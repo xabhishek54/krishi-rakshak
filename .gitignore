@@ -1,2 +1,55 @@
+# Mandatory Git Policy: Ignore all markdown files except README.md
 *.md
 !README.md
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Frontend / Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp*
+.yarn/
+frontend/dist/
+frontend/.svelte-kit/
+frontend/.next/
+frontend/.nuxt/
+frontend/.cache/
+
+# Databases
+backend/krishirakshak.db
+backend/krishirakshak.db-journal
+*.db
+*.db-journal
+*.sqlite3
+
+# Environment and Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+
+# IDE / System files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

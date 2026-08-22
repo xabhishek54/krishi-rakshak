@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@theme {
+  --color-stable-light: #f4f9f4;
+  --color-stable: #2e7d32;
+  --color-stable-dark: #1b5e20;
+  
+  --color-watch-light: #fffde7;
+  --color-watch: #fbc02d;
+  --color-watch-dark: #f57f17;
+  
+  --color-elevated-light: #fff3e0;
+  --color-elevated: #f57c00;
+  --color-elevated-dark: #e65100;
+  
+  --color-high-light: #fbe9e7;
+  --color-high: #d84315;
+  --color-high-dark: #bf360c;
+  
+  --color-critical-light: #ffebee;
+  --color-critical: #c62828;
+  --color-critical-dark: #880e4f;
+  
+  --color-earth-50: #faf8f5;
+  --color-earth-100: #f5efe6;
+  --color-earth-200: #e6d8c4;
+  --color-earth-800: #5c4033;
+  
+  --font-sans: "Outfit", "Inter", sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-earth-50 text-slate-800 font-sans min-h-screen antialiased;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold text-slate-900;
+  }
+}
+
+/* Custom scrollbar styling for visual polish */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-earth-50;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded-full hover:bg-slate-400 transition-colors;
+}
+
+/* Leaflet map styles to ensure it fills container */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  border-radius: 0.75rem;
+}
