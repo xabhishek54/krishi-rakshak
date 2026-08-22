@@ -9,7 +9,7 @@ from app.database import engine, Base, get_db
 from app import models, schemas, auth
 from app.weather import OpenMeteoProvider
 from app.advisory import evaluate_advisories
-from app.mandi import seed_mandi_data, get_mandi_comparison
+from app.mandi import seed_mandi_data, get_mandi_comparison, detect_price_crash, get_price_history
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -300,6 +300,29 @@ def compare_mandis(
         lat, lon = farm.latitude, farm.longitude
         
     return get_mandi_comparison(db, crop, lat, lon)
+
+@app.get("/api/v1/market/price-crash", response_model=schemas.PriceCrashResponse)
+def get_price_crash(
+    crop: str,
+    mandi_id: int,
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+    db: Session = Depends(get_db)
+):
+    # Verify that the mandi belongs to the farmer's district (optional, but we can check via farm location)
+    # For simplicity, we just compute for the given mandi and crop.
+    result = detect_price_crash(db, crop, mandi_id)
+    return result
+
+@app.get("/api/v1/market/price-history", response_model=List[schemas.PriceHistoryResponse])
+def get_price_history_endpoint(
+    crop: str,
+    mandi_id: int,
+    window: int = 30,
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+    db: Session = Depends(get_db)
+):
+    history = get_price_history(db, crop, mandi_id, window)
+    return history
 
 @app.post("/api/v1/farmers/me/obligations", response_model=schemas.FinancialObligationResponse, status_code=status.HTTP_201_CREATED)
 def create_obligation(

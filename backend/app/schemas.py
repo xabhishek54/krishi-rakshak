@@ -178,6 +178,22 @@ class MandiCompareResponse(BaseModel):
     other_fees: float
     net_return: float
 
+# Price Crash Schema
+class PriceCrashResponse(BaseModel):
+    price_crash: bool
+    price_change_pct: float
+    recent_7day_avg: float
+    baseline_30day_avg: float
+    reason: str
+
+# Price History Schema
+class PriceHistoryResponse(BaseModel):
+    date: str
+    min_price: float
+    max_price: float
+    modal_price: float
+    arrivals: float
+
 # Financial Schemas
 class FinancialObligationCreate(BaseModel):
     amount: float = Field(..., gt=0.0)

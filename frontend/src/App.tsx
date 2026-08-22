@@ -16,6 +16,7 @@ import {
   Thermometer,
   Droplets
 } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 // Type declarations
 type TabType = 'home' | 'crop' | 'market' | 'alerts' | 'support' | 'risk-detail' | 'profile';
@@ -39,8 +40,11 @@ function App() {
   const [loadingWeather, setLoadingWeather] = useState<boolean>(false);
   const [advisories, setAdvisories] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
-  const [mandiPrices, setMandiPrices] = useState<any[]>([]);
-  const [cashFlow, setCashFlow] = useState<any>(null);
+const [mandiPrices, setMandiPrices] = useState<any[]>([]);
+    const [priceHistoryData, setPriceHistoryData] = useState<any[]>([]);
+    const [priceCrashStatus, setPriceCrashStatus] = useState<any>(null);
+    const [selectedMandiId, setSelectedMandiId] = useState<number | null>(null);
+    const [cashFlow, setCashFlow] = useState<any>(null);
 
   // Obligation Overlay Modal States
   const [showAddObligationModal, setShowAddObligationModal] = useState<boolean>(false);
@@ -308,14 +312,81 @@ function App() {
       if (res.ok) {
         const data = await res.json();
         setMandiPrices(data);
+        // Set selectedMandiId to the first mandi (highest net return due to sorting in backend)
+        if (data.length > 0) {
+          setSelectedMandiId(data[0].mandi_id);
+        }
+        // Fetch price history and price crash for the selected mandi
+        await fetchPriceHistory();
+        await fetchPriceCrash();
       }
     } catch {
       // Fallback mocks
-      setMandiPrices([
-        { mandi_name: 'Lasalgaon APMC', distance_km: 12.0, sticker_price: 2620, transport_cost: 194, other_fees: 52.4, net_return: 2373.6 },
-        { mandi_name: 'Nashik APMC', distance_km: 15.0, sticker_price: 2600, transport_cost: 230, other_fees: 52.0, net_return: 2318.0 },
-        { mandi_name: 'Pimpalgaon APMC', distance_km: 35.0, sticker_price: 2850, transport_cost: 470, other_fees: 57.0, net_return: 2323.0 }
-      ]);
+      const mockData = [
+        { mandi_id: 1, mandi_name: 'Lasalgaon APMC', distance_km: 12.0, sticker_price: 2620, transport_cost: 194, other_fees: 52.4, net_return: 2373.6 },
+        { mandi_id: 2, mandi_name: 'Nashik APMC', distance_km: 15.0, sticker_price: 2600, transport_cost: 230, other_fees: 52.0, net_return: 2318.0 },
+        { mandi_id: 3, mandi_name: 'Pimpalgaon APMC', distance_km: 35.0, sticker_price: 2850, transport_cost: 470, other_fees: 57.0, net_return: 2323.0 }
+      ];
+      setMandiPrices(mockData);
+      // Set selectedMandiId to the first mandi in mock data
+      setSelectedMandiId(1);
+      // Fetch price history and price crash (will fallback to mocks)
+      await fetchPriceHistory();
+      await fetchPriceCrash();
+    }
+  };
+
+  const fetchPriceHistory = async () => {
+    if (!token || !selectedCrop || !selectedMandiId) return;
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/v1/market/price-history?crop=${selectedCrop.crop_type}&mandi_id=${selectedMandiId}&window=30`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPriceHistoryData(data);
+      }
+    } catch {
+      // Fallback mocks: generate 30 days of mock data
+      const mockData = [];
+      const today = new Date();
+      for (let i = 0; i < 30; i++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() - i);
+        const basePrice = 2600; // example base price for tomato
+        const variation = Math.sin(i) * 100;
+        const modal = basePrice + variation;
+        mockData.push({
+          date: date.toISOString().split('T')[0],
+          min_price: modal * 0.9,
+          max_price: modal * 1.1,
+          modal_price: modal,
+          arrivals: 100 + i * 5
+        });
+      }
+      setPriceHistoryData(mockData.reverse()); // oldest first
+    }
+  };
+
+  const fetchPriceCrash = async () => {
+    if (!token || !selectedCrop || !selectedMandiId) return;
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/v1/market/price-crash?crop=${selectedCrop.crop_type}&mandi_id=${selectedMandiId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPriceCrashStatus(data);
+      }
+    } catch {
+      // Fallback mock
+      setPriceCrashStatus({
+        price_crash: false,
+        price_change_pct: -5.2,
+        recent_7day_avg: 2500,
+        baseline_30day_avg: 2600,
+        reason: "Price changed -5.2% vs 30-day baseline"
+      });
     }
   };
 
@@ -704,6 +775,78 @@ function App() {
             {mandiPrices.length > 0 && (
               <div className="bg-stable-light p-3.5 rounded-xl border border-stable-dark/10 text-xs text-stable-dark text-left">
                 💡 **System Tip:** Sell your crop at **{mandiPrices[0].mandi_name}**. Even though sticker prices vary across APMCs, selling here minimizes transportation overhead and commissions, netting you a peak return of **₹{mandiPrices[0].net_return} per quintal**.
+              </div>
+            )}
+
+            {/* Price Crash Banner */}
+            {priceCrashStatus && priceCrashStatus.price_crash && (
+              <div className="flex gap-4 items-start p-4 bg-high-light rounded-xl border border-high-dark/10">
+                <span className="bg-high text-white p-2.5 rounded-xl shrink-0"><TrendingDown size={20} /></span>
+                <div className="flex-1">
+                  <div className="flex justify-between items-center">
+                    <h4 className="font-bold text-high-dark text-sm">Price Crash Alert</h4>
+                    <span className="text-[10px] bg-high text-white font-bold px-2 py-0.5 rounded-full uppercase">Critical</span>
+                  </div>
+                  <p className="text-slate-600 text-xs mt-1">
+                    {priceCrashStatus.reason || `Recent 7-day average price has dropped ${priceCrashStatus.price_change_pct.toFixed(1)}% compared to the 30-day baseline. Consider holding stock or exploring alternative mandis.`}
+                  </p>
+                  <div className="mt-3 flex gap-3 text-xs text-slate-500">
+                    <div><span className="font-bold text-slate-700">7-day avg:</span> ₹{priceCrashStatus.recent_7day_avg.toFixed(0)}/qtl</div>
+                    <div><span className="font-bold text-slate-700">30-day baseline:</span> ₹{priceCrashStatus.baseline_30day_avg.toFixed(0)}/qtl</div>
+                    <div className={priceCrashStatus.price_change_pct < 0 ? 'font-bold text-high-dark' : 'font-bold text-stable'}>
+                      Change: {priceCrashStatus.price_change_pct.toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Price History Chart */}
+            {priceHistoryData.length > 0 && (
+              <div className="bg-white p-4 rounded-2xl border border-earth-200 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold">Price Trend (30-Day History)</h3>
+                    <p className="text-slate-500 text-xs mt-0.5">
+                      {selectedCrop ? <span className="capitalize">{selectedCrop.crop_type}</span> : null}
+                      {mandiPrices.find(m => m.mandi_id === selectedMandiId) ? ` · ${mandiPrices.find(m => m.mandi_id === selectedMandiId)!.mandi_name}` : ''}
+                    </p>
+                  </div>
+                </div>
+                {(() => {
+                  const chartData = priceHistoryData.map(p => ({
+                    date: p.date,
+                    'Modal Price': p.modal_price,
+                    'Min Price': p.min_price,
+                    'Max Price': p.max_price
+                  }));
+                  return (
+                    <div style={{ width: '100%', height: 280 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                          <XAxis
+                            dataKey="date"
+                            tick={{ fontSize: 10, fill: '#64748b' }}
+                            tickFormatter={(v: string) => v ? v.substring(5) : ''}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 10, fill: '#64748b' }}
+                            tickFormatter={(v: number) => `₹${Math.round(v)}`}
+                          />
+                          <Tooltip
+                            contentStyle={{ fontSize: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                            formatter={(value: any) => value !== null && value !== undefined ? `₹${parseFloat(value).toFixed(2)}` : ''}
+                          />
+                          <Legend wrapperStyle={{ fontSize: '12px' }} />
+                          <Line type="monotone" dataKey="Modal Price" stroke="#16a34a" strokeWidth={2.5} dot={false} />
+                          <Line type="monotone" dataKey="Min Price" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
+                          <Line type="monotone" dataKey="Max Price" stroke="#cbd5e1" strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>

@@ -66,6 +66,93 @@ def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     
     return R * c
 
+# Price-crash detection logic
+def detect_price_crash(db: Session, crop_type: str, mandi_id: int) -> dict:
+    """
+    Detect if a crop's price has dropped sharply enough to matter.
+    Price change = (Current 7-day avg - 30-day baseline) / 30-day baseline
+    A drop around -20% or more is treated as a strong risk signal.
+    """
+    today = datetime.date.today()
+    
+    # Get current 7-day average price
+    seven_days_ago = today - datetime.timedelta(days=7)
+    recent_prices = db.query(models.MarketPrice).filter(
+        models.MarketPrice.mandi_id == mandi_id,
+        models.MarketPrice.crop == crop_type.lower(),
+        models.MarketPrice.date >= seven_days_ago,
+        models.MarketPrice.date <= today
+    ).all()
+    
+    if len(recent_prices) == 0:
+        return {"price_crash": False, "price_change_pct": 0.0, "reason": "Insufficient data"}
+    
+    recent_avg = sum(p.modal_price for p in recent_prices) / len(recent_prices)
+    
+    # Get 30-day baseline price (simple average of prices from 30-60 days ago)
+    sixty_days_ago = today - datetime.timedelta(days=60)
+    thirty_days_ago = today - datetime.timedelta(days=30)
+    baseline_prices = db.query(models.MarketPrice).filter(
+        models.MarketPrice.mandi_id == mandi_id,
+        models.MarketPrice.crop == crop_type.lower(),
+        models.MarketPrice.date >= sixty_days_ago,
+        models.MarketPrice.date < thirty_days_ago
+    ).all()
+    
+    if len(baseline_prices) == 0:
+        # Fallback to using all available historical data if no 30-60 day window
+        baseline_prices = db.query(models.MarketPrice).filter(
+            models.MarketPrice.mandi_id == mandi_id,
+            models.MarketPrice.crop == crop_type.lower(),
+            models.MarketPrice.date < thirty_days_ago
+        ).all()
+    
+    if len(baseline_prices) == 0:
+        return {"price_crash": False, "price_change_pct": 0.0, "reason": "Insufficient baseline data"}
+    
+    baseline_avg = sum(p.modal_price for p in baseline_prices) / len(baseline_prices)
+    
+    # Calculate percentage change
+    if baseline_avg == 0:
+        price_change_pct = 0.0
+    else:
+        price_change_pct = ((recent_avg - baseline_avg) / baseline_avg) * 100
+    
+    # Price crash detected if drop is -20% or more
+    price_crash = price_change_pct <= -20.0
+    
+    return {
+        "price_crash": price_crash,
+        "price_change_pct": round(price_change_pct, 2),
+        "recent_7day_avg": round(recent_avg, 2),
+        "baseline_30day_avg": round(baseline_avg, 2),
+        "reason": f"Price changed {price_change_pct:.2f}% vs 30-day baseline"
+    }
+
+# Price history logic
+def get_price_history(db: Session, crop_type: str, mandi_id: int, window_days: int = 30) -> list:
+    """
+    Get historical price data for a crop at a mandi over a specified window.
+    Returns list of {date, min_price, max_price, modal_price} dicts ordered by date.
+    """
+    today = datetime.date.today()
+    start_date = today - datetime.timedelta(days=window_days)
+    
+    prices = db.query(models.MarketPrice).filter(
+        models.MarketPrice.mandi_id == mandi_id,
+        models.MarketPrice.crop == crop_type.lower(),
+        models.MarketPrice.date >= start_date,
+        models.MarketPrice.date <= today
+    ).order_by(models.MarketPrice.date.asc()).all()
+    
+    return [{
+        "date": p.date.isoformat(),
+        "min_price": p.min_price,
+        "max_price": p.max_price,
+        "modal_price": p.modal_price,
+        "arrivals": p.arrivals
+    } for p in prices]
+
 # Mandi comparison logic
 def get_mandi_comparison(db: Session, crop_type: str, farm_lat: float, farm_lon: float):
     # Find latest prices for the requested crop
@@ -76,12 +163,6 @@ def get_mandi_comparison(db: Session, crop_type: str, farm_lat: float, farm_lon:
     
     for mandi in mandis:
         # Get most recent price entry
-        price_entry = db.query(models.MarketPrice).filter(
-            models.MarketPrice.mandi_id == mandi.id,
-            models.MarketPrice.crop == crop_type.lower()
-        ).order_index = models.MarketPrice.date.desc()
-        
-        # If no price exists for today, fallback to latest entry
         price_entry = db.query(models.MarketPrice).filter(
             models.MarketPrice.mandi_id == mandi.id,
             models.MarketPrice.crop == crop_type.lower()
