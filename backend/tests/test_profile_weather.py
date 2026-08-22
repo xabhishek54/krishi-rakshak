@@ -126,7 +126,8 @@ def test_create_crop_and_stage_derivation(client, auth_header):
     crop_data = {
         "crop_type": "tomato",
         "variety": "Nashik Local",
-        "sowing_date": sowing_date
+        "sowing_date": sowing_date,
+        "image_url": "https://example.com/custom_tomato.jpg"
     }
     
     response = client.post(f"/api/v1/farms/{farm_id}/crops", json=crop_data, headers=auth_header)
@@ -134,6 +135,7 @@ def test_create_crop_and_stage_derivation(client, auth_header):
     data = response.json()
     assert data["crop_type"] == "tomato"
     assert data["stage"] == "Flowering"
+    assert data["image_url"] == "https://example.com/custom_tomato.jpg"
     
     # Verify GET crops list calculates stage
     response = client.get(f"/api/v1/farms/{farm_id}/crops", headers=auth_header)
@@ -141,6 +143,7 @@ def test_create_crop_and_stage_derivation(client, auth_header):
     crops = response.json()
     assert len(crops) == 1
     assert crops[0]["stage"] == "Flowering"
+    assert crops[0]["image_url"] == "https://example.com/custom_tomato.jpg"
 
 def test_weather_sync_and_retrieve(client, auth_header):
     location_id = "Niphad_Block_01"

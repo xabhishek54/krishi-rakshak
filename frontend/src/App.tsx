@@ -39,6 +39,33 @@ function App() {
   const [loadingWeather, setLoadingWeather] = useState<boolean>(false);
   const [advisories, setAdvisories] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [mandiPrices, setMandiPrices] = useState<any[]>([]);
+
+  // Multiple Farms and Crops States
+  const [farms, setFarms] = useState<any[]>([]);
+  const [crops, setCrops] = useState<any[]>([]);
+  const [selectedFarm, setSelectedFarm] = useState<any>(null);
+  const [selectedCrop, setSelectedCrop] = useState<any>(null);
+
+  // Modals overlays
+  const [showAddFarmModal, setShowAddFarmModal] = useState<boolean>(false);
+  const [showAddCropModal, setShowAddCropModal] = useState<boolean>(false);
+
+  // Modal form states
+  const [newFarmArea, setNewFarmArea] = useState<string>('2.5');
+  const [newFarmSoil, setNewFarmSoil] = useState<string>('loam');
+  const [newFarmIrrigation, setNewFarmIrrigation] = useState<string>('drip');
+  const [newFarmLat, setNewFarmLat] = useState<string>('20.08');
+  const [newFarmLon, setNewFarmLon] = useState<string>('74.11');
+  const [newFarmBlock, setNewFarmBlock] = useState<string>('Niphad');
+  const [newFarmDistrict, setNewFarmDistrict] = useState<string>('Nashik');
+  
+  const [newCropType, setNewCropType] = useState<string>('tomato');
+  const [newCropVariety, setNewCropVariety] = useState<string>('PKM-1');
+  const [newCropSowingDate, setNewCropSowingDate] = useState<string>(
+    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  );
+  const [newCropImageUrl, setNewCropImageUrl] = useState<string>('');
 
   // Form states for login/register
   const [isRegistering, setIsRegistering] = useState<boolean>(false);
@@ -50,12 +77,57 @@ function App() {
 
   const [farmer, setFarmer] = useState<FarmerProfile | null>(null);
 
-  // Sync token to localStorage
+  const fetchFarmsAndCrops = async () => {
+    if (!token) return;
+    try {
+      const farmRes = await fetch('http://127.0.0.1:8000/api/v1/farmers/me/farms', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (farmRes.ok) {
+        const farmData = await farmRes.json();
+        setFarms(farmData);
+        if (farmData.length > 0) {
+          // If no farm selected yet, pick first
+          const currentFarm = selectedFarm || farmData[0];
+          setSelectedFarm(currentFarm);
+          
+          const cropRes = await fetch(`http://127.0.0.1:8000/api/v1/farms/${currentFarm.id}/crops`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (cropRes.ok) {
+            const cropData = await cropRes.json();
+            setCrops(cropData);
+            if (cropData.length > 0) {
+              setSelectedCrop(selectedCrop || cropData[0]);
+            } else {
+              setSelectedCrop(null);
+            }
+          }
+        } else {
+          setFarms([]);
+          setCrops([]);
+          setSelectedFarm(null);
+          setSelectedCrop(null);
+        }
+      }
+    } catch (e) {
+      console.warn("Offline fetch fallback for farms/crops", e);
+      // Fallback mocks
+      const mockFarm = { id: 1, area: 2.5, soil_type: 'loam', irrigation: 'drip', latitude: 20.08, longitude: 74.11 };
+      const mockCrop = { id: 1, crop_type: 'tomato', variety: 'Nashik Premium', stage: 'Fruit Development', sowing_date: '2026-07-04', image_url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop' };
+      setFarms([mockFarm]);
+      setCrops([mockCrop]);
+      setSelectedFarm(mockFarm);
+      setSelectedCrop(mockCrop);
+    }
+  };
+
+  // Sync token and load profiles
   useEffect(() => {
     if (token) {
       localStorage.setItem('token', token);
       
-      // Fetch profile from backend if possible
+      // Fetch profile
       fetch('http://127.0.0.1:8000/api/v1/farmers/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       })
@@ -75,6 +147,7 @@ function App() {
           localStorage.setItem('hasFarm', 'true');
           setHasFarm(true);
         }
+        fetchFarmsAndCrops();
       })
       .catch(() => {
         // Fallback to mock
@@ -85,6 +158,7 @@ function App() {
           location_id: localStorage.getItem('onboardLocation') || 'Niphad_Nashik',
           risk_profile: 'High'
         });
+        fetchFarmsAndCrops();
       });
     } else {
       localStorage.removeItem('token');
@@ -93,6 +167,10 @@ function App() {
       setFarmer(null);
       setHasFarm(false);
       setWeather(null);
+      setFarms([]);
+      setCrops([]);
+      setSelectedFarm(null);
+      setSelectedCrop(null);
     }
   }, [token]);
 
@@ -179,13 +257,64 @@ function App() {
     }
   };
 
+  // Load crops when selected farm changes
+  useEffect(() => {
+    if (token && selectedFarm) {
+      fetch(`http://127.0.0.1:8000/api/v1/farms/${selectedFarm.id}/crops`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error("No crops");
+      })
+      .then(data => {
+        setCrops(data);
+        if (data.length > 0) {
+          setSelectedCrop(data[0]);
+        } else {
+          setSelectedCrop(null);
+        }
+      })
+      .catch(() => {
+        // Fallback mock
+        const mockCrop = { id: 1, crop_type: 'tomato', variety: 'Nashik Premium', stage: 'Fruit Development', sowing_date: '2026-07-04', image_url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop' };
+        setCrops([mockCrop]);
+        setSelectedCrop(mockCrop);
+      });
+    }
+  }, [token, selectedFarm]);
+
   useEffect(() => {
     if (token && hasFarm && farmer?.location_id) {
       fetchWeather();
       fetchAdvisoriesAndAlerts();
     }
-  }, [token, hasFarm, farmer?.location_id]);
+  }, [token, hasFarm, farmer?.location_id, selectedFarm, selectedCrop]);
+  const fetchMandiPrices = async () => {
+    if (!token || !selectedCrop) return;
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/v1/mandis/compare?crop=${selectedCrop.crop_type}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMandiPrices(data);
+      }
+    } catch {
+      // Fallback mocks
+      setMandiPrices([
+        { mandi_name: 'Lasalgaon APMC', distance_km: 12.0, sticker_price: 2620, transport_cost: 194, other_fees: 52.4, net_return: 2373.6 },
+        { mandi_name: 'Nashik APMC', distance_km: 15.0, sticker_price: 2600, transport_cost: 230, other_fees: 52.0, net_return: 2318.0 },
+        { mandi_name: 'Pimpalgaon APMC', distance_km: 35.0, sticker_price: 2850, transport_cost: 470, other_fees: 57.0, net_return: 2323.0 }
+      ]);
+    }
+  };
 
+  useEffect(() => {
+    if (token && selectedCrop) {
+      fetchMandiPrices();
+    }
+  }, [token, selectedCrop]);
   // Handle Logout
   const handleLogout = () => {
     setToken(null);
@@ -235,6 +364,26 @@ function App() {
     marathi: 'मराठी (Marathi)'
   };
 
+  const getSowingDaysAgo = (sowingDateStr: string) => {
+    try {
+      const sowing = new Date(sowingDateStr);
+      const diffTime = Math.abs(Date.now() - sowing.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays;
+    } catch {
+      return 30;
+    }
+  };
+
+  const getCropImage = (type: string, url?: string) => {
+    if (url && url.trim().length > 0) return url;
+    const c = type.toLowerCase();
+    if (c.includes('tomato')) return 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop';
+    if (c.includes('wheat')) return 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=600&auto=format&fit=crop';
+    if (c.includes('onion')) return 'https://images.unsplash.com/photo-1508747703725-719ae25db3e4?w=600&auto=format&fit=crop';
+    return 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=600&auto=format&fit=crop';
+  };
+
   // Main UI shell if authenticated
   const renderTabContent = () => {
     switch (activeTab) {
@@ -255,6 +404,68 @@ function App() {
                 <span className={`h-2.5 w-2.5 rounded-full bg-white ${loadingWeather ? 'animate-ping' : ''}`}></span>
                 {loadingWeather ? 'Syncing Weather...' : 'Refresh Weather Forecast'}
               </button>
+            </div>
+
+            {/* Farm & Crop Selector Strip */}
+            <div className="bg-white p-4 rounded-2xl border border-earth-200 shadow-sm flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between">
+              <div className="flex flex-wrap gap-4 items-center">
+                {/* Farm Selector */}
+                <div className="flex-1 sm:flex-none">
+                  <label className="block text-slate-400 text-[10px] font-bold uppercase mb-1">Active Farm</label>
+                  <select 
+                    value={selectedFarm?.id || ''}
+                    onChange={(e) => {
+                      const f = farms.find(farm => farm.id === parseInt(e.target.value));
+                      if (f) setSelectedFarm(f);
+                    }}
+                    className="text-xs font-bold px-3 py-1.5 rounded-lg border border-earth-200 bg-earth-50 focus:outline-none w-full"
+                  >
+                    {farms.map((f, i) => (
+                      <option key={f.id} value={f.id}>Farm #{i+1} ({f.area} Acres - {f.soil_type.toUpperCase()})</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Crop Selector */}
+                <div className="flex-1 sm:flex-none">
+                  <label className="block text-slate-400 text-[10px] font-bold uppercase mb-1">Active Crop</label>
+                  {crops.length > 0 ? (
+                    <select 
+                      value={selectedCrop?.id || ''}
+                      onChange={(e) => {
+                        const cr = crops.find(crop => crop.id === parseInt(e.target.value));
+                        if (cr) setSelectedCrop(cr);
+                      }}
+                      className="text-xs font-bold px-3 py-1.5 rounded-lg border border-earth-200 bg-earth-50 focus:outline-none w-full"
+                    >
+                      {crops.map((cr) => (
+                        <option key={cr.id} value={cr.id}>{cr.crop_type.toUpperCase()} ({cr.variety || 'Local'})</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-xs text-slate-400 font-bold block py-1.5">No Crops Added</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 justify-end">
+                <button 
+                  onClick={() => setShowAddFarmModal(true)}
+                  className="px-3 py-1.5 border border-stable/30 text-stable hover:bg-stable-light rounded-lg text-xs font-bold transition-all"
+                >
+                  + Add Farm
+                </button>
+                <button 
+                  onClick={() => {
+                    if (!selectedFarm) alert("Please register a farm first.");
+                    else setShowAddCropModal(true);
+                  }}
+                  className="px-3 py-1.5 bg-stable text-white hover:bg-stable-dark rounded-lg text-xs font-bold transition-all"
+                >
+                  + Add Crop
+                </button>
+              </div>
             </div>
 
             {/* 2x2 Responsive Grid */}
@@ -284,8 +495,8 @@ function App() {
               >
                 <div className="text-stable mb-2"><Sprout size={32} /></div>
                 <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider">My Crop</h3>
-                <p className="text-slate-900 text-lg font-bold mt-1 my-0">Tomato</p>
-                <span className="text-slate-400 text-xs mt-1 block">Stage: Veg. Growth</span>
+                <p className="text-slate-900 text-lg font-bold mt-1 my-0 capitalize">{selectedCrop ? selectedCrop.crop_type : 'Tomato'}</p>
+                <span className="text-slate-400 text-xs mt-1 block">Stage: {selectedCrop ? selectedCrop.stage : 'Veg. Growth'}</span>
               </button>
 
               <button 
@@ -337,34 +548,66 @@ function App() {
       case 'crop':
         return (
           <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">
-            <h2 className="text-xl font-bold">My Crop Advisory</h2>
-            <div className="p-4 bg-earth-50 rounded-xl border border-earth-200 flex justify-between items-center">
-              <div>
-                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Active Crop</p>
-                <h3 className="text-lg font-bold mt-0.5">Tomato (Nashik Premium)</h3>
-                <p className="text-slate-500 text-xs">Sowed: 45 days ago (Tomato Stage: Fruit Development)</p>
-              </div>
-              <span className="bg-stable text-white text-xs font-bold px-3 py-1 rounded-full uppercase">Healthy</span>
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold my-0">My Crop Advisory</h2>
+              <button 
+                onClick={() => {
+                  if (!selectedFarm) alert("Please register a farm first.");
+                  else setShowAddCropModal(true);
+                }}
+                className="px-3 py-1.5 bg-stable text-white hover:bg-stable-dark rounded-lg text-xs font-bold transition-all"
+              >
+                + Add Another Crop
+              </button>
             </div>
+
+            {selectedCrop ? (
+              <div className="relative h-48 w-full rounded-2xl overflow-hidden border border-earth-200 shadow-sm">
+                <img 
+                  src={getCropImage(selectedCrop.crop_type, selectedCrop.image_url)} 
+                  alt={selectedCrop.crop_type} 
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-end p-5">
+                  <div className="text-white text-left">
+                    <span className="text-[10px] bg-stable px-2 py-0.5 rounded-full font-bold uppercase">Healthy</span>
+                    <h3 className="text-xl font-bold mt-1 capitalize my-0">{selectedCrop.crop_type} ({selectedCrop.variety || 'Local'})</h3>
+                    <p className="text-slate-200 text-xs mt-1 mb-0">Sown: {selectedCrop.sowing_date} ({getSowingDaysAgo(selectedCrop.sowing_date)} days ago) • Stage: {selectedCrop.stage}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-8 bg-earth-50 rounded-xl border border-earth-200 text-center">
+                <p className="text-slate-500 text-sm">No crops registered for this farm yet.</p>
+                <button 
+                  onClick={() => setShowAddCropModal(true)} 
+                  className="mt-3 px-4 py-2 bg-stable text-white hover:bg-stable-dark rounded-xl text-xs font-bold transition-all"
+                >
+                  Register First Crop
+                </button>
+              </div>
+            )}
 
             {/* Advisory History */}
             <div className="space-y-3">
-              <h3 className="font-bold text-slate-900">Advisory Feed</h3>
-              <div className="border-l-2 border-stable pl-4 py-2 space-y-4">
-                <div className="relative">
-                  <span className="absolute -left-[23px] top-1.5 bg-stable h-3 w-3 rounded-full border-2 border-white"></span>
-                  <div className="bg-white p-3 rounded-xl border border-earth-200 shadow-xs">
-                    <p className="text-slate-400 text-[10px] font-semibold">Today • Weather Warning</p>
-                    <p className="text-slate-800 text-xs mt-1">Do not irrigate for the next 48 hours. Heavy rain is expected. Check field drainage tomorrow morning because waterlogging during fruit development can damage roots.</p>
+              <h3 className="font-bold text-slate-900 text-left my-0">Advisory Feed</h3>
+              <div className="border-l-2 border-stable pl-4 py-2 space-y-4 text-left">
+                {advisories.filter(adv => adv.farm_id === selectedFarm?.id).length > 0 ? (
+                  advisories.filter(adv => adv.farm_id === selectedFarm?.id).map((adv) => (
+                    <div key={adv.id} className="relative">
+                      <span className="absolute -left-[23px] top-1.5 bg-stable h-3 w-3 rounded-full border-2 border-white"></span>
+                      <div className="bg-white p-3 rounded-xl border border-earth-200 shadow-xs">
+                        <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">{adv.category} • Alert</p>
+                        <p className="text-slate-800 text-xs font-semibold mt-1">{adv.recommendation}</p>
+                        <p className="text-slate-500 text-xs mt-0.5">{adv.reason}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-slate-400 text-xs py-2">
+                    No active alerts or dynamic warnings for this crop. Continue standard crop maintenance and monitoring.
                   </div>
-                </div>
-                <div className="relative">
-                  <span className="absolute -left-[23px] top-1.5 bg-slate-300 h-3 w-3 rounded-full border-2 border-white"></span>
-                  <div className="bg-white p-3 rounded-xl border border-earth-200 shadow-xs">
-                    <p className="text-slate-400 text-[10px] font-semibold">2 days ago • Soil Moisture</p>
-                    <p className="text-slate-800 text-xs mt-1">Loam soil moisture status is High. Maintain optimal drainage grids.</p>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </div>
@@ -373,8 +616,10 @@ function App() {
         return (
           <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">
             <div>
-              <h2 className="text-xl font-bold">Mandi Pricing & Net Realization</h2>
-              <p className="text-slate-500 text-xs mt-1">Optimized for net returns (modal price minus transport/handling costs)</p>
+              <h2 className="text-xl font-bold my-0">Mandi Pricing & Net Realization</h2>
+              <p className="text-slate-500 text-xs mt-1 mb-0">
+                Optimized for net returns on crop: <span className="font-bold capitalize text-stable">{selectedCrop ? selectedCrop.crop_type : 'Tomato'}</span> (modal price minus transport/handling costs)
+              </p>
             </div>
 
             {/* Mandi comparison table */}
@@ -382,41 +627,47 @@ function App() {
               <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Mandi</th>
+                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Mandi Name</th>
+                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Distance</th>
                     <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Sticker Price</th>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Transport</th>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Other Fees</th>
+                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Transport Cost</th>
+                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Mandi Fees (2%)</th>
                     <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Net Return</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  <tr className="bg-white">
-                    <td className="px-4 py-3 font-semibold">Mandi A</td>
-                    <td className="px-4 py-3">₹2,700</td>
-                    <td className="px-4 py-3">₹500</td>
-                    <td className="px-4 py-3">₹100</td>
-                    <td className="px-4 py-3 text-slate-900 font-bold">₹2,100</td>
-                  </tr>
-                  <tr className="bg-white">
-                    <td className="px-4 py-3 font-semibold">Mandi B</td>
-                    <td className="px-4 py-3">₹2,850</td>
-                    <td className="px-4 py-3">₹900</td>
-                    <td className="px-4 py-3">₹100</td>
-                    <td className="px-4 py-3 text-slate-900 font-bold">₹1,850</td>
-                  </tr>
-                  <tr className="bg-stable-light font-semibold">
-                    <td className="px-4 py-3 font-bold text-stable">Mandi C (Best)</td>
-                    <td className="px-4 py-3 text-stable">₹2,620</td>
-                    <td className="px-4 py-3 text-stable">₹250</td>
-                    <td className="px-4 py-3 text-stable">₹80</td>
-                    <td className="px-4 py-3 text-stable font-extrabold">₹2,290</td>
-                  </tr>
+                  {mandiPrices.length > 0 ? (
+                    mandiPrices.map((m, idx) => (
+                      <tr 
+                        key={m.mandi_id || idx} 
+                        className={idx === 0 ? "bg-stable-light font-semibold text-stable" : "bg-white text-slate-700"}
+                      >
+                        <td className="px-4 py-3 font-bold">
+                          {m.mandi_name} {idx === 0 && <span className="text-[10px] bg-stable text-white px-1.5 py-0.5 rounded-md ml-1.5 uppercase tracking-wide">Best Value</span>}
+                        </td>
+                        <td className="px-4 py-3 font-mono">{m.distance_km} km</td>
+                        <td className="px-4 py-3 font-mono">₹{m.sticker_price}</td>
+                        <td className="px-4 py-3 font-mono">₹{m.transport_cost}</td>
+                        <td className="px-4 py-3 font-mono">₹{m.other_fees}</td>
+                        <td className="px-4 py-3 font-extrabold font-mono">₹{m.net_return}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-slate-400 text-xs">
+                        No mandi comparison data available. Register crop above to evaluate APMCs.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
-            <div className="bg-stable-light p-3.5 rounded-xl border border-stable-dark/10 text-xs text-stable-dark">
-              💡 **System Tip:** Sell tomatoes at **Mandi C**. Although the listed sticker price (₹2,620) is lower than Mandi B (₹2,850), the shorter distance reduces transportation losses and expenses, giving you **₹440 extra net profit** per quintal.
-            </div>
+
+            {mandiPrices.length > 0 && (
+              <div className="bg-stable-light p-3.5 rounded-xl border border-stable-dark/10 text-xs text-stable-dark text-left">
+                💡 **System Tip:** Sell your crop at **{mandiPrices[0].mandi_name}**. Even though sticker prices vary across APMCs, selling here minimizes transportation overhead and commissions, netting you a peak return of **₹{mandiPrices[0].net_return} per quintal**.
+              </div>
+            )}
           </div>
         );
       case 'alerts':
@@ -821,6 +1072,304 @@ function App() {
       >
         <Mic size={24} />
       </button>
+
+      {/* Add Farm Modal Overlay */}
+      {showAddFarmModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in text-left">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-earth-200 shadow-xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-lg font-bold text-slate-900 my-0">Register New Farm</h3>
+              <button 
+                onClick={() => setShowAddFarmModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Area (Acres)</label>
+                  <input 
+                    type="number" 
+                    step="0.1"
+                    value={newFarmArea} 
+                    onChange={(e) => setNewFarmArea(e.target.value)}
+                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Soil Type</label>
+                  <select 
+                    value={newFarmSoil} 
+                    onChange={(e) => setNewFarmSoil(e.target.value)}
+                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
+                  >
+                    <option value="loam">Loam</option>
+                    <option value="clay">Clay</option>
+                    <option value="sandy">Sandy</option>
+                    <option value="black">Black Cotton</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Irrigation Method</label>
+                <select 
+                  value={newFarmIrrigation} 
+                  onChange={(e) => setNewFarmIrrigation(e.target.value)}
+                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
+                >
+                  <option value="drip">Drip Irrigation</option>
+                  <option value="sprinkler">Sprinkler Irrigation</option>
+                  <option value="flood">Flood Irrigation</option>
+                  <option value="rainfed">Rainfed (None)</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-slate-500 text-[10px] font-bold uppercase mb-1">Block/Village</label>
+                  <input 
+                    type="text" 
+                    value={newFarmBlock} 
+                    onChange={(e) => setNewFarmBlock(e.target.value)}
+                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 text-[10px] font-bold uppercase mb-1">District</label>
+                  <input 
+                    type="text" 
+                    value={newFarmDistrict} 
+                    onChange={(e) => setNewFarmDistrict(e.target.value)}
+                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 text-[10px] font-bold uppercase mb-1">State</label>
+                  <span className="block text-xs py-2 text-slate-500 font-bold uppercase">Maharashtra</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-500 text-[10px] font-bold uppercase mb-1">Latitude</label>
+                  <input 
+                    type="text" 
+                    value={newFarmLat} 
+                    onChange={(e) => setNewFarmLat(e.target.value)}
+                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 text-[10px] font-bold uppercase mb-1">Longitude</label>
+                  <input 
+                    type="text" 
+                    value={newFarmLon} 
+                    onChange={(e) => setNewFarmLon(e.target.value)}
+                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl font-mono"
+                  />
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                      (position) => {
+                        setNewFarmLat(position.coords.latitude.toFixed(4));
+                        setNewFarmLon(position.coords.longitude.toFixed(4));
+                      },
+                      (err) => {
+                        console.error(err);
+                        alert("Could not retrieve GPS coordinates. Please input them manually.");
+                      }
+                    );
+                  }
+                }}
+                className="w-full py-1.5 border border-stable/30 hover:bg-stable-light text-stable rounded-lg text-[10px] font-bold transition-all"
+              >
+                Auto-Detect coordinates via Device GPS
+              </button>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button 
+                onClick={() => setShowAddFarmModal(false)}
+                className="px-4 py-2 border border-slate-200 text-slate-500 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  try {
+                    const res = await fetch('http://127.0.0.1:8000/api/v1/farmers/me/farms', {
+                      method: 'POST',
+                      headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                      },
+                      body: JSON.stringify({
+                        area: parseFloat(newFarmArea),
+                        soil_type: newFarmSoil,
+                        irrigation: newFarmIrrigation,
+                        latitude: parseFloat(newFarmLat),
+                        longitude: parseFloat(newFarmLon)
+                      })
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      setFarms(prev => [...prev, data]);
+                      setSelectedFarm(data);
+                      setShowAddFarmModal(false);
+                      alert("Farm registered successfully!");
+                    } else {
+                      alert("Failed to register farm with backend.");
+                    }
+                  } catch {
+                    alert("Network offline. Saved farm locally.");
+                    const mockFarm = { 
+                      id: Date.now(), 
+                      area: parseFloat(newFarmArea), 
+                      soil_type: newFarmSoil, 
+                      irrigation: newFarmIrrigation,
+                      latitude: parseFloat(newFarmLat),
+                      longitude: parseFloat(newFarmLon)
+                    };
+                    setFarms(prev => [...prev, mockFarm]);
+                    setSelectedFarm(mockFarm);
+                    setShowAddFarmModal(false);
+                  }
+                }}
+                className="px-4 py-2 bg-stable hover:bg-stable-dark text-white rounded-xl text-xs font-bold transition-all"
+              >
+                Register Farm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Crop Modal Overlay */}
+      {showAddCropModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in text-left">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-earth-200 shadow-xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-lg font-bold text-slate-900 my-0">Register New Crop</h3>
+              <button 
+                onClick={() => setShowAddCropModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Crop Type</label>
+                <select 
+                  value={newCropType} 
+                  onChange={(e) => setNewCropType(e.target.value)}
+                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
+                >
+                  <option value="tomato">Tomato</option>
+                  <option value="wheat">Wheat</option>
+                  <option value="onion">Onion</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Variety Name</label>
+                <input 
+                  type="text" 
+                  value={newCropVariety} 
+                  onChange={(e) => setNewCropVariety(e.target.value)}
+                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
+                  placeholder="e.g. PKM-1, Local Premium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Sowing Date</label>
+                <input 
+                  type="date" 
+                  value={newCropSowingDate} 
+                  onChange={(e) => setNewCropSowingDate(e.target.value)}
+                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Crop Image URL (Optional)</label>
+                <input 
+                  type="url" 
+                  value={newCropImageUrl} 
+                  onChange={(e) => setNewCropImageUrl(e.target.value)}
+                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl font-mono"
+                  placeholder="https://example.com/mycrop.jpg"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Leave empty to auto-assign a beautiful stock farm photo based on selected crop.</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button 
+                onClick={() => setShowAddCropModal(false)}
+                className="px-4 py-2 border border-slate-200 text-slate-500 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  if (!selectedFarm) return;
+                  try {
+                    const res = await fetch(`http://127.0.0.1:8000/api/v1/farms/${selectedFarm.id}/crops`, {
+                      method: 'POST',
+                      headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                      },
+                      body: JSON.stringify({
+                        crop_type: newCropType,
+                        variety: newCropVariety,
+                        sowing_date: newCropSowingDate,
+                        image_url: newCropImageUrl || null
+                      })
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      setCrops(prev => [...prev, data]);
+                      setSelectedCrop(data);
+                      setShowAddCropModal(false);
+                      alert("Crop registered successfully!");
+                    } else {
+                      alert("Failed to register crop with backend.");
+                    }
+                  } catch {
+                    alert("Network offline. Saved crop locally.");
+                    const mockCrop = { 
+                      id: Date.now(), 
+                      crop_type: newCropType, 
+                      variety: newCropVariety,
+                      sowing_date: newCropSowingDate,
+                      image_url: newCropImageUrl || null,
+                      stage: 'Vegetative'
+                    };
+                    setCrops(prev => [...prev, mockCrop]);
+                    setSelectedCrop(mockCrop);
+                    setShowAddCropModal(false);
+                  }
+                }}
+                className="px-4 py-2 bg-stable hover:bg-stable-dark text-white rounded-xl text-xs font-bold transition-all"
+              >
+                Register Crop
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

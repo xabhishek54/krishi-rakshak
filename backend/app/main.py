@@ -9,6 +9,7 @@ from app.database import engine, Base, get_db
 from app import models, schemas, auth
 from app.weather import OpenMeteoProvider
 from app.advisory import evaluate_advisories
+from app.mandi import seed_mandi_data, get_mandi_comparison
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -18,6 +19,14 @@ app = FastAPI(
     description="Early-warning, risk-intelligence, and intervention system backend API.",
     version="1.0.0"
 )
+
+@app.on_event("startup")
+def startup_event():
+    db = next(get_db())
+    try:
+        seed_mandi_data(db)
+    except Exception as e:
+        print("Mandi seeding failed:", e)
 
 # Enable CORS
 app.add_middleware(
@@ -169,7 +178,8 @@ def create_crop(farm_id: int, crop_in: schemas.CropCreate, current_farmer: model
         variety=crop_in.variety,
         sowing_date=crop_in.sowing_date,
         stage=stage_derived,
-        expected_harvest_date=crop_in.expected_harvest_date
+        expected_harvest_date=crop_in.expected_harvest_date,
+        image_url=crop_in.image_url
     )
     db.add(new_crop)
     db.commit()
@@ -276,3 +286,17 @@ def get_advisories(current_farmer: models.Farmer = Depends(auth.get_current_farm
 def get_alerts(current_farmer: models.Farmer = Depends(auth.get_current_farmer), db: Session = Depends(get_db)):
     evaluate_advisories(db, current_farmer)
     return db.query(models.Alert).filter(models.Alert.farmer_id == current_farmer.id).all()
+
+@app.get("/api/v1/mandis/compare", response_model=List[schemas.MandiCompareResponse])
+def compare_mandis(
+    crop: str = "tomato",
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+    db: Session = Depends(get_db)
+):
+    farm = db.query(models.Farm).filter(models.Farm.farmer_id == current_farmer.id).first()
+    if not farm:
+        lat, lon = 20.08, 74.11
+    else:
+        lat, lon = farm.latitude, farm.longitude
+        
+    return get_mandi_comparison(db, crop, lat, lon)

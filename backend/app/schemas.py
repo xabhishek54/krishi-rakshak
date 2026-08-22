@@ -46,6 +46,7 @@ class CropCreate(BaseModel):
     variety: Optional[str] = None
     sowing_date: date
     expected_harvest_date: Optional[date] = None
+    image_url: Optional[str] = None
 
 class CropResponse(BaseModel):
     id: int
@@ -55,6 +56,7 @@ class CropResponse(BaseModel):
     sowing_date: date
     stage: Optional[str]
     expected_harvest_date: Optional[date]
+    image_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -165,3 +167,14 @@ class SchemeResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# Mandi Comparison Schemas
+class MandiCompareResponse(BaseModel):
+    mandi_id: int
+    mandi_name: str
+    distance_km: float
+    sticker_price: float
+    transport_cost: float
+    other_fees: float
+    net_return: float
+

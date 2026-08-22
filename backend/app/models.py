@@ -49,6 +49,7 @@ class Crop(Base):
     sowing_date = Column(Date, nullable=False)
     stage = Column(String, nullable=True) # vegetative, flowering, fruit_development, maturity (derived)
     expected_harvest_date = Column(Date, nullable=True)
+    image_url = Column(String, nullable=True)
 
     # Relationships
     farm = relationship("Farm", back_populates="crops")
