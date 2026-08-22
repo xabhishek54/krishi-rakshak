@@ -21,6 +21,14 @@ class FarmerLogin(BaseModel):
     username: str # matches phone number
     password: str
 
+class FarmerUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    password: Optional[str] = None
+    language: Optional[str] = None
+    location_id: Optional[str] = None
+
+
 class FarmerResponse(BaseModel):
     id: int
     name: str
