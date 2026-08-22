@@ -10,9 +10,11 @@ import {
   AlertTriangle,
   ChevronRight,
   TrendingDown,
-  Volume2,
   Lock,
-  LogOut
+  LogOut,
+  CloudRain,
+  Thermometer,
+  Droplets
 } from 'lucide-react';
 
 // Type declarations
@@ -32,7 +34,9 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [language, setLanguage] = useState<LanguageType>('english');
   const [isVoicePlaying, setIsVoicePlaying] = useState<boolean>(false);
-
+  const [hasFarm, setHasFarm] = useState<boolean>(localStorage.getItem('hasFarm') === 'true');
+  const [weather, setWeather] = useState<any>(null);
+  const [loadingWeather, setLoadingWeather] = useState<boolean>(false);
 
   // Form states for login/register
   const [isRegistering, setIsRegistering] = useState<boolean>(false);
@@ -48,19 +52,106 @@ function App() {
   useEffect(() => {
     if (token) {
       localStorage.setItem('token', token);
-      // Mock fetch profile
-      setFarmer({
-        name: regName || 'Ramesh Kumar',
-        phone: loginPhone || regPhone || '+91 98765 43210',
-        language: language,
-        location_id: 'Niphad, Nashik',
-        risk_profile: 'High'
+      
+      // Fetch profile from backend if possible
+      fetch('http://127.0.0.1:8000/api/v1/farmers/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error("API failed");
+      })
+      .then(data => {
+        setFarmer({
+          name: data.name,
+          phone: data.phone,
+          language: data.language as LanguageType,
+          location_id: data.location_id || undefined,
+          risk_profile: data.risk_profile || 'Stable'
+        });
+        if (data.location_id) {
+          localStorage.setItem('hasFarm', 'true');
+          setHasFarm(true);
+        }
+      })
+      .catch(() => {
+        // Fallback to mock
+        setFarmer({
+          name: regName || 'Ramesh Kumar',
+          phone: loginPhone || regPhone || '+91 98765 43210',
+          language: language,
+          location_id: localStorage.getItem('onboardLocation') || 'Niphad_Nashik',
+          risk_profile: 'High'
+        });
       });
     } else {
       localStorage.removeItem('token');
+      localStorage.removeItem('hasFarm');
+      localStorage.removeItem('onboardLocation');
       setFarmer(null);
+      setHasFarm(false);
+      setWeather(null);
     }
   }, [token]);
+
+  // Fetch Weather
+  const fetchWeather = async () => {
+    if (!farmer?.location_id) return;
+    setLoadingWeather(true);
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/v1/weather/${farmer.location_id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.observation) {
+          setWeather(data);
+          setLoadingWeather(false);
+          return;
+        }
+      }
+      throw new Error("No cached weather");
+    } catch {
+      // Offline/Error Fallback Mock Data
+      setWeather({
+        location_id: farmer.location_id,
+        observation: {
+          rainfall: 8.0,
+          temperature: 26.0,
+          humidity: 78.0
+        },
+        forecasts: [
+          { date: new Date().toISOString().split('T')[0], rainfall_forecast: 12.0, temperature: 27.5, rain_probability: 65.0 },
+          { date: new Date(Date.now() + 86400000).toISOString().split('T')[0], rainfall_forecast: 40.0, temperature: 24.0, rain_probability: 90.0 },
+          { date: new Date(Date.now() + 172800000).toISOString().split('T')[0], rainfall_forecast: 5.0, temperature: 28.0, rain_probability: 30.0 }
+        ],
+        generated_at: new Date().toISOString()
+      });
+    }
+    setLoadingWeather(false);
+  };
+
+  // Trigger weather refresh from API
+  const refreshWeatherFromApi = async () => {
+    if (!farmer?.location_id) return;
+    setLoadingWeather(true);
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/v1/weather/${farmer.location_id}/refresh`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        await fetchWeather();
+      }
+    } catch (e) {
+      console.error("Failed to refresh weather live. Using cache.", e);
+    }
+    setLoadingWeather(false);
+  };
+
+  useEffect(() => {
+    if (token && hasFarm && farmer?.location_id) {
+      fetchWeather();
+    }
+  }, [token, hasFarm, farmer?.location_id]);
 
   // Handle Logout
   const handleLogout = () => {
@@ -118,26 +209,50 @@ function App() {
         return (
           <div className="space-y-6">
             {/* Header Greeting */}
-            <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm flex justify-between items-center">
+            <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
-                <h2 className="text-2xl font-bold font-sans">Namaskar, {farmer?.name}!</h2>
-                <p className="text-slate-500 font-sans text-sm mt-1">Farm Location: {farmer?.location_id || 'Not Set'}</p>
+                <h2 className="text-2xl font-bold font-sans my-0">Namaskar, {farmer?.name}!</h2>
+                <p className="text-slate-500 font-sans text-sm mt-1 mb-0">Farm Location: {farmer?.location_id || 'Not Set'}</p>
               </div>
-              <div className="bg-stable-light text-stable font-bold text-xs px-3 py-1.5 rounded-full uppercase tracking-wider flex items-center gap-1 border border-stable-dark/20">
-                <span className="h-2 w-2 rounded-full bg-stable animate-pulse"></span> Offline Mode Cached
-              </div>
+              <button 
+                onClick={refreshWeatherFromApi}
+                disabled={loadingWeather}
+                className="bg-stable text-white hover:bg-stable-dark font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-50"
+              >
+                <span className={`h-2.5 w-2.5 rounded-full bg-white ${loadingWeather ? 'animate-ping' : ''}`}></span>
+                {loadingWeather ? 'Syncing Weather...' : 'Refresh Weather Forecast'}
+              </button>
             </div>
 
             {/* 2x2 Responsive Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Weather Card */}
+              <div className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm text-left">
+                <div className="text-stable mb-2"><CloudRain size={32} /></div>
+                <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Weather Today</h3>
+                {weather?.observation ? (
+                  <div className="mt-2 space-y-1">
+                    <p className="text-slate-900 text-lg font-bold flex items-center gap-1 my-0">
+                      <Thermometer size={16} className="text-elevated" /> {weather.observation.temperature.toFixed(1)}°C
+                    </p>
+                    <div className="flex justify-between text-slate-500 text-[10px] mt-1.5">
+                      <span className="flex items-center gap-0.5"><CloudRain size={12} className="text-slate-400" /> {weather.observation.rainfall.toFixed(1)} mm</span>
+                      <span className="flex items-center gap-0.5"><Droplets size={12} className="text-slate-400" /> {weather.observation.humidity.toFixed(0)}%</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-slate-400 text-xs mt-2 my-0">Loading weather...</p>
+                )}
+              </div>
+
               <button 
                 onClick={() => setActiveTab('crop')}
                 className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm hover:border-stable transition-colors text-left"
               >
                 <div className="text-stable mb-2"><Sprout size={32} /></div>
                 <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider">My Crop</h3>
-                <p className="text-slate-900 text-lg font-bold mt-1">Tomato</p>
-                <span className="text-slate-400 text-xs mt-1 block">Stage: Fruiting</span>
+                <p className="text-slate-900 text-lg font-bold mt-1 my-0">Tomato</p>
+                <span className="text-slate-400 text-xs mt-1 block">Stage: Veg. Growth</span>
               </button>
 
               <button 
@@ -146,9 +261,9 @@ function App() {
               >
                 <div className="text-elevated mb-2"><ShoppingCart size={32} /></div>
                 <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Market Price</h3>
-                <p className="text-slate-900 text-lg font-bold mt-1">₹2,290 <span className="text-xs font-normal text-slate-500">/q</span></p>
-                <span className="text-high text-xs font-bold mt-1 block flex items-center gap-1">
-                  <TrendingDown size={14} /> Price Crash (-22%)
+                <p className="text-slate-900 text-lg font-bold mt-1 my-0">₹2,290 <span className="text-xs font-normal text-slate-500">/q</span></p>
+                <span className="text-high text-[10px] font-bold mt-1 block flex items-center gap-0.5">
+                  <TrendingDown size={12} /> Price Crash (-22%)
                 </span>
               </button>
 
@@ -158,20 +273,8 @@ function App() {
               >
                 <div className="text-high mb-2"><AlertTriangle size={32} /></div>
                 <h3 className="text-high-dark text-xs font-semibold uppercase tracking-wider">Distress Risk</h3>
-                <p className="text-high-dark text-2xl font-bold mt-1">82 <span className="text-sm font-normal">/ 100</span></p>
-                <span className="bg-high text-white text-[10px] font-bold px-2 py-0.5 rounded-full mt-1.5 inline-block uppercase">High Risk</span>
-              </div>
-
-              <div className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm text-left">
-                <div className="text-stable mb-2"><Volume2 size={32} /></div>
-                <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Audio Assist</h3>
-                <p className="text-slate-900 text-lg font-bold mt-1">Read Aloud</p>
-                <button 
-                  onClick={handleVoicePlayback} 
-                  className={`mt-2 flex items-center gap-1.5 text-xs text-stable hover:underline font-semibold ${isVoicePlaying ? 'animate-pulse text-high' : ''}`}
-                >
-                  <Volume2 size={16} /> {isVoicePlaying ? 'Playing Audio...' : 'Click to Play'}
-                </button>
+                <p className="text-high-dark text-lg font-bold mt-1 my-0">82 <span className="text-sm font-normal">/ 100</span></p>
+                <span className="bg-high text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-1.5 inline-block uppercase">High Risk</span>
               </div>
             </div>
 
@@ -547,6 +650,22 @@ function App() {
     );
   }
 
+  // Onboarding wizard layout if farm setup is missing
+  if (token && !hasFarm) {
+    const handleOnboardComplete = (location: string, _cropType: string) => {
+      localStorage.setItem('hasFarm', 'true');
+      localStorage.setItem('onboardLocation', location);
+      setHasFarm(true);
+      if (farmer) {
+        setFarmer({
+          ...farmer,
+          location_id: location
+        });
+      }
+    };
+    return <OnboardingWizard onComplete={handleOnboardComplete} token={token} />;
+  }
+
   return (
     <div className="min-h-screen bg-earth-50 flex flex-col md:flex-row">
       {/* Sidebar Nav (Desktop widths >= md breakpoint) */}
@@ -646,6 +765,319 @@ function App() {
       >
         <Mic size={24} />
       </button>
+    </div>
+  );
+}
+
+interface OnboardingWizardProps {
+  onComplete: (location: string, crop: string) => void;
+  token: string;
+}
+
+function OnboardingWizard({ onComplete, token }: OnboardingWizardProps) {
+  const [step, setStep] = useState<number>(1);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [state, setState] = useState<string>('Maharashtra');
+  const [district, setDistrict] = useState<string>('Nashik');
+  const [block, setBlock] = useState<string>('Niphad');
+  const [lat, setLat] = useState<string>('20.08');
+  const [lon, setLon] = useState<string>('74.11');
+  
+  const [area, setArea] = useState<string>('2.5');
+  const [soilType, setSoilType] = useState<string>('loam');
+  const [irrigation, setIrrigation] = useState<string>('drip');
+  
+  const [cropType, setCropType] = useState<string>('tomato');
+  const [variety, setVariety] = useState<string>('Nashik Premium');
+  const [sowingDate, setSowingDate] = useState<string>(
+    new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // default 45 days ago
+  );
+
+  const [detectingGps, setDetectingGps] = useState<boolean>(false);
+
+  const handleDetectGps = () => {
+    setDetectingGps(true);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setLat(position.coords.latitude.toFixed(4));
+          setLon(position.coords.longitude.toFixed(4));
+          setDetectingGps(false);
+        },
+        (error) => {
+          console.error("GPS Detection failed, falling back to default Nashik/Niphad coordinates.", error);
+          setLat('20.08');
+          setLon('74.11');
+          setDetectingGps(false);
+        }
+      );
+    } else {
+      setLat('20.08');
+      setLon('74.11');
+      setDetectingGps(false);
+    }
+  };
+
+  const handleNext = async () => {
+    if (step < 3) {
+      setStep(step + 1);
+    } else {
+      setSubmitting(true);
+      const loc_id = `${block}_${district}`.replace(/\s+/g, '_');
+      try {
+        // 1. Update farmer location
+        await fetch('http://127.0.0.1:8000/api/v1/farmers/me', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            location_id: loc_id
+          })
+        });
+
+        // 2. Create farm
+        const farmRes = await fetch('http://127.0.0.1:8000/api/v1/farmers/me/farms', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            area: parseFloat(area),
+            soil_type: soilType,
+            irrigation: irrigation,
+            latitude: parseFloat(lat),
+            longitude: parseFloat(lon)
+          })
+        });
+        
+        if (farmRes.ok) {
+          const farmData = await farmRes.json();
+          // 3. Create crop
+          await fetch(`http://127.0.0.1:8000/api/v1/farms/${farmData.id}/crops`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              crop_type: cropType,
+              variety: variety || null,
+              sowing_date: sowingDate
+            })
+          });
+        }
+      } catch (e) {
+        console.warn("Could not save to live backend, proceeding in offline mode.", e);
+      }
+      setSubmitting(false);
+      onComplete(loc_id, cropType);
+    }
+  };
+
+  const handleBack = () => {
+    if (step > 1) {
+      setStep(step - 1);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-earth-50 flex items-center justify-center p-4 w-full">
+      <div className="bg-white max-w-lg w-full p-8 rounded-3xl border border-earth-200 shadow-sm space-y-6">
+        {/* Step Indicator */}
+        <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+          <div>
+            <h2 className="text-xl font-bold font-sans my-0">Farm Onboarding Setup</h2>
+            <p className="text-slate-500 text-xs mt-0.5 mb-0">Define your farm profile to calibrate advisories</p>
+          </div>
+          <span className="text-stable font-bold text-xs bg-stable-light px-3 py-1.5 rounded-full uppercase">
+            Step {step} of 3
+          </span>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+          <div 
+            className="bg-stable h-full transition-all duration-300"
+            style={{ width: `${(step / 3) * 100}%` }}
+          ></div>
+        </div>
+
+        {/* Steps Content */}
+        {step === 1 && (
+          <div className="space-y-4 text-left">
+            <h3 className="font-bold text-slate-800 text-sm uppercase my-0">1. Location Details</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-slate-500 text-xs font-bold uppercase mb-1.5">State</label>
+                <input
+                  type="text"
+                  value={state}
+                  onChange={(e) => setState(e.target.value)}
+                  className="w-full text-sm px-4 py-2.5 rounded-xl border border-earth-200 bg-earth-50"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-slate-500 text-xs font-bold uppercase mb-1.5">District</label>
+                <input
+                  type="text"
+                  value={district}
+                  onChange={(e) => setDistrict(e.target.value)}
+                  className="w-full text-sm px-4 py-2.5 rounded-xl border border-earth-200 bg-earth-50"
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-slate-500 text-xs font-bold uppercase mb-1.5">Village / Block</label>
+              <input
+                type="text"
+                value={block}
+                onChange={(e) => setBlock(e.target.value)}
+                className="w-full text-sm px-4 py-2.5 rounded-xl border border-earth-200 bg-earth-50"
+                required
+              />
+            </div>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleDetectGps}
+                className="w-full py-2.5 border border-stable/30 hover:bg-stable-light text-stable rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Mic size={16} /> {detectingGps ? "Detecting GPS Coordinates..." : "Detect Current GPS Location"}
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-slate-500 text-xs font-bold uppercase mb-1.5">Latitude</label>
+                <input
+                  type="text"
+                  value={lat}
+                  onChange={(e) => setLat(e.target.value)}
+                  className="w-full text-sm px-4 py-2.5 rounded-xl border border-earth-200 bg-earth-50 text-slate-500"
+                  readOnly
+                />
+              </div>
+              <div>
+                <label className="block text-slate-500 text-xs font-bold uppercase mb-1.5">Longitude</label>
+                <input
+                  type="text"
+                  value={lon}
+                  onChange={(e) => setLon(e.target.value)}
+                  className="w-full text-sm px-4 py-2.5 rounded-xl border border-earth-200 bg-earth-50 text-slate-500"
+                  readOnly
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-4 text-left">
+            <h3 className="font-bold text-slate-800 text-sm uppercase my-0">2. Farm Attributes</h3>
+            <div>
+              <label className="block text-slate-500 text-xs font-bold uppercase mb-1.5">Farm Size (Acres)</label>
+              <input
+                type="number"
+                step="0.1"
+                value={area}
+                onChange={(e) => setArea(e.target.value)}
+                className="w-full text-sm px-4 py-2.5 rounded-xl border border-earth-200 bg-earth-50"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-slate-500 text-xs font-bold uppercase mb-1.5">Soil Type</label>
+              <select
+                value={soilType}
+                onChange={(e) => setSoilType(e.target.value)}
+                className="w-full text-sm px-4 py-2.5 rounded-xl border border-earth-200 bg-earth-50"
+              >
+                <option value="loam">Loam / Medium Soil</option>
+                <option value="clay">Clay / Heavy Soil</option>
+                <option value="sandy">Sandy / Light Soil</option>
+                <option value="black_cotton">Black Cotton Soil</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-slate-500 text-xs font-bold uppercase mb-1.5">Irrigation Setup</label>
+              <select
+                value={irrigation}
+                onChange={(e) => setIrrigation(e.target.value)}
+                className="w-full text-sm px-4 py-2.5 rounded-xl border border-earth-200 bg-earth-50"
+              >
+                <option value="drip">Drip Irrigation</option>
+                <option value="sprinkler">Sprinkler Irrigation</option>
+                <option value="flood">Flood Irrigation</option>
+                <option value="rainfed">Rainfed (No Irrigation)</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-4 text-left">
+            <h3 className="font-bold text-slate-800 text-sm uppercase my-0">3. Crop Details</h3>
+            <div>
+              <label className="block text-slate-500 text-xs font-bold uppercase mb-1.5">Active Crop Type</label>
+              <select
+                value={cropType}
+                onChange={(e) => setCropType(e.target.value)}
+                className="w-full text-sm px-4 py-2.5 rounded-xl border border-earth-200 bg-earth-50"
+              >
+                <option value="tomato">Tomato</option>
+                <option value="wheat">Wheat</option>
+                <option value="onion">Onion</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-slate-500 text-xs font-bold uppercase mb-1.5">Crop Variety</label>
+              <input
+                type="text"
+                value={variety}
+                onChange={(e) => setVariety(e.target.value)}
+                className="w-full text-sm px-4 py-2.5 rounded-xl border border-earth-200 bg-earth-50"
+                placeholder="e.g. PKM-1, Arka Vikas"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-500 text-xs font-bold uppercase mb-1.5">Sowing Date</label>
+              <input
+                type="date"
+                value={sowingDate}
+                onChange={(e) => setSowingDate(e.target.value)}
+                className="w-full text-sm px-4 py-2.5 rounded-xl border border-earth-200 bg-earth-50"
+                required
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Buttons */}
+        <div className="flex gap-4 pt-4 border-t border-slate-100">
+          {step > 1 && (
+            <button
+              type="button"
+              onClick={handleBack}
+              disabled={submitting}
+              className="flex-1 py-3 border border-slate-200 text-slate-500 rounded-2xl text-sm font-bold hover:bg-slate-50 transition-colors disabled:opacity-50"
+            >
+              Back
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleNext}
+            disabled={submitting}
+            className="flex-1 bg-stable text-white py-3 rounded-2xl text-sm font-bold shadow-sm hover:bg-stable-dark transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+          >
+            {submitting ? "Saving Profile..." : step === 3 ? "Finish & Sync Profiles" : "Continue"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
