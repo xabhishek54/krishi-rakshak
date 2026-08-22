@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 from app.database import engine, Base, get_db
 from app import models, schemas, auth
 from app.weather import OpenMeteoProvider
+from app.advisory import evaluate_advisories
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -264,3 +265,14 @@ async def get_weather(location_id: str, db: Session = Depends(get_db)):
         "forecasts": forecasts,
         "generated_at": datetime.utcnow()
     }
+
+@app.get("/api/v1/advisories", response_model=List[schemas.AdvisoryResponse])
+def get_advisories(current_farmer: models.Farmer = Depends(auth.get_current_farmer), db: Session = Depends(get_db)):
+    evaluate_advisories(db, current_farmer)
+    farm_ids = [f.id for f in db.query(models.Farm).filter(models.Farm.farmer_id == current_farmer.id).all()]
+    return db.query(models.Advisory).filter(models.Advisory.farm_id.in_(farm_ids)).all()
+
+@app.get("/api/v1/alerts", response_model=List[schemas.AlertResponse])
+def get_alerts(current_farmer: models.Farmer = Depends(auth.get_current_farmer), db: Session = Depends(get_db)):
+    evaluate_advisories(db, current_farmer)
+    return db.query(models.Alert).filter(models.Alert.farmer_id == current_farmer.id).all()

@@ -37,6 +37,8 @@ function App() {
   const [hasFarm, setHasFarm] = useState<boolean>(localStorage.getItem('hasFarm') === 'true');
   const [weather, setWeather] = useState<any>(null);
   const [loadingWeather, setLoadingWeather] = useState<boolean>(false);
+  const [advisories, setAdvisories] = useState<any[]>([]);
+  const [alerts, setAlerts] = useState<any[]>([]);
 
   // Form states for login/register
   const [isRegistering, setIsRegistering] = useState<boolean>(false);
@@ -140,6 +142,7 @@ function App() {
       });
       if (res.ok) {
         await fetchWeather();
+        await fetchAdvisoriesAndAlerts();
       }
     } catch (e) {
       console.error("Failed to refresh weather live. Using cache.", e);
@@ -147,9 +150,39 @@ function App() {
     setLoadingWeather(false);
   };
 
+  // Fetch Advisories and Alerts
+  const fetchAdvisoriesAndAlerts = async () => {
+    try {
+      const advRes = await fetch('http://127.0.0.1:8000/api/v1/advisories', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (advRes.ok) {
+        const data = await advRes.json();
+        setAdvisories(data);
+      }
+      
+      const alertRes = await fetch('http://127.0.0.1:8000/api/v1/alerts', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (alertRes.ok) {
+        const data = await alertRes.json();
+        setAlerts(data);
+      }
+    } catch {
+      // Fallback mocks if offline
+      setAdvisories([
+        { id: 1, category: 'irrigation', priority: 'high', recommendation: 'Stop Tomato Irrigation', reason: 'Heavy rainfall expected tomorrow. Skip irrigation today to prevent crop waterlogging.' }
+      ]);
+      setAlerts([
+        { id: 1, severity: 'Critical', reason: 'Late Blight Risk: Humidity has exceeded 80% for 3 consecutive days. Apply preventive fungicide.' }
+      ]);
+    }
+  };
+
   useEffect(() => {
     if (token && hasFarm && farmer?.location_id) {
       fetchWeather();
+      fetchAdvisoriesAndAlerts();
     }
   }, [token, hasFarm, farmer?.location_id]);
 
@@ -282,21 +315,21 @@ function App() {
             <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
               <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-3 mb-4">What should I do today?</h3>
               <div className="space-y-4">
-                <div className="flex gap-4 items-start p-3 bg-earth-50 rounded-xl">
-                  <span className="bg-high text-white p-2 rounded-lg mt-0.5"><AlertTriangle size={18} /></span>
-                  <div>
-                    <h4 className="font-semibold text-sm text-slate-900">Stop Tomato Irrigation</h4>
-                    <p className="text-slate-500 text-xs mt-0.5">Heavy rainfall of 40mm expected in Niphad block tomorrow. Skip irrigation today to prevent crop waterlogging.</p>
-                  </div>
-                </div>
-
-                <div className="flex gap-4 items-start p-3 bg-earth-50 rounded-xl">
-                  <span className="bg-elevated text-white p-2 rounded-lg mt-0.5"><ShoppingCart size={18} /></span>
-                  <div>
-                    <h4 className="font-semibold text-sm text-slate-900">Check Mandi Prices</h4>
-                    <p className="text-slate-500 text-xs mt-0.5">Tomato prices are down 22% locally. Compare transportation costs to choose the highest net realization sale option.</p>
-                  </div>
-                </div>
+                {advisories.length > 0 ? (
+                  advisories.map((adv) => (
+                    <div key={adv.id} className="flex gap-4 items-start p-3 bg-earth-50 rounded-xl">
+                      <span className={`p-2 rounded-lg mt-0.5 text-white flex items-center justify-center ${
+                        adv.priority === 'high' ? 'bg-high' : adv.priority === 'medium' ? 'bg-elevated' : 'bg-stable'
+                      }`}><AlertTriangle size={18} /></span>
+                      <div>
+                        <h4 className="font-semibold text-sm text-slate-900">{adv.recommendation}</h4>
+                        <p className="text-slate-500 text-xs mt-0.5">{adv.reason}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-slate-400 text-sm py-2">No alerts or advisories for today. Your crops are in optimal condition!</p>
+                )}
               </div>
             </div>
           </div>
@@ -391,6 +424,7 @@ function App() {
           <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">
             <h2 className="text-xl font-bold">Alert Center</h2>
             <div className="space-y-4">
+              {/* Financial Distress Alert (Baseline Simulation) */}
               <div className="flex gap-4 items-start p-4 bg-high-light rounded-xl border border-high-dark/10">
                 <span className="bg-high text-white p-2.5 rounded-xl"><AlertTriangle size={20} /></span>
                 <div>
@@ -404,6 +438,28 @@ function App() {
                   </button>
                 </div>
               </div>
+
+              {/* Dynamic Alerts (Pest Warnings) */}
+              {alerts.length > 0 ? (
+                alerts.map((al) => (
+                  <div key={al.id} className={`flex gap-4 items-start p-4 rounded-xl border ${
+                    al.severity === 'Critical' ? 'bg-high-light border-high-dark/10' : 'bg-elevated-light border-elevated-dark/10'
+                  }`}>
+                    <span className={`p-2.5 rounded-xl text-white ${
+                      al.severity === 'Critical' ? 'bg-high' : 'bg-elevated'
+                    }`}><AlertTriangle size={20} /></span>
+                    <div className="flex-1">
+                      <div className="flex justify-between items-center">
+                        <h4 className="font-bold text-slate-800 text-sm">Agricultural Alert</h4>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                          al.severity === 'Critical' ? 'bg-high text-white' : 'bg-elevated text-white'
+                        }`}>{al.severity}</span>
+                      </div>
+                      <p className="text-slate-600 text-xs mt-1">{al.reason}</p>
+                    </div>
+                  </div>
+                ))
+              ) : null}
             </div>
           </div>
         );

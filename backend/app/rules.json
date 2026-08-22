@@ -1,0 +1,110 @@
+{
+  "advisory_rules": [
+    {
+      "crop": "tomato",
+      "stage": "fruit development",
+      "conditions": {
+        "rain_forecast_24h_min": 25.0
+      },
+      "advisory": {
+        "category": "irrigation",
+        "priority": 1,
+        "recommendation": "Stop Tomato Irrigation",
+        "reason": "Heavy rainfall forecast",
+        "explanation": "Heavy rainfall of over 25mm expected in Niphad block tomorrow. Skip irrigation today to prevent crop waterlogging."
+      }
+    },
+    {
+      "crop": "tomato",
+      "stage": "vegetative",
+      "conditions": {
+        "temperature_max": 35.0
+      },
+      "advisory": {
+        "category": "irrigation",
+        "priority": 2,
+        "recommendation": "Increase irrigation frequency",
+        "reason": "High temperature conditions",
+        "explanation": "High temperature of over 35°C is expected. Increase irrigation frequency to keep the soil moist and prevent leaf scorch."
+      }
+    },
+    {
+      "crop": "wheat",
+      "stage": "flowering",
+      "conditions": {
+        "rain_forecast_24h_min": 15.0
+      },
+      "advisory": {
+        "category": "irrigation",
+        "priority": 1,
+        "recommendation": "Postpone irrigation and pesticide spraying",
+        "reason": "Moderate rain expected",
+        "explanation": "Rain is expected in the next 24 hours. Postpone irrigation and chemical spraying to avoid runoffs."
+      }
+    },
+    {
+      "crop": "onion",
+      "stage": "bulb development & maturity",
+      "conditions": {
+        "rain_forecast_24h_min": 10.0
+      },
+      "advisory": {
+        "category": "harvesting",
+        "priority": 1,
+        "recommendation": "Accelerate onion curing and secure storage",
+        "reason": "Rain expected during curing stage",
+        "explanation": "Rain during curing will cause onion bulb rotting. Cover harvested bulbs and transfer to a dry shed immediately."
+      }
+    },
+    {
+      "crop": "*",
+      "stage": "*",
+      "conditions": {
+        "rain_forecast_24h_min": 20.0
+      },
+      "advisory": {
+        "category": "general",
+        "priority": 3,
+        "recommendation": "Check field drainage channels",
+        "reason": "Heavy rain alert",
+        "explanation": "Clear any blocked drainage paths to allow excess water to escape and prevent root rot."
+      }
+    }
+  ],
+  "pest_rules": [
+    {
+      "crop": "tomato",
+      "stage": "flowering",
+      "conditions": {
+        "humidity_threshold": 80.0,
+        "temp_min": 15.0,
+        "temp_max": 25.0,
+        "persistence_days": 3
+      },
+      "pest": {
+        "category": "disease",
+        "priority": 1,
+        "warning": "High Late Blight Outbreak Risk",
+        "reason": "Prolonged high humidity and moderate temperatures",
+        "explanation": "Humidity has exceeded 80% for 3 consecutive days with temperatures between 15°C and 25°C. Inspect lower leaves for black spots and apply preventive fungicide."
+      }
+    },
+    {
+      "crop": "wheat",
+      "stage": "tillering",
+      "conditions": {
+        "humidity_threshold": 75.0,
+        "temp_min": 10.0,
+        "temp_max": 20.0,
+        "persistence_days": 2
+      },
+      "pest": {
+        "category": "disease",
+        "priority": 2,
+        "warning": "Stripe Rust Infection Warning",
+        "reason": "Cool humid nights",
+        "explanation": "Cool, humid nights favor stripe rust spore germination. Monitor fields closely for yellow dust stripes on leaves."
+      }
+    }
+  ]
+}
