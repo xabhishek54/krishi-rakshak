@@ -110,11 +110,13 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           if (cropRes.ok) {
             const cropData = await cropRes.json();
             setCrops(cropData);
-            if (cropData.length > 0) {
-              setSelectedCrop(selectedCrop || cropData[0]);
-            } else {
-              setSelectedCrop(null);
-            }
+if (cropData.length > 0) {
+      // When switching farms, always select the first crop from the new farm's crops
+      // Unless we're initializing and have no prior selection
+      setSelectedCrop(selectedCrop && cropData.some(c => c.id === selectedCrop.id) ? selectedCrop : cropData[0]);
+    } else {
+      setSelectedCrop(null);
+    }
           }
         } else {
           setFarms([]);

@@ -119,7 +119,22 @@ def test_create_and_list_farm(client, auth_header):
 def test_create_crop_and_stage_derivation(client, auth_header):
     # Fetch farm id
     response = client.get("/api/v1/farmers/me/farms", headers=auth_header)
-    farm_id = response.json()[0]["id"]
+    farms_list = response.json()
+    if not farms_list:
+        # Create a farm if none exists
+        farm_data = {
+            "area": 2.5,
+            "soil_type": "loam",
+            "irrigation": "drip",
+            "latitude": 20.08,
+            "longitude": 74.11
+        }
+        response = client.post("/api/v1/farmers/me/farms", json=farm_data, headers=auth_header)
+        assert response.status_code == 201
+        data = response.json()
+        farm_id = data["id"]
+    else:
+        farm_id = farms_list[0]["id"]
     
     # Crop sowed 45 days ago (should resolve to Flowering or Fruit Development stage)
     sowing_date = (datetime.date.today() - datetime.timedelta(days=45)).isoformat()
