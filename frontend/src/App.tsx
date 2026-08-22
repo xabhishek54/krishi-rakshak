@@ -40,6 +40,15 @@ function App() {
   const [advisories, setAdvisories] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [mandiPrices, setMandiPrices] = useState<any[]>([]);
+  const [cashFlow, setCashFlow] = useState<any>(null);
+
+  // Obligation Overlay Modal States
+  const [showAddObligationModal, setShowAddObligationModal] = useState<boolean>(false);
+  const [newObligationAmount, setNewObligationAmount] = useState<string>('30000');
+  const [newObligationType, setNewObligationType] = useState<string>('loan');
+  const [newObligationDate, setNewObligationDate] = useState<string>(
+    new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  );
 
   // Multiple Farms and Crops States
   const [farms, setFarms] = useState<any[]>([]);
@@ -310,9 +319,38 @@ function App() {
     }
   };
 
+  const fetchProjections = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/v1/farmers/me/projections', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCashFlow(data);
+      }
+    } catch {
+      // Fallback mocks
+      setCashFlow({
+        projected_yield_quintals: 30.0,
+        expected_price_per_quintal: 2600.0,
+        projected_revenue: 78000.0,
+        cultivation_cost: 30000.0,
+        projected_net_income: 48000.0,
+        total_obligations: 60000.0,
+        cash_flow_surplus: -12000.0,
+        has_shortfall: true,
+        obligations: [
+          { id: 1, amount: 60000, due_date: '2026-09-04', type: 'loan' }
+        ]
+      });
+    }
+  };
+
   useEffect(() => {
     if (token && selectedCrop) {
       fetchMandiPrices();
+      fetchProjections();
     }
   }, [token, selectedCrop]);
   // Handle Logout
@@ -737,12 +775,37 @@ function App() {
           </div>
         );
       case 'risk-detail':
+        const normalIncome = cashFlow?.projected_net_income || 95000;
+        const currentIncome = cashFlow?.projected_net_income || 62000;
+        const stressIncome = Math.round(currentIncome * 0.7);
+        const totalObligations = cashFlow?.total_obligations || 0;
+        
+        const getRatioText = (inc: number, ob: number) => {
+          if (ob === 0) return "N/A (No Debt)";
+          const r = inc / ob;
+          if (r >= 1.2) return `${r.toFixed(2)}x (Secure)`;
+          if (r >= 1.0) return `${r.toFixed(2)}x (Tight)`;
+          return `${r.toFixed(2)}x (Deficit)`;
+        };
+
+        const getRatioColor = (inc: number, ob: number) => {
+          if (ob === 0) return "text-stable";
+          const r = inc / ob;
+          if (r >= 1.2) return "text-stable";
+          if (r >= 1.0) return "text-watch";
+          return "text-high";
+        };
+
         return (
-          <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">
+          <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6 text-left">
             <button onClick={() => setActiveTab('home')} className="text-xs font-semibold text-slate-500 hover:underline">← Back to Home</button>
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold">Farm Financial Resilience</h2>
-              <span className="bg-high text-white text-xs font-bold px-3 py-1 rounded-full uppercase">High Risk (82)</span>
+            <div className="flex justify-between items-center flex-wrap gap-2">
+              <h2 className="text-xl font-bold my-0">Farm Financial Resilience</h2>
+              <span className={`text-white text-xs font-bold px-3 py-1 rounded-full uppercase ${
+                cashFlow?.has_shortfall ? 'bg-high' : 'bg-stable'
+              }`}>
+                {cashFlow?.has_shortfall ? 'Deficit Risk' : 'Resilient'}
+              </span>
             </div>
 
             <div className="p-4 bg-earth-50 rounded-xl border border-earth-200 text-xs">
@@ -763,33 +826,60 @@ function App() {
                 <tbody className="divide-y divide-slate-100">
                   <tr className="bg-white">
                     <td className="px-4 py-3 font-semibold">Normal Baseline</td>
-                    <td className="px-4 py-3">₹95,000</td>
-                    <td className="px-4 py-3">₹60,000</td>
-                    <td className="px-4 py-3 text-stable font-bold">1.58x (Secure)</td>
+                    <td className="px-4 py-3 font-mono">₹{normalIncome}</td>
+                    <td className="px-4 py-3 font-mono">₹{totalObligations}</td>
+                    <td className={`px-4 py-3 font-bold ${getRatioColor(normalIncome, totalObligations)}`}>
+                      {getRatioText(normalIncome, totalObligations)}
+                    </td>
                   </tr>
                   <tr className="bg-white">
                     <td className="px-4 py-3 font-semibold">Current Forecast</td>
-                    <td className="px-4 py-3">₹62,000</td>
-                    <td className="px-4 py-3">₹60,000</td>
-                    <td className="px-4 py-3 text-watch font-bold">1.03x (Tight)</td>
+                    <td className="px-4 py-3 font-mono">₹{currentIncome}</td>
+                    <td className="px-4 py-3 font-mono">₹{totalObligations}</td>
+                    <td className={`px-4 py-3 font-bold ${getRatioColor(currentIncome, totalObligations)}`}>
+                      {getRatioText(currentIncome, totalObligations)}
+                    </td>
                   </tr>
                   <tr className="bg-high-light font-semibold">
-                    <td className="px-4 py-3 font-bold text-high-dark">Stress Scenario</td>
-                    <td className="px-4 py-3 text-high-dark">₹42,000</td>
-                    <td className="px-4 py-3 text-high-dark">₹60,000</td>
-                    <td className="px-4 py-3 text-high font-extrabold">0.70x (Deficit)</td>
+                    <td className="px-4 py-3 font-bold text-high-dark">Stress Scenario (-30%)</td>
+                    <td className="px-4 py-3 text-high-dark font-mono">₹{stressIncome}</td>
+                    <td className="px-4 py-3 text-high-dark font-mono">₹{totalObligations}</td>
+                    <td className={`px-4 py-3 font-extrabold ${getRatioColor(stressIncome, totalObligations)}`}>
+                      {getRatioText(stressIncome, totalObligations)}
+                    </td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            
-            <div className="bg-high-light p-4 rounded-xl border border-high-dark/10 text-xs text-high-dark space-y-1">
-              <h4 className="font-bold flex items-center gap-1"><AlertTriangle size={14} /> Risk Drivers Detected:</h4>
-              <ul className="list-disc pl-4 space-y-0.5">
-                <li>Rainfall: **-31% below seasonal norm**</li>
-                <li>Expected Yield: **-18% projection reduction**</li>
-                <li>Mandi Tomato Prices: **-22% local crash**</li>
-              </ul>
+
+            {/* Obligations Section */}
+            <div className="space-y-4 pt-4 border-t border-slate-100">
+              <div className="flex justify-between items-center">
+                <h3 className="text-base font-bold text-slate-900 my-0">Upcoming Financial Obligations</h3>
+                <button 
+                  onClick={() => setShowAddObligationModal(true)}
+                  className="px-3 py-1 bg-stable text-white hover:bg-stable-dark rounded-lg text-xs font-bold transition-all"
+                >
+                  + Add Obligation
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {cashFlow?.obligations && cashFlow.obligations.length > 0 ? (
+                  cashFlow.obligations.map((ob: any) => (
+                    <div key={ob.id} className="p-4 rounded-xl border border-earth-200 bg-white flex justify-between items-center shadow-xs">
+                      <div>
+                        <span className="text-[9px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full uppercase">{ob.type}</span>
+                        <h4 className="font-bold text-slate-800 text-sm mt-1 mb-0">₹{ob.amount}</h4>
+                        <p className="text-slate-400 text-[10px] mt-0.5 mb-0">Due Date: {ob.due_date}</p>
+                      </div>
+                      <span className="text-high bg-high-light p-2 rounded-lg"><AlertTriangle size={18} /></span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-slate-400 text-xs py-2">No debt obligations registered. Your cash flows are fully unencumbered!</p>
+                )}
+              </div>
             </div>
           </div>
         );
@@ -1365,6 +1455,119 @@ function App() {
                 className="px-4 py-2 bg-stable hover:bg-stable-dark text-white rounded-xl text-xs font-bold transition-all"
               >
                 Register Crop
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Obligation Modal Overlay */}
+      {showAddObligationModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in text-left">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-earth-200 shadow-xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-lg font-bold text-slate-900 my-0">Register Financial Obligation</h3>
+              <button 
+                onClick={() => setShowAddObligationModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Obligation Type</label>
+                <select 
+                  value={newObligationType} 
+                  onChange={(e) => setNewObligationType(e.target.value)}
+                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
+                >
+                  <option value="loan">Bank Crop Loan (KCC)</option>
+                  <option value="lease">Land Lease Rent</option>
+                  <option value="inputs">Fertilizer/Seed Credit</option>
+                  <option value="other">Other Debt</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Amount Due (₹)</label>
+                <input 
+                  type="number" 
+                  value={newObligationAmount} 
+                  onChange={(e) => setNewObligationAmount(e.target.value)}
+                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl font-bold"
+                  placeholder="e.g. 50000"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Due Date</label>
+                <input 
+                  type="date" 
+                  value={newObligationDate} 
+                  onChange={(e) => setNewObligationDate(e.target.value)}
+                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button 
+                onClick={() => setShowAddObligationModal(false)}
+                className="px-4 py-2 border border-slate-200 text-slate-500 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  try {
+                    const res = await fetch('http://127.0.0.1:8000/api/v1/farmers/me/obligations', {
+                      method: 'POST',
+                      headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                      },
+                      body: JSON.stringify({
+                        amount: parseFloat(newObligationAmount),
+                        due_date: newObligationDate,
+                        type: newObligationType
+                      })
+                    });
+                    if (res.ok) {
+                      setShowAddObligationModal(false);
+                      alert("Obligation registered successfully!");
+                      await fetchProjections();
+                    } else {
+                      alert("Failed to save obligation with backend.");
+                    }
+                  } catch {
+                    alert("Saved obligation locally (demo mode).");
+                    const mockOb = { 
+                      id: Date.now(), 
+                      amount: parseFloat(newObligationAmount), 
+                      due_date: newObligationDate, 
+                      type: newObligationType 
+                    };
+                    setCashFlow((prev: any) => {
+                      if (!prev) return prev;
+                      const nextObs = [...(prev.obligations || []), mockOb];
+                      const totalOb = nextObs.reduce((sum, o) => sum + o.amount, 0);
+                      const surplus = prev.projected_net_income - totalOb;
+                      return {
+                        ...prev,
+                        total_obligations: totalOb,
+                        cash_flow_surplus: surplus,
+                        has_shortfall: surplus < 0,
+                        obligations: nextObs
+                      };
+                    });
+                    setShowAddObligationModal(false);
+                  }
+                }}
+                className="px-4 py-2 bg-stable hover:bg-stable-dark text-white rounded-xl text-xs font-bold transition-all"
+              >
+                Record Obligation
               </button>
             </div>
           </div>

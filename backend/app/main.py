@@ -300,3 +300,76 @@ def compare_mandis(
         lat, lon = farm.latitude, farm.longitude
         
     return get_mandi_comparison(db, crop, lat, lon)
+
+@app.post("/api/v1/farmers/me/obligations", response_model=schemas.FinancialObligationResponse, status_code=status.HTTP_201_CREATED)
+def create_obligation(
+    obligation_in: schemas.FinancialObligationCreate,
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+    db: Session = Depends(get_db)
+):
+    new_ob = models.FinancialObligation(
+        farmer_id=current_farmer.id,
+        amount=obligation_in.amount,
+        due_date=obligation_in.due_date,
+        type=obligation_in.type
+    )
+    db.add(new_ob)
+    db.commit()
+    db.refresh(new_ob)
+    return new_ob
+
+@app.get("/api/v1/farmers/me/obligations", response_model=List[schemas.FinancialObligationResponse])
+def get_obligations(
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+    db: Session = Depends(get_db)
+):
+    return db.query(models.FinancialObligation).filter(models.FinancialObligation.farmer_id == current_farmer.id).all()
+
+@app.get("/api/v1/farmers/me/projections", response_model=schemas.CashFlowResponse)
+def get_cash_flow_projection(
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+    db: Session = Depends(get_db)
+):
+    # Find farmer's active farm and crop
+    farm = db.query(models.Farm).filter(models.Farm.farmer_id == current_farmer.id).first()
+    
+    # Base calibration parameters per acre: (yield_quintals, price_per_quintal, cost_per_acre)
+    crop_params = {
+        "tomato": (12.0, 2600.0, 12000.0),
+        "wheat": (16.0, 2100.0, 9000.0),
+        "onion": (14.0, 1800.0, 10000.0)
+    }
+    
+    farm_area = 2.5 # fallback
+    crop_type = "tomato"
+    
+    if farm:
+        farm_area = farm.area
+        crop = db.query(models.Crop).filter(models.Crop.farm_id == farm.id).first()
+        if crop:
+            crop_type = crop.crop_type.lower()
+            
+    p_yield_per_acre, p_price, p_cost_per_acre = crop_params.get(crop_type, (12.0, 2600.0, 12000.0))
+    
+    projected_yield = farm_area * p_yield_per_acre
+    projected_rev = projected_yield * p_price
+    projected_cost = farm_area * p_cost_per_acre
+    projected_net_inc = projected_rev - projected_cost
+    
+    obligations = db.query(models.FinancialObligation).filter(models.FinancialObligation.farmer_id == current_farmer.id).all()
+    total_ob = sum(ob.amount for ob in obligations)
+    
+    surplus = projected_net_inc - total_ob
+    has_shortfall = surplus < 0
+    
+    return {
+        "projected_yield_quintals": round(projected_yield, 1),
+        "expected_price_per_quintal": round(p_price, 2),
+        "projected_revenue": round(projected_rev, 2),
+        "cultivation_cost": round(projected_cost, 2),
+        "projected_net_income": round(projected_net_inc, 2),
+        "total_obligations": round(total_ob, 2),
+        "cash_flow_surplus": round(surplus, 2),
+        "has_shortfall": has_shortfall,
+        "obligations": obligations
+    }

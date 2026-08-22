@@ -178,3 +178,31 @@ class MandiCompareResponse(BaseModel):
     other_fees: float
     net_return: float
 
+# Financial Schemas
+class FinancialObligationCreate(BaseModel):
+    amount: float = Field(..., gt=0.0)
+    due_date: date
+    type: str = Field(..., pattern="^(loan|lease|inputs|other)$")
+
+class FinancialObligationResponse(BaseModel):
+    id: int
+    farmer_id: int
+    amount: float
+    due_date: date
+    type: str
+
+    class Config:
+        from_attributes = True
+
+class CashFlowResponse(BaseModel):
+    projected_yield_quintals: float
+    expected_price_per_quintal: float
+    projected_revenue: float
+    cultivation_cost: float
+    projected_net_income: float
+    total_obligations: float
+    cash_flow_surplus: float
+    has_shortfall: bool
+    obligations: List[FinancialObligationResponse]
+
+
