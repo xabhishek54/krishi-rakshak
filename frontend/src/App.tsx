@@ -7,7 +7,7 @@ import { speakText, stopSpeech, buildVoiceText, askGemini } from './voice';
 // Lazy-loaded map picker — load once at module level to avoid remounting
 import MapPickerComponent from './MapPicker';
 import CommunityMap from './CommunityMap';
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = 'http://localhost:8000';
 import { 
   Home as HomeIcon, 
   Sprout, 
@@ -152,7 +152,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   const fetchFarmsAndCrops = async () => {
     if (!token) return;
     try {
-      const farmRes = await fetch('http://127.0.0.1:8000/api/v1/farmers/me/farms', {
+      const farmRes = await fetch('http://localhost:8000/api/v1/farmers/me/farms', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (farmRes.ok) {
@@ -164,7 +164,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           setSelectedFarm(currentFarm);
 
           // Load crops from the selected farm (for modal UI)
-          const cropRes = await fetch(`http://127.0.0.1:8000/api/v1/farms/${currentFarm.id}/crops`, {
+          const cropRes = await fetch(`http://localhost:8000/api/v1/farms/${currentFarm.id}/crops`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (cropRes.ok) {
@@ -181,7 +181,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           const allCropResults: any[] = [];
           await Promise.all(farmData.map(async (farm: any) => {
             try {
-              const r = await fetch(`http://127.0.0.1:8000/api/v1/farms/${farm.id}/crops`, {
+              const r = await fetch(`http://localhost:8000/api/v1/farms/${farm.id}/crops`, {
                 headers: { 'Authorization': `Bearer ${token}` }
               });
               if (r.ok) {
@@ -220,7 +220,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
       localStorage.setItem('token', token);
       
       // Fetch profile
-      fetch('http://127.0.0.1:8000/api/v1/farmers/me', {
+      fetch('http://localhost:8000/api/v1/farmers/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       .then(res => {
@@ -273,7 +273,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     if (!farmer?.location_id) return;
     setLoadingWeather(true);
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/weather/${farmer.location_id}`);
+      const res = await fetch(`http://localhost:8000/api/v1/weather/${farmer.location_id}`);
       if (res.ok) {
         const data = await res.json();
         if (data.observation) {
@@ -308,7 +308,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     if (!farmer?.location_id) return;
     setLoadingWeather(true);
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/weather/${farmer.location_id}/refresh`, {
+      const res = await fetch(`http://localhost:8000/api/v1/weather/${farmer.location_id}/refresh`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -325,7 +325,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   // Fetch Advisories and Alerts
   const fetchAdvisoriesAndAlerts = async () => {
     try {
-      const advRes = await fetch('http://127.0.0.1:8000/api/v1/advisories', {
+      const advRes = await fetch('http://localhost:8000/api/v1/advisories', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (advRes.ok) {
@@ -333,7 +333,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         setAdvisories(data);
       }
       
-      const alertRes = await fetch('http://127.0.0.1:8000/api/v1/alerts', {
+      const alertRes = await fetch('http://localhost:8000/api/v1/alerts', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (alertRes.ok) {
@@ -354,7 +354,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   // Load crops when selected farm changes
   useEffect(() => {
     if (token && selectedFarm) {
-      fetch(`http://127.0.0.1:8000/api/v1/farms/${selectedFarm.id}/crops`, {
+      fetch(`http://localhost:8000/api/v1/farms/${selectedFarm.id}/crops`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       .then(res => {
@@ -387,7 +387,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   const fetchMandiPrices = async () => {
     if (!token || !selectedCrop) return;
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/mandis/compare?crop=${selectedCrop.crop_type}`, {
+      const res = await fetch(`http://localhost:8000/api/v1/mandis/compare?crop=${selectedCrop.crop_type}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -420,7 +420,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   const fetchPriceHistory = async () => {
     if (!token || !selectedCrop || !selectedMandiId) return;
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/market/price-history?crop=${selectedCrop.crop_type}&mandi_id=${selectedMandiId}&window=30`, {
+      const res = await fetch(`http://localhost:8000/api/v1/market/price-history?crop=${selectedCrop.crop_type}&mandi_id=${selectedMandiId}&window=30`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -452,7 +452,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   const fetchPriceCrash = async () => {
     if (!token || !selectedCrop || !selectedMandiId) return;
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/market/price-crash?crop=${selectedCrop.crop_type}&mandi_id=${selectedMandiId}`, {
+      const res = await fetch(`http://localhost:8000/api/v1/market/price-crash?crop=${selectedCrop.crop_type}&mandi_id=${selectedMandiId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -474,7 +474,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   const fetchProjections = async () => {
     if (!token) return;
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/v1/farmers/me/projections', {
+      const res = await fetch('http://localhost:8000/api/v1/farmers/me/projections', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -503,10 +503,10 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     if (!token) return;
     try {
       const [distressRes, schemesRes] = await Promise.all([
-        fetch('http://127.0.0.1:8000/api/v1/farmers/me/distress', {
+        fetch('http://localhost:8000/api/v1/farmers/me/distress', {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch('http://127.0.0.1:8000/api/v1/farmers/me/schemes', {
+        fetch('http://localhost:8000/api/v1/farmers/me/schemes', {
           headers: { 'Authorization': `Bearer ${token}` }
         })
       ]);
@@ -612,7 +612,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     e.preventDefault();
     if (loginPhone && loginPassword) {
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/v1/auth/login', {
+        const res = await fetch('http://localhost:8000/api/v1/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
@@ -639,7 +639,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     e.preventDefault();
     if (regName && regPhone && regPassword) {
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/v1/auth/register', {
+        const res = await fetch('http://localhost:8000/api/v1/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -652,7 +652,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         if (res.ok) {
           await res.json();
           // Auto-login after registration
-          const loginRes = await fetch('http://127.0.0.1:8000/api/v1/auth/login', {
+          const loginRes = await fetch('http://localhost:8000/api/v1/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
@@ -3177,7 +3177,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                 </button>
                 <button onClick={async () => {
                   try {
-                    const res = await fetch('http://127.0.0.1:8000/api/v1/farmers/me/farms', {
+                    const res = await fetch('http://localhost:8000/api/v1/farmers/me/farms', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                       body: JSON.stringify({
@@ -3314,7 +3314,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                   const farmId = cropFarmId ?? selectedFarm?.id ?? farms[0]?.id;
                   if (!farmId) { toast.error("No farm selected", "Please add a farm first before registering a crop."); return; }
                   try {
-                    const res = await fetch(`http://127.0.0.1:8000/api/v1/farms/${farmId}/crops`, {
+                    const res = await fetch(`http://localhost:8000/api/v1/farms/${farmId}/crops`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                       body: JSON.stringify({
@@ -3418,7 +3418,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               <button 
                 onClick={async () => {
                   try {
-                    const res = await fetch('http://127.0.0.1:8000/api/v1/farmers/me/obligations', {
+                    const res = await fetch('http://localhost:8000/api/v1/farmers/me/obligations', {
                       method: 'POST',
                       headers: { 
                         'Content-Type': 'application/json',
@@ -3536,7 +3536,7 @@ function OnboardingWizard({ onComplete, token }: OnboardingWizardProps) {
       const loc_id = `${block}_${district}`.replace(/\s+/g, '_');
       try {
         // 1. Update farmer location
-        await fetch('http://127.0.0.1:8000/api/v1/farmers/me', {
+        await fetch('http://localhost:8000/api/v1/farmers/me', {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -3548,7 +3548,7 @@ function OnboardingWizard({ onComplete, token }: OnboardingWizardProps) {
         });
 
         // 2. Create farm
-        const farmRes = await fetch('http://127.0.0.1:8000/api/v1/farmers/me/farms', {
+        const farmRes = await fetch('http://localhost:8000/api/v1/farmers/me/farms', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -3566,7 +3566,7 @@ function OnboardingWizard({ onComplete, token }: OnboardingWizardProps) {
         if (farmRes.ok) {
           const farmData = await farmRes.json();
           // 3. Create crop
-          await fetch(`http://127.0.0.1:8000/api/v1/farms/${farmData.id}/crops`, {
+          await fetch(`http://localhost:8000/api/v1/farms/${farmData.id}/crops`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
