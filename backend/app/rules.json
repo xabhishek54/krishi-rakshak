@@ -9,8 +9,8 @@
         "category": "crop_management",
         "priority": 2,
         "recommendation": "Monitor tomato fruit quality and watch for cracking",
-        "reason": "Tomato at Fruit Development stage — weekly action required",
-        "explanation": "At Fruit Development stage (week 6–10), check for blossom-end rot (black bottom), fruit cracking from irregular irrigation, and early signs of Late Blight. Harvest tomatoes that have reached full colour to reduce disease pressure on the plant."
+        "reason": "Tomato at Fruit Development stage \u2014 weekly action required",
+        "explanation": "At Fruit Development stage (week 6\u201310), check for blossom-end rot (black bottom), fruit cracking from irregular irrigation, and early signs of Late Blight. Harvest tomatoes that have reached full colour to reduce disease pressure on the plant."
       }
     },
     {
@@ -22,9 +22,9 @@
       "advisory": {
         "category": "pest",
         "priority": 1,
-        "recommendation": "Apply preventive fungicide to tomato — monsoon humidity risk",
+        "recommendation": "Apply preventive fungicide to tomato \u2014 monsoon humidity risk",
         "reason": "Humidity above 70% increases Late Blight and Septoria leaf spot risk",
-        "explanation": "Monsoon humidity (>70%) sustained over tomato Fruit Development stage creates prime fungal conditions. Apply Mancozeb 75WP (2g/L) or Copper Oxychloride (3g/L) every 7–10 days as a preventive spray, especially targeting lower leaf undersides."
+        "explanation": "Monsoon humidity (>70%) sustained over tomato Fruit Development stage creates prime fungal conditions. Apply Mancozeb 75WP (2g/L) or Copper Oxychloride (3g/L) every 7\u201310 days as a preventive spray, especially targeting lower leaf undersides."
       }
     },
     {
@@ -36,7 +36,7 @@
       "advisory": {
         "category": "irrigation",
         "priority": 1,
-        "recommendation": "Reduce tomato irrigation — rain probability above 60%",
+        "recommendation": "Reduce tomato irrigation \u2014 rain probability above 60%",
         "reason": "High rain probability forecast (60%+) for next 2 days",
         "explanation": "With 60%+ rain probability, reduce your drip irrigation by 50% today. Excessive soil moisture during Fruit Development causes blossom-end rot and Phytophthora root rot."
       }
@@ -49,8 +49,8 @@
         "category": "crop_management",
         "priority": 3,
         "recommendation": "Apply nitrogen top-dressing to onion at vegetative stage",
-        "reason": "Onion at Vegetative Growth stage (week 4–6) has peak N demand",
-        "explanation": "Apply Urea @ 30kg/acre as top-dressing now. Split the dose — apply half immediately, half in 2 weeks. Ensure you water lightly before applying to prevent leaf burn. This stage determines final bulb size."
+        "reason": "Onion at Vegetative Growth stage (week 4\u20136) has peak N demand",
+        "explanation": "Apply Urea @ 30kg/acre as top-dressing now. Split the dose \u2014 apply half immediately, half in 2 weeks. Ensure you water lightly before applying to prevent leaf burn. This stage determines final bulb size."
       }
     },
     {
@@ -62,9 +62,9 @@
       "advisory": {
         "category": "pest",
         "priority": 1,
-        "recommendation": "Spray Mancozeb on onion to prevent Purple Blotch — monsoon risk",
+        "recommendation": "Spray Mancozeb on onion to prevent Purple Blotch \u2014 monsoon risk",
         "reason": "Sustained humidity above 70% triggers Alternaria porri (Purple Blotch) on onion",
-        "explanation": "Monsoon humidity (>70%) is ideal for Purple Blotch infection on onion leaves at Vegetative Growth stage. Apply Mancozeb 75WP (2g/L) + Iprodione (1g/L) as a protective spray. Inspect for small white spots with purple margins — if found, increase spray frequency to every 5 days."
+        "explanation": "Monsoon humidity (>70%) is ideal for Purple Blotch infection on onion leaves at Vegetative Growth stage. Apply Mancozeb 75WP (2g/L) + Iprodione (1g/L) as a protective spray. Inspect for small white spots with purple margins \u2014 if found, increase spray frequency to every 5 days."
       }
     },
     {
@@ -76,7 +76,7 @@
       "advisory": {
         "category": "irrigation",
         "priority": 2,
-        "recommendation": "Skip onion irrigation today — rain forecast",
+        "recommendation": "Skip onion irrigation today \u2014 rain forecast",
         "reason": "Rain probability above 60% in next 2 days",
         "explanation": "With significant rainfall expected, skip drip/sprinkler irrigation today. Excess moisture in onion plots at Vegetative Growth promotes collar rot and purple blotch. Check bund heights after rain to prevent waterlogging."
       }
@@ -88,9 +88,9 @@
       "advisory": {
         "category": "crop_management",
         "priority": 3,
-        "recommendation": "Check wheat germination uniformity — thin or re-sow sparse patches",
-        "reason": "Wheat at Germination stage (day 15–25) — stand establishment check",
-        "explanation": "Walk your wheat plot and count seedlings per metre. Target: 25–30 seedlings/metre row. Sparse patches (<15 seedlings/m) should be re-sown within the next 5 days while still within the optimal sowing window. Mark gaps with flags for re-sowing tomorrow morning."
+        "recommendation": "Check wheat germination uniformity \u2014 thin or re-sow sparse patches",
+        "reason": "Wheat at Germination stage (day 15\u201325) \u2014 stand establishment check",
+        "explanation": "Walk your wheat plot and count seedlings per metre. Target: 25\u201330 seedlings/metre row. Sparse patches (<15 seedlings/m) should be re-sown within the next 5 days while still within the optimal sowing window. Mark gaps with flags for re-sowing tomorrow morning."
       }
     },
     {
@@ -102,9 +102,9 @@
       "advisory": {
         "category": "irrigation",
         "priority": 2,
-        "recommendation": "Skip planned wheat irrigation — rain forecast for next 2 days",
+        "recommendation": "Skip planned wheat irrigation \u2014 rain forecast for next 2 days",
         "reason": "60%+ rain probability eliminates need for irrigation",
-        "explanation": "Rain forecasted with 60%+ probability. Wheat at Germination stage only needs 60–70% field capacity. Skip your scheduled irrigation — waterlogged seedbeds cause damping-off and seed rot. Check drainage channels are clear before the rain."
+        "explanation": "Rain forecasted with 60%+ probability. Wheat at Germination stage only needs 60\u201370% field capacity. Skip your scheduled irrigation \u2014 waterlogged seedbeds cause damping-off and seed rot. Check drainage channels are clear before the rain."
       }
     },
     {
@@ -117,7 +117,7 @@
       "advisory": {
         "category": "irrigation",
         "priority": 1,
-        "recommendation": "Postpone tomato irrigation — heavy rain expected",
+        "recommendation": "Postpone tomato irrigation \u2014 heavy rain expected",
         "reason": "20mm+ rainfall forecast in 24 hours",
         "explanation": "Over 20mm rainfall expected. Skip today's irrigation cycle and check furrows for drainage blockage."
       }
@@ -159,7 +159,7 @@
       "advisory": {
         "category": "general",
         "priority": 1,
-        "recommendation": "Clear all field drainage channels — heavy rain imminent",
+        "recommendation": "Clear all field drainage channels \u2014 heavy rain imminent",
         "reason": "Heavy rainfall (30mm+) forecast",
         "explanation": "Clear blocked drainage paths, bunds, and furrows before heavy rain. Waterlogging for >6 hours damages roots and promotes fungal conditions. Move farm equipment to high ground."
       }
@@ -173,9 +173,81 @@
       "advisory": {
         "category": "general",
         "priority": 1,
-        "recommendation": "Protect all crops from extreme heat — mulch and early irrigation",
-        "reason": "Extreme temperature alert (>40°C forecast)",
-        "explanation": "Temperatures above 40°C cause severe heat stress. Apply straw mulch (5cm) around crop bases. Irrigate before 7 AM and after 6 PM only. Do not irrigate mid-day — water evaporates before reaching roots."
+        "recommendation": "Protect all crops from extreme heat \u2014 mulch and early irrigation",
+        "reason": "Extreme temperature alert (>40\u00b0C forecast)",
+        "explanation": "Temperatures above 40\u00b0C cause severe heat stress. Apply straw mulch (5cm) around crop bases. Irrigate before 7 AM and after 6 PM only. Do not irrigate mid-day \u2014 water evaporates before reaching roots."
+      }
+    },
+    {
+      "crop": "*",
+      "stage": "*",
+      "conditions": {
+        "rain_forecast_24h_min": 20
+      },
+      "advisory": {
+        "category": "Irrigation",
+        "priority": 2,
+        "recommendation": "Rain expected \u2014 skip irrigation today",
+        "reason": "Forecast shows 20mm+ rain in next 24h. Irrigating now wastes water and risks waterlogging."
+      }
+    },
+    {
+      "crop": "*",
+      "stage": "*",
+      "conditions": {
+        "temperature_max": 38
+      },
+      "advisory": {
+        "category": "Heat Stress",
+        "priority": 1,
+        "recommendation": "High temperature alert \u2014 irrigate early morning before 8 AM",
+        "reason": "Temperatures above 38\u00b0C cause heat stress and can reduce fruit set. Early watering cools soil temperature."
+      }
+    },
+    {
+      "crop": "*",
+      "stage": "flowering",
+      "conditions": {},
+      "advisory": {
+        "category": "Crop Care",
+        "priority": 2,
+        "recommendation": "Crop is in flowering stage \u2014 avoid pesticide sprays now",
+        "reason": "Pesticide application during flowering kills pollinators and reduces fruit set by up to 40%."
+      }
+    },
+    {
+      "crop": "*",
+      "stage": "fruiting",
+      "conditions": {},
+      "advisory": {
+        "category": "Crop Care",
+        "priority": 2,
+        "recommendation": "Fruiting stage \u2014 apply potassium-rich fertiliser for better fruit quality",
+        "reason": "Potassium (K) improves fruit size, colour and sugar content. Apply 50 kg MOP per hectare at fruiting."
+      }
+    },
+    {
+      "crop": "*",
+      "stage": "harvest",
+      "conditions": {},
+      "advisory": {
+        "category": "Harvest",
+        "priority": 1,
+        "recommendation": "Crop ready for harvest \u2014 contact local mandi for best pricing",
+        "reason": "Delayed harvest increases post-harvest losses and reduces market value. Check the Market tab for nearest mandi."
+      }
+    },
+    {
+      "crop": "*",
+      "stage": "vegetative",
+      "conditions": {
+        "humidity_min": 80
+      },
+      "advisory": {
+        "category": "Disease",
+        "priority": 2,
+        "recommendation": "High humidity \u2014 watch for fungal disease symptoms on leaves",
+        "reason": "Humidity above 80% promotes powdery mildew and downy mildew. Inspect leaves daily and apply copper-based fungicide if spots appear."
       }
     }
   ],
@@ -192,8 +264,8 @@
       "pest": {
         "category": "disease",
         "priority": 1,
-        "warning": "Late Blight (Phytophthora infestans) Risk — Tomato Fruit Development Stage",
-        "reason": "Sustained humidity > 75% with temperatures 18–32°C for 2+ days",
+        "warning": "Late Blight (Phytophthora infestans) Risk \u2014 Tomato Fruit Development Stage",
+        "reason": "Sustained humidity > 75% with temperatures 18\u201332\u00b0C for 2+ days",
         "explanation": "This is the prime Late Blight outbreak window for tomato at Fruit Development. Apply Mancozeb 75WP (2g/L) or Cymoxanil + Mancozeb immediately. Inspect lower leaf undersides for dark-green water-soaked lesions."
       }
     },
@@ -209,9 +281,9 @@
       "pest": {
         "category": "disease",
         "priority": 1,
-        "warning": "High Late Blight Outbreak Risk — Tomato Flowering",
+        "warning": "High Late Blight Outbreak Risk \u2014 Tomato Flowering",
         "reason": "Prolonged high humidity (>80%) and moderate temperatures for 3 consecutive days",
-        "explanation": "Humidity has exceeded 80% for 3 consecutive days — optimal Late Blight conditions. Inspect lower leaves for black spots. Apply Mancozeb 75WP (2g/L) preventively now."
+        "explanation": "Humidity has exceeded 80% for 3 consecutive days \u2014 optimal Late Blight conditions. Inspect lower leaves for black spots. Apply Mancozeb 75WP (2g/L) preventively now."
       }
     },
     {
@@ -226,9 +298,9 @@
       "pest": {
         "category": "insect",
         "priority": 2,
-        "warning": "Whitefly and Thrips Risk — Tomato Vegetative Stage",
+        "warning": "Whitefly and Thrips Risk \u2014 Tomato Vegetative Stage",
         "reason": "Warm humid conditions for 2+ days",
-        "explanation": "Hot humid weather (>80% RH, 25–38°C) for 2+ days creates ideal whitefly and thrips conditions. Apply imidacloprid 17.8 SL (0.5ml/L) if >5 insects/leaf."
+        "explanation": "Hot humid weather (>80% RH, 25\u201338\u00b0C) for 2+ days creates ideal whitefly and thrips conditions. Apply imidacloprid 17.8 SL (0.5ml/L) if >5 insects/leaf."
       }
     },
     {
@@ -243,8 +315,8 @@
       "pest": {
         "category": "disease",
         "priority": 1,
-        "warning": "Purple Blotch (Alternaria porri) Alert — Onion Vegetative Stage",
-        "reason": "Humidity > 78% and warm temperatures (20–32°C) for 2+ days",
+        "warning": "Purple Blotch (Alternaria porri) Alert \u2014 Onion Vegetative Stage",
+        "reason": "Humidity > 78% and warm temperatures (20\u201332\u00b0C) for 2+ days",
         "explanation": "Prime Purple Blotch outbreak conditions. Look for small white spots with purple-bordered centres on onion leaves. Apply Mancozeb 75WP (2g/L) + Iprodione 50WP (1g/L) spray immediately."
       }
     },
@@ -260,8 +332,8 @@
       "pest": {
         "category": "disease",
         "priority": 2,
-        "warning": "Stripe Rust Risk — Wheat Tillering Stage",
-        "reason": "Cool humid nights (10–20°C, >75% RH) for 2+ days",
+        "warning": "Stripe Rust Risk \u2014 Wheat Tillering Stage",
+        "reason": "Cool humid nights (10\u201320\u00b0C, >75% RH) for 2+ days",
         "explanation": "Cool, humid nights favour stripe rust spore germination. Monitor for yellow dust stripes on leaves. Apply Propiconazole 25EC (1ml/L) preventively."
       }
     },
@@ -277,7 +349,7 @@
       "pest": {
         "category": "disease",
         "priority": 2,
-        "warning": "Damping-Off (Pythium spp.) Risk — Wheat Seedling Stage",
+        "warning": "Damping-Off (Pythium spp.) Risk \u2014 Wheat Seedling Stage",
         "reason": "High humidity (>82%) + warm temperatures during germination for 2+ days",
         "explanation": "Damping-Off can kill wheat seedlings under waterlogged, humid conditions. Ensure field drainage. Apply Thiram 75WS seed treatment if re-sowing. Walk the field and check for collapsed seedlings at soil level."
       }

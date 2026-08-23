@@ -203,8 +203,75 @@ def evaluate_advisories(db: Session, farmer: models.Farmer) -> List[models.Advis
                             )
                             db.add(new_alert)
                             
+
+    # --- GDACS Real-time Disaster Alerts integration ---
+    # Fetch real-time active disaster alerts from GDACS (keyless, high-availability geo-JSON feed)
+    try:
+        import urllib.request
+        import urllib.parse
+        import math
+
+        def _haversine_dist(lat1, lon1, lat2, lon2):
+            R = 6371.0
+            dlat = math.radians(lat2 - lat1)
+            dlon = math.radians(lon2 - lon1)
+            a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+            return R * 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+
+        gdacs_url = "https://www.gdacs.org/xml/gdacs.geojson"
+        req = urllib.request.Request(
+            gdacs_url, 
+            headers={'User-Agent': 'Mozilla/5.0 (KrishiRakshak/1.0)'}
+        )
+        with urllib.request.urlopen(req, timeout=3.0) as response:
+            geojson = json.loads(response.read().decode('utf-8'))
+            
+        features = geojson.get("features", [])
+        
+        for farm in farms:
+            if farm.latitude is None or farm.longitude is None:
+                continue
+            
+            for feat in features:
+                geom = feat.get("geometry", {})
+                props = feat.get("properties", {})
+                
+                if geom and geom.get("type") == "Point":
+                    coords = geom.get("coordinates", [])
+                    if len(coords) >= 2:
+                        disaster_lon, disaster_lat = coords[0], coords[1]
+                        dist = _haversine_dist(farm.latitude, farm.longitude, disaster_lat, disaster_lon)
+                        
+                        if dist <= 350.0:
+                            event_name = props.get("name", "Natural Disaster")
+                            event_type = props.get("eventtype", "Alert")
+                            severity_level = props.get("severitylevel", "High")
+                            
+                            severity_str = "Critical" if severity_level.lower() == "red" else "Elevated"
+                            reason_str = f"Real-time Warning: Active GDACS {event_type} ({event_name}) reported within {int(dist)}km of your farm."
+                            
+                            existing_alert = db.query(models.Alert).filter(
+                                models.Alert.farmer_id == farmer.id,
+                                models.Alert.reason == reason_str,
+                                models.Alert.status == "open"
+                            ).first()
+                            
+                            if not existing_alert:
+                                new_alert = models.Alert(
+                                    farmer_id=farmer.id,
+                                    severity=severity_str,
+                                    reason=reason_str,
+                                    status="open"
+                                )
+                                db.add(new_alert)
+    except Exception as gdacs_err:
+        print("GDACS live alert fetch failed or timed out:", gdacs_err)
+
     db.commit()
     # Refresh all objects
     for adv in generated_advisories:
-        db.refresh(adv)
+        try:
+            db.refresh(adv)
+        except Exception:
+            pass
     return generated_advisories

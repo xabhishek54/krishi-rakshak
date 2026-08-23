@@ -140,6 +140,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   const [language, setLanguage] = useState<LanguageType>(
     (localStorage.getItem('kr_language') as LanguageType) || 'english'
   );
+  const [showNotificationPanel, setShowNotificationPanel] = useState<boolean>(false);
   const t = translations[language];
 
   // Toast notifications
@@ -554,6 +555,8 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         setCrops([]);
         setSelectedCrop(null);
         toast.success('Farm deleted', 'Farm and its crops have been removed.');
+        fetchProjections();
+        fetchDistressAndSchemes();
       } else {
         toast.error('Delete failed', 'Could not delete farm. Try again.');
       }
@@ -574,6 +577,8 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         setCrops(updatedCrops);
         setSelectedCrop(updatedCrops[0] || null);
         toast.success('Crop deleted', 'Crop entry removed successfully.');
+        fetchProjections();
+        fetchDistressAndSchemes();
       } else {
         toast.error('Delete failed', 'Could not delete crop. Try again.');
       }
@@ -590,12 +595,9 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        // Refresh cash flow
-        if (token) {
-          fetch(`${API_BASE}/api/v1/distress/cashflow`, {
-            headers: { Authorization: `Bearer ${token}` }
-          }).then(r => r.json()).then(setCashFlow).catch(() => {});
-        }
+        // Refresh projections (which includes the obligations list)
+        fetchProjections();
+        fetchDistressAndSchemes();
         toast.success('Obligation deleted', 'Financial obligation removed.');
       } else {
         toast.error('Delete failed', 'Could not delete obligation.');
@@ -748,7 +750,13 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
 
     rec.onerror = (e: any) => {
       console.warn('SpeechRecognition error:', e.error);
-      if (e.error !== 'aborted') toast.warning('Mic error', `Could not capture audio: ${e.error}`);
+      if (e.error === 'network') {
+        toast.warning('Network Issue', 'Voice speech recognition requires internet connection. Please type your question in the Assistant box.');
+      } else if (e.error === 'not-allowed') {
+        toast.warning('Permission Denied', 'Please allow microphone access in your browser settings.');
+      } else if (e.error !== 'aborted') {
+        toast.warning('Mic error', `Could not capture audio: ${e.error}`);
+      }
       setVoiceState('idle');
     };
     rec.onend = () => {
@@ -907,9 +915,16 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                     }}
                     className="text-xs font-bold px-3 py-1.5 rounded-lg border border-earth-200 bg-earth-50 focus:outline-none w-full"
                   >
-                    {farms.map((f, i) => (
-                      <option key={f.id} value={f.id}>Farm #{i+1} ({f.area} Acres - {f.soil_type.toUpperCase()})</option>
-                    ))}
+                    {farms.map((f, i) => {
+                      const loc = f.district
+                        ? `${f.district}${f.state ? ', ' + f.state : ''}`
+                        : f.latitude ? `${f.latitude.toFixed(2)}°N ${f.longitude?.toFixed(2)}°E` : '';
+                      return (
+                        <option key={f.id} value={f.id}>
+                          Farm #{i+1} ({f.area} Ac · {f.soil_type.toUpperCase()}{loc ? ' · ' + loc : ''})
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -1210,165 +1225,19 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               </div>
             )}
 
-            {/* ── Yield Calculator ── */}
-            {(()=> {
-              const runYieldCalc = async () => {
-                setYieldLoading(true);
-                try {
-                  const params = new URLSearchParams({
-                    crop_type: yieldCrop,
-                    area_acres: String(yieldArea),
-                    rainfall_deviation: String(yieldRainfall),
-                    soil_type: yieldSoil,
-                    irrigation_type: yieldIrrigation,
-                  });
-                  const r = await fetch(`${API_BASE}/api/v1/yield/estimate?${params}`, {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${token}` },
-                  });
-                  if (r.ok) setYieldResult(await r.json());
-                } catch (e) {}
-                setYieldLoading(false);
-              };
-
-              return (
-                <div className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-slate-900 my-0">🧮 Yield Calculator</h3>
-                    <span className="text-[10px] bg-stable/10 text-stable font-bold px-2 py-0.5 rounded-full">ML Model</span>
-                  </div>
-                  <p className="text-xs text-slate-400">Estimate your crop yield and projected revenue based on current conditions.</p>
-
-                  {/* Inputs */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Crop</label>
-                      <select
-                        value={yieldCrop}
-                        onChange={e => setYieldCrop(e.target.value)}
-                        className="w-full text-xs border border-earth-200 rounded-lg px-2 py-1.5 bg-white text-slate-700"
-                      >
-                        {['tomato','onion','wheat','potato','maize','rice','cotton','soybean'].map(c => (
-                          <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Area (acres)</label>
-                      <input
-                        type="number" min="0.1" step="0.1"
-                        value={yieldArea}
-                        onChange={e => setYieldArea(Number(e.target.value))}
-                        className="w-full text-xs border border-earth-200 rounded-lg px-2 py-1.5"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Soil Type</label>
-                      <select
-                        value={yieldSoil}
-                        onChange={e => setYieldSoil(e.target.value)}
-                        className="w-full text-xs border border-earth-200 rounded-lg px-2 py-1.5 bg-white text-slate-700"
-                      >
-                        {['loam','clay','sandy','black'].map(s => (
-                          <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Irrigation</label>
-                      <select
-                        value={yieldIrrigation}
-                        onChange={e => setYieldIrrigation(e.target.value)}
-                        className="w-full text-xs border border-earth-200 rounded-lg px-2 py-1.5 bg-white text-slate-700"
-                      >
-                        {['drip','sprinkler','flood','rainfed'].map(i => (
-                          <option key={i} value={i}>{i.charAt(0).toUpperCase()+i.slice(1)}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="col-span-2">
-                      <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">
-                        Rainfall vs. Normal: <span className={yieldRainfall < 0 ? 'text-high' : 'text-stable'}>{yieldRainfall > 0 ? '+' : ''}{yieldRainfall}%</span>
-                      </label>
-                      <input
-                        type="range" min="-60" max="60" step="5"
-                        value={yieldRainfall}
-                        onChange={e => setYieldRainfall(Number(e.target.value))}
-                        className="w-full accent-stable"
-                      />
-                      <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
-                        <span>−60% (severe drought)</span><span>0% (normal)</span><span>+60% (excess)</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={runYieldCalc}
-                    disabled={yieldLoading}
-                    className="w-full py-2.5 bg-stable text-white text-sm font-bold rounded-xl hover:bg-stable-dark transition-colors disabled:opacity-60"
-                  >
-                    {yieldLoading ? '⏳ Calculating…' : '🧮 Estimate Yield & Revenue'}
-                  </button>
-
-                  {/* Results */}
-                  {yieldResult && (
-                    <div className="space-y-3 pt-3 border-t border-earth-50">
-                      <div className="grid grid-cols-3 gap-3 text-center">
-                        <div className="bg-earth-50 rounded-xl p-3">
-                          <p className="text-[10px] text-slate-400 uppercase font-bold">Yield/Acre</p>
-                          <p className="text-lg font-black text-slate-900">{yieldResult.estimated_yield_q_per_acre}<span className="text-xs font-semibold text-slate-400"> q</span></p>
-                          <p className="text-[10px] text-slate-400">baseline {yieldResult.baseline_yield_q_per_acre}q</p>
-                        </div>
-                        <div className="bg-earth-50 rounded-xl p-3">
-                          <p className="text-[10px] text-slate-400 uppercase font-bold">Total Yield</p>
-                          <p className="text-lg font-black text-slate-900">{yieldResult.estimated_total_yield_q}<span className="text-xs font-semibold text-slate-400"> q</span></p>
-                          <p className="text-[10px] text-slate-400">{yieldResult.area_acres} acres</p>
-                        </div>
-                        <div className={`rounded-xl p-3 ${yieldResult.yield_deviation_pct < 0 ? 'bg-high-light' : 'bg-stable/10'}`}>
-                          <p className="text-[10px] text-slate-400 uppercase font-bold">ML Deviation</p>
-                          <p className={`text-lg font-black ${yieldResult.yield_deviation_pct < 0 ? 'text-high' : 'text-stable'}`}>
-                            {yieldResult.yield_deviation_pct > 0 ? '+' : ''}{yieldResult.yield_deviation_pct}%
-                          </p>
-                          <p className="text-[10px] text-slate-400">vs baseline</p>
-                        </div>
-                      </div>
-
-                      {/* Revenue */}
-                      <div className="bg-gradient-to-r from-stable to-stable-dark text-white rounded-xl p-4">
-                        <p className="text-xs font-bold opacity-70">Projected Gross Revenue</p>
-                        <p className="text-2xl font-black">₹{yieldResult.projected_gross_revenue.toLocaleString('en-IN')}</p>
-                        <p className="text-[10px] opacity-70 mt-0.5">
-                          @ ₹{yieldResult.modal_price_per_q}/q · {yieldResult.price_source}
-                        </p>
-                      </div>
-
-                      {/* Scenario bars */}
-                      <div className="space-y-2">
-                        <p className="text-[10px] text-slate-400 uppercase font-bold">Revenue Scenarios (±15%)</p>
-                        {[
-                          { label: 'Best Case (+15%)', val: yieldResult.scenario.best.revenue, color: '#22c55e', q: yieldResult.scenario.best.yield_q },
-                          { label: 'Base Estimate',    val: yieldResult.scenario.base.revenue, color: '#3b82f6', q: yieldResult.scenario.base.yield_q },
-                          { label: 'Worst Case (−15%)',val: yieldResult.scenario.worst.revenue,color: '#ef4444', q: yieldResult.scenario.worst.yield_q },
-                        ].map(s => (
-                          <div key={s.label} className="flex items-center gap-2">
-                            <span className="text-[10px] w-32 text-slate-500 shrink-0">{s.label}</span>
-                            <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                              <div
-                                className="h-full rounded-full"
-                                style={{ width: `${(s.val / yieldResult.scenario.best.revenue) * 100}%`, background: s.color }}
-                              />
-                            </div>
-                            <span className="text-[10px] font-bold text-slate-700 w-20 text-right shrink-0">
-                              ₹{Math.round(s.val).toLocaleString('en-IN')}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
+            {/* ── Yield Calculator CTA ── */}
+            <div className="bg-gradient-to-r from-stable-light to-earth-50 border border-stable/20 rounded-2xl p-5 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-slate-800 my-0 flex items-center gap-2"><Calculator size={18} className="text-stable" /> Yield Calculator</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Estimate harvest, revenue &amp; profit with ML model</p>
+              </div>
+              <button
+                onClick={() => setActiveTab('yield')}
+                className="px-4 py-2 bg-stable text-white rounded-xl text-xs font-bold hover:bg-stable-dark transition-colors flex items-center gap-1.5"
+              >
+                Open <ChevronRight size={14} />
+              </button>
+            </div>
           </div>
         );
       }
@@ -2768,10 +2637,16 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
             <ShoppingCart size={18} /> Market & Mandis
           </button>
           <button 
-            onClick={() => setActiveTab('alerts')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'alerts' || activeTab === 'risk-detail' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
+            onClick={() => setActiveTab('yield')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'yield' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
           >
-            <Bell size={18} /> Alert Center
+            <Calculator size={18} /> Yield Calculator
+          </button>
+          <button 
+            onClick={() => setActiveTab('financial')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'financial' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <PiggyBank size={18} /> Financial Health
           </button>
           <button 
             onClick={() => setActiveTab('support')}
@@ -2784,18 +2659,6 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'community' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
           >
             <span className="text-base">🗺️</span> Community Map
-          </button>
-          <button 
-            onClick={() => setActiveTab('yield')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'yield' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
-          >
-            <Calculator size={18} /> Yield Calculator
-          </button>
-          <button 
-            onClick={() => setActiveTab('financial')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'financial' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
-          >
-            <PiggyBank size={18} /> Financial Health
           </button>
         </nav>
 
@@ -2810,7 +2673,75 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-4 md:p-8 max-w-5xl mx-auto w-full pb-24 md:pb-8 overflow-y-auto h-screen">
+      <main className="flex-1 p-4 md:p-8 max-w-5xl mx-auto w-full pb-24 md:pb-8 overflow-y-auto h-screen relative">
+        {/* Global Top Bar */}
+        <header className="flex justify-between items-center mb-6 pb-4 border-b border-earth-200">
+          <div className="md:hidden">
+            <h1 className="text-lg font-black text-stable tracking-tight my-0">KrishiRakshak</h1>
+          </div>
+          <div className="hidden md:block">
+            {/* Breadcrumb or current tab name */}
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+              Dashboard / {activeTab === 'home' ? 'Home Summary' : activeTab === 'crop' ? 'My Crop' : activeTab === 'market' ? 'Market & Mandis' : activeTab === 'yield' ? 'Yield Calculator' : activeTab === 'financial' ? 'Financial Health' : activeTab === 'support' ? 'Schemes' : activeTab === 'community' ? 'Community Map' : activeTab.toUpperCase()}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* Language Selector in Header */}
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as any)}
+              className="text-xs font-bold px-3 py-1.5 rounded-xl border border-earth-200 bg-white text-slate-600 focus:outline-none"
+            >
+              {Object.entries(LANGUAGES).map(([key, name]) => (
+                <option key={key} value={key}>{name}</option>
+              ))}
+            </select>
+
+            {/* Notification Bell Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNotificationPanel(!showNotificationPanel)}
+                className="relative p-2.5 rounded-xl bg-earth-50 text-slate-600 hover:bg-earth-100 hover:text-stable transition-all flex items-center justify-center"
+                title="View Alerts"
+              >
+                <Bell size={20} />
+                {alerts.length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-high text-white text-[10px] font-black flex items-center justify-center border-2 border-white animate-bounce">
+                    {alerts.length}
+                  </span>
+                )}
+              </button>
+
+              {/* Notification Panel */}
+              {showNotificationPanel && (
+                <div className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-2xl border border-earth-200 p-4 z-50 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <h4 className="font-bold text-slate-800 text-sm my-0">Active Risk Alerts</h4>
+                    <span className="text-[10px] font-bold text-slate-400">{alerts.length} alerts</span>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto space-y-2">
+                    {alerts.length > 0 ? (
+                      alerts.map((a: any) => (
+                        <div key={a.id} className={`p-3 rounded-xl border text-xs ${
+                          a.severity === 'Critical' ? 'bg-high-light border-high/20 text-high' : 'bg-elevated-light border-elevated/20 text-elevated'
+                        }`}>
+                          <p className="font-bold my-0 flex items-center gap-1">
+                            {a.severity === 'Critical' ? '🚨' : '⚠️'} {a.severity}
+                          </p>
+                          <p className="mt-1 mb-0 leading-relaxed font-semibold text-slate-700">{a.reason}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-400 text-center py-4">No active risk alerts today.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+
         {renderTabContent()}
       </main>
 
@@ -2833,12 +2764,6 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           className={`flex flex-col items-center text-[10px] font-bold ${activeTab === 'market' ? 'text-stable' : 'text-slate-400'}`}
         >
           <ShoppingCart size={20} /> <span className="mt-1">Market</span>
-        </button>
-        <button 
-          onClick={() => setActiveTab('alerts')}
-          className={`flex flex-col items-center text-[10px] font-bold ${activeTab === 'alerts' || activeTab === 'risk-detail' ? 'text-stable' : 'text-slate-400'}`}
-        >
-          <Bell size={20} /> <span className="mt-1">Alerts</span>
         </button>
          <button 
           onClick={() => setActiveTab('yield')}
@@ -3017,7 +2942,15 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                     setVoiceQuestion(transcript);
                     setVoiceListening(false);
                   };
-                  rec.onerror = () => setVoiceListening(false);
+                  rec.onerror = (err: any) => {
+                    console.warn('SpeechRecognition error:', err.error);
+                    if (err.error === 'network') {
+                      toast.warning('Network Issue', 'Voice speech recognition requires internet connection. Please type your question.');
+                    } else if (err.error === 'not-allowed') {
+                      toast.warning('Permission Denied', 'Please allow microphone access in your browser settings.');
+                    }
+                    setVoiceListening(false);
+                  };
                   rec.onend = () => setVoiceListening(false);
                 }}
                 disabled={voiceListening || voiceLoading}
