@@ -542,6 +542,53 @@ def get_distress_score(
     distress = calculate_distress_risk(db, current_farmer)
     return distress
 
+@app.post("/api/v1/farmers/me/recommendations/generate", response_model=List[schemas.RecommendationResponse])
+def generate_recommendations(
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+    db: Session = Depends(get_db)
+):
+    """Generate intervention recommendations based on current distress score"""
+    from app.intervention import generate_intervention_recommendations
+    recommendations = generate_intervention_recommendations(db, current_farmer)
+    return recommendations
+
+@app.get("/api/v1/farmers/me/recommendations", response_model=List[schemas.RecommendationResponse])
+def get_recommendations(
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+    db: Session = Depends(get_db)
+):
+    """Get current intervention recommendations for the farmer"""
+    from app.intervention import get_farmer_recommendations
+    recommendations = get_farmer_recommendations(db, current_farmer)
+    return recommendations
+
+@app.patch("/api/v1/recommendations/{recommendation_id}", response_model=schemas.RecommendationResponse)
+def update_recommendation_status(
+    recommendation_id: int,
+    recommendation_update: schemas.RecommendationUpdate,
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+    db: Session = Depends(get_db)
+):
+    """Update the status of a recommendation (Suggested → In progress → Done → Dismissed)"""
+    from app.intervention import update_recommendation_status
+    success = update_recommendation_status(
+        db, 
+        recommendation_id, 
+        current_farmer.id, 
+        recommendation_update.status
+    )
+    if not success:
+        raise HTTPException(
+            status_code=404, 
+            detail="Recommendation not found or unauthorized"
+        )
+    
+    # Return updated recommendation
+    recommendation = db.query(models.Recommendation).filter(
+        models.Recommendation.id == recommendation_id
+    ).first()
+    return recommendation
+
 @app.get("/api/v1/farmers/me/schemes", response_model=List[schemas.SchemeResponse])
 def get_matching_schemes(
     current_farmer: models.Farmer = Depends(auth.get_current_farmer),

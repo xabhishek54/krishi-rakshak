@@ -49,7 +49,7 @@ def fetch_agmarknet_prices(
         params["filters[State]"] = state
 
     try:
-        with httpx.Client(timeout=8.0) as client:
+        with httpx.Client(timeout=15.0) as client:
             resp = client.get(f"{BASE_URL}/{AGMARKNET_RESOURCE}", params=params)
             resp.raise_for_status()
             data = resp.json()

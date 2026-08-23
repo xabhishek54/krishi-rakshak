@@ -194,4 +194,12 @@ def calculate_distress_risk(db: Session, farmer: models.Farmer) -> models.Distre
     db.add(new_distress)
     db.commit()
     db.refresh(new_distress)
+    
+    # Generate intervention recommendations based on the new distress score
+    try:
+        from app.intervention import generate_intervention_recommendations
+        generate_intervention_recommendations(db, farmer)
+    except Exception as e:
+        print(f"Failed to generate intervention recommendations: {e}")
+    
     return new_distress

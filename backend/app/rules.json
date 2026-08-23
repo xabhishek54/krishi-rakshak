@@ -367,6 +367,84 @@
         "reason": "High humidity (>82%) + warm temperatures during germination for 2+ days",
         "explanation": "Damping-Off can kill wheat seedlings under waterlogged, humid conditions. Ensure field drainage. Apply Thiram 75WS seed treatment if re-sowing. Walk the field and check for collapsed seedlings at soil level."
       }
-    }
-  ]
 }
+   ],
+   "intervention_rules": [
+     {
+       "_comment": "Weather stress -> irrigation/drainage actions",
+       "weather_component_min": 30,
+       "actions": [
+         {
+           "action_type": "irrigation_advisory",
+           "confidence_weight": 2.0,
+           "reason_template": "High weather stress detected - consider irrigation adjustments"
+         },
+         {
+           "action_type": "drainage_check",
+           "confidence_weight": 1.0,
+           "reason_template": "Extreme weather conditions - check field drainage",
+           "weather_component_min": 60
+         }
+       ]
+     },
+     {
+       "_comment": "Yield loss -> insurance/pest prevention",
+       "yield_component_min": 25,
+       "actions": [
+         {
+           "action_type": "crop_insurance_check",
+           "confidence_weight": 2.0,
+           "reason_template": "High yield loss risk - consider crop insurance"
+         },
+         {
+           "action_type": "pest_prevention",
+           "confidence_weight": 1.0,
+           "reason_template": "Yield risk may indicate pest/disease vulnerability"
+         }
+       ]
+     },
+     {
+       "_comment": "Market stress -> alternate mandi/schemes",
+       "market_component_min": 30,
+       "actions": [
+         {
+           "action_type": "alternate_mandi",
+           "confidence_weight": 2.0,
+           "reason_template": "Market price volatility detected - explore alternate mandis"
+         },
+         {
+           "action_type": "scheme_eligibility",
+           "confidence_weight": 1.0,
+           "reason_template": "Market stress may qualify for government support"
+         }
+       ]
+     },
+     {
+       "_comment": "Financial stress -> loan/scheme support",
+       "financial_component_min": 30,
+       "actions": [
+         {
+           "action_type": "loan_rescheduling",
+           "confidence_weight": 2.0,
+           "reason_template": "Financial stress detected - consider loan rescheduling"
+         },
+         {
+           "action_type": "scheme_eligibility",
+           "confidence_weight": 1.5,
+           "reason_template": "Financial difficulties may qualify for relief schemes"
+         }
+       ]
+     },
+     {
+       "_comment": "Urgency -> contact support",
+       "urgency_component_min": 40,
+       "actions": [
+{
+           "action_type": "contact_support",
+           "confidence_weight": 2.0,
+           "reason_template": "Urgent financial obligations - contact support services"
+          }
+        ]
+      }
+    ]
+  }

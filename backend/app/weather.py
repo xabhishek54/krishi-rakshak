@@ -15,7 +15,7 @@ class WeatherProvider:
 
 class OpenMeteoProvider(WeatherProvider):
     def __init__(self):
-        self.client = httpx.AsyncClient(timeout=10.0)
+        self.client = httpx.AsyncClient(timeout=15.0)
 
     async def fetch_weather(self, lat: float, lon: float) -> Optional[Dict]:
         url = "https://api.open-meteo.com/v1/forecast"
