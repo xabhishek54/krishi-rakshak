@@ -137,7 +137,7 @@ def test_evaluate_rules_and_fetch(client, db_session, auth_header):
     alerts = response.json()
     assert len(alerts) >= 1
     
-    # Check that stripe rust or blight warning exists
+    # Check that Late Blight warning exists (can be multiple for multi-stage crops)
     blight_alert = [al for al in alerts if "Late Blight" in al["reason"]]
-    assert len(blight_alert) == 1
-    assert blight_alert[0]["severity"] == "Critical"
+    assert len(blight_alert) >= 1
+    assert all(al["severity"] == "Critical" for al in blight_alert)

@@ -43,6 +43,16 @@ def startup_event():
     except Exception as e:
         print("Scheme seeding failed:", e)
 
+    # Auto-seed rich demo farmer if they don't exist or have fewer than 5 farms
+    try:
+        from seed_demo import seed_farmer_data, DEMO_PHONE
+        farmer = db.query(models.Farmer).filter(models.Farmer.phone == DEMO_PHONE).first()
+        if not farmer or len(farmer.farms) < 5:
+            print("[startup] Auto-seeding rich demo farmer environment...")
+            seed_farmer_data(db)
+    except Exception as e:
+        print("Auto-seeding demo farmer failed:", e)
+
     # Phase 19: Launch Agmarknet background price fetch (non-blocking)
     async def _agmarknet_bg():
         try:

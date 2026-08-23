@@ -42,6 +42,20 @@
       }
     },
     {
+      "crop": "tomato",
+      "stage": "fruit development",
+      "conditions": {
+        "rain_forecast_24h_min": 30.0
+      },
+      "advisory": {
+        "category": "irrigation",
+        "priority": 1,
+        "recommendation": "Stop Tomato Irrigation",
+        "reason": "Heavy rain forecast (30mm+) in next 24 hours",
+        "explanation": "Heavy rainfall of 30mm or more is forecast within 24 hours. Stop all drip/flood irrigation immediately to avoid waterlogging, blossom-end rot, and Phytophthora root rot in Fruit Development stage. Resume 48 hours after rain stops."
+      }
+    },
+    {
       "crop": "onion",
       "stage": "vegetative growth",
       "conditions": {},
