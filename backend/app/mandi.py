@@ -30,17 +30,20 @@ def seed_mandi_data(db: Session):
         "onion": [1800.0, 1950.0, 1850.0]
     }
     
-    for offset in range(7):
+    for offset in range(90):  # 90 days of history for reliable baseline detection
         d = today - datetime.timedelta(days=offset)
         for crop in crops:
             for i, mandi in enumerate(apmc_mandis):
-                # Add minor price fluctuations for historical timeline
-                modifier = math.sin(offset) * 50.0
+                # Realistic price trend: gradual decline last 2 weeks to simulate crash
+                if offset <= 7:
+                    trend_modifier = -60.0 + (offset * 5)  # Recent prices lower
+                else:
+                    trend_modifier = math.sin(offset * 0.2) * 80.0  # Historical variation
                 base_modal = base_prices[crop][i]
-                modal = round(base_modal + modifier, 2)
-                min_p = round(modal * 0.9, 2)
-                max_p = round(modal * 1.1, 2)
-                
+                modal = round(base_modal + trend_modifier, 2)
+                min_p = round(modal * 0.88, 2)
+                max_p = round(modal * 1.12, 2)
+
                 price_record = models.MarketPrice(
                     mandi_id=mandi.id,
                     crop=crop,
@@ -48,7 +51,7 @@ def seed_mandi_data(db: Session):
                     min_price=min_p,
                     max_price=max_p,
                     modal_price=modal,
-                    arrivals=120.0 + offset * 10
+                    arrivals=120.0 + (offset % 10) * 8
                 )
                 db.add(price_record)
     db.commit()
@@ -85,7 +88,13 @@ def detect_price_crash(db: Session, crop_type: str, mandi_id: int) -> dict:
     ).all()
     
     if len(recent_prices) == 0:
-        return {"price_crash": False, "price_change_pct": 0.0, "reason": "Insufficient data"}
+        return {
+            "price_crash": False,
+            "price_change_pct": 0.0,
+            "recent_7day_avg": None,
+            "baseline_30day_avg": None,
+            "reason": "No recent price data available"
+        }
     
     recent_avg = sum(p.modal_price for p in recent_prices) / len(recent_prices)
     
@@ -108,7 +117,14 @@ def detect_price_crash(db: Session, crop_type: str, mandi_id: int) -> dict:
         ).all()
     
     if len(baseline_prices) == 0:
-        return {"price_crash": False, "price_change_pct": 0.0, "reason": "Insufficient baseline data"}
+        # Still have recent data — return it with no baseline comparison
+        return {
+            "price_crash": False,
+            "price_change_pct": 0.0,
+            "recent_7day_avg": round(recent_avg, 2),
+            "baseline_30day_avg": None,
+            "reason": "Insufficient baseline data (< 30 days of history)"
+        }
     
     baseline_avg = sum(p.modal_price for p in baseline_prices) / len(baseline_prices)
     

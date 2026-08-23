@@ -1,5 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { translations } from './translations';
+import { ToastContainer, useToast } from './Toast';
+import { getStateList, getDistrictsForState, getDistrictCoords } from './india_locations';
+import { speakText, stopSpeech, buildVoiceText, askGemini } from './voice';
+
+// Lazy-loaded map picker — load once at module level to avoid remounting
+const MapPickerComponent = lazy(() => import('./MapPicker'));
 import { 
   Home as HomeIcon, 
   Sprout, 
@@ -20,7 +26,7 @@ import {
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 // Type declarations
-type TabType = 'home' | 'crop' | 'market' | 'alerts' | 'support' | 'risk-detail' | 'profile';
+type TabType = 'home' | 'crop' | 'market' | 'alerts' | 'support' | 'risk-detail' | 'profile' | 'community';
 type LanguageType = 'english' | 'hindi' | 'odia' | 'bengali' | 'marathi';
 
 interface FarmerProfile {
@@ -36,6 +42,20 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [isVoicePlaying, setIsVoicePlaying] = useState<boolean>(false);
   const [hasFarm, setHasFarm] = useState<boolean>(localStorage.getItem('hasFarm') === 'true');
+
+  // Voice — instant tap flow (no modal)
+  const [voiceState, setVoiceState] = useState<'idle'|'listening'|'thinking'|'speaking'>('idle');
+  const [voiceTranscript, setVoiceTranscript] = useState<string>('');
+  const [voiceAnswerText, setVoiceAnswerText] = useState<string>('');
+  // Legacy modal — kept for "Ask a Question" explicit entry
+  const [showVoiceModal, setShowVoiceModal] = useState<boolean>(false);
+  const [voiceQuestion, setVoiceQuestion] = useState<string>('');
+  const [voiceAnswer, setVoiceAnswer] = useState<string>('');
+  const [voiceListening, setVoiceListening] = useState<boolean>(false);
+  const [voiceLoading, setVoiceLoading] = useState<boolean>(false);
+  // Translated dynamic content (advisories, alerts)
+  const [translatedAdvisories, setTranslatedAdvisories] = useState<any[]>([]);
+  const [translatedAlerts, setTranslatedAlerts] = useState<any[]>([]);
   const [weather, setWeather] = useState<any>(null);
   const [loadingWeather, setLoadingWeather] = useState<boolean>(false);
   const [advisories, setAdvisories] = useState<any[]>([]);
@@ -58,7 +78,8 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
 
   // Multiple Farms and Crops States
   const [farms, setFarms] = useState<any[]>([]);
-  const [crops, setCrops] = useState<any[]>([]);
+  const [crops, setCrops] = useState<any[]>([]);         // crops for selected farm
+  const [allCrops, setAllCrops] = useState<any[]>([]);   // ALL crops across ALL farms
   const [selectedFarm, setSelectedFarm] = useState<any>(null);
   const [selectedCrop, setSelectedCrop] = useState<any>(null);
 
@@ -70,10 +91,11 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   const [newFarmArea, setNewFarmArea] = useState<string>('2.5');
   const [newFarmSoil, setNewFarmSoil] = useState<string>('loam');
   const [newFarmIrrigation, setNewFarmIrrigation] = useState<string>('drip');
-  const [newFarmLat, setNewFarmLat] = useState<string>('20.08');
-  const [newFarmLon, setNewFarmLon] = useState<string>('74.11');
-  const [newFarmBlock, setNewFarmBlock] = useState<string>('Niphad');
+  const [newFarmLat, setNewFarmLat] = useState<number>(20.08);
+  const [newFarmLon, setNewFarmLon] = useState<number>(74.11);
+  const [newFarmState, setNewFarmState] = useState<string>('Maharashtra');
   const [newFarmDistrict, setNewFarmDistrict] = useState<string>('Nashik');
+  const [newFarmName, setNewFarmName] = useState<string>('');
   
   const [newCropType, setNewCropType] = useState<string>('tomato');
   const [newCropVariety, setNewCropVariety] = useState<string>('PKM-1');
@@ -96,6 +118,12 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   );
   const t = translations[language];
 
+  // Toast notifications
+  const { toasts, removeToast, toast } = useToast();
+
+  // Crop modal: which farm to add crop to (default to selectedFarm.id)
+  const [cropFarmId, setCropFarmId] = useState<number | null>(null);
+
   const fetchFarmsAndCrops = async () => {
     if (!token) return;
     try {
@@ -109,35 +137,53 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           // If no farm selected yet, pick first
           const currentFarm = selectedFarm || farmData[0];
           setSelectedFarm(currentFarm);
-          
+
+          // Load crops from the selected farm (for modal UI)
           const cropRes = await fetch(`http://127.0.0.1:8000/api/v1/farms/${currentFarm.id}/crops`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (cropRes.ok) {
             const cropData = await cropRes.json();
             setCrops(cropData);
-if (cropData.length > 0) {
-      // When switching farms, always select the first crop from the new farm's crops
-      // Unless we're initializing and have no prior selection
-      setSelectedCrop(selectedCrop && cropData.some((c: any) => c.id === selectedCrop.id) ? selectedCrop : cropData[0]);
-    } else {
-      setSelectedCrop(null);
-    }
+            if (cropData.length > 0) {
+              setSelectedCrop(selectedCrop && cropData.some((c: any) => c.id === selectedCrop.id) ? selectedCrop : cropData[0]);
+            } else {
+              setSelectedCrop(null);
+            }
           }
+
+          // --- Load ALL crops from ALL farms (for home card grid + advisory) ---
+          const allCropResults: any[] = [];
+          await Promise.all(farmData.map(async (farm: any) => {
+            try {
+              const r = await fetch(`http://127.0.0.1:8000/api/v1/farms/${farm.id}/crops`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+              });
+              if (r.ok) {
+                const d = await r.json();
+                // Attach farm info to each crop for display
+                d.forEach((c: any) => {
+                  allCropResults.push({ ...c, farm_name: farm.name || `Farm ${farm.id}`, farm_district: farm.district, farm_area: farm.area });
+                });
+              }
+            } catch {}
+          }));
+          setAllCrops(allCropResults);
         } else {
           setFarms([]);
           setCrops([]);
+          setAllCrops([]);
           setSelectedFarm(null);
           setSelectedCrop(null);
         }
       }
     } catch (e) {
       console.warn("Offline fetch fallback for farms/crops", e);
-      // Fallback mocks
-      const mockFarm = { id: 1, area: 2.5, soil_type: 'loam', irrigation: 'drip', latitude: 20.08, longitude: 74.11 };
-      const mockCrop = { id: 1, crop_type: 'tomato', variety: 'Nashik Premium', stage: 'Fruit Development', sowing_date: '2026-07-04', image_url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop' };
+      const mockFarm = { id: 1, area: 2.5, soil_type: 'loam', irrigation: 'drip', latitude: 20.08, longitude: 74.11, name: 'Main Farm', district: 'Nashik' };
+      const mockCrop = { id: 1, crop_type: 'tomato', variety: 'Nashik Premium', stage: 'Fruit Development', sowing_date: '2026-07-04', image_url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop', farm_name: 'Main Farm', farm_district: 'Nashik' };
       setFarms([mockFarm]);
       setCrops([mockCrop]);
+      setAllCrops([mockCrop]);
       setSelectedFarm(mockFarm);
       setSelectedCrop(mockCrop);
     }
@@ -487,11 +533,11 @@ if (cropData.length > 0) {
           setToken(data.access_token);
         } else {
           const errorData = await res.json();
-          alert(errorData.detail || 'Login failed');
+          toast.error('Login failed', errorData.detail || 'Incorrect phone number or password');
         }
       } catch (err) {
         console.error(err);
-        alert('Network error during login');
+        toast.error('Connection error', 'Cannot reach server. Please check backend is running.');
       }
     }
   };
@@ -528,36 +574,140 @@ if (cropData.length > 0) {
           } else {
             // If auto-login fails, still set token from registration response if it includes token
             // But our registration endpoint doesn't return token, so we rely on the login call above
-            alert('Registration successful, but auto-login failed. Please login manually.');
+            toast.warning('Registered!', 'Auto-login failed. Please log in manually.');
           }
         } else {
           const errorData = await res.json();
-          alert(errorData.detail || 'Registration failed');
+          toast.error('Registration failed', errorData.detail || 'Could not create account.');
         }
       } catch (err) {
         console.error(err);
-        alert('Network error during registration');
+        toast.error('Connection error', 'Cannot reach server during registration.');
       }
     }
   };
 
-  // Mock Voice Playback
-  const handleVoicePlayback = () => {
+  // Voice Playback — reads advisory text aloud (tab-aware)
+  const handleVoicePlayback = async () => {
+    if (isVoicePlaying) { stopSpeech(); setIsVoicePlaying(false); return; }
     setIsVoicePlaying(true);
-    const utterance = new SpeechSynthesisUtterance();
-    
-    let text = "Welcome to KrishiRakshak.";
-    if (activeTab === 'home') {
-      text = "Your farm distress risk is elevated. Skip irrigation today because rain is expected.";
-    } else if (activeTab === 'market') {
-      text = "Mandi C is recommended for your tomatoes with net realization of 2,290 rupees.";
-    }
-    
-    utterance.text = text;
-    utterance.lang = language === 'hindi' ? 'hi-IN' : 'en-IN';
-    utterance.onend = () => setIsVoicePlaying(false);
-    window.speechSynthesis.speak(utterance);
+    const text = buildVoiceText({ activeTab, advisories, distressData, mandiPrices, schemes, selectedCrop, language });
+    try {
+      await speakText(text, language, (err) => { setIsVoicePlaying(false); toast.error('Voice error', err); });
+      const checkDone = setInterval(() => {
+        if (!window.speechSynthesis.speaking) { setIsVoicePlaying(false); clearInterval(checkDone); }
+      }, 300);
+    } catch { setIsVoicePlaying(false); }
   };
+
+  // Instant voice: tap mic → immediately record → AI answer → speak
+  const handleInstantMic = async () => {
+    // If currently playing, stop
+    if (voiceState === 'speaking' || isVoicePlaying) {
+      stopSpeech(); setVoiceState('idle'); setIsVoicePlaying(false); return;
+    }
+    if (voiceState === 'thinking') return; // wait for AI
+
+    const localeMap: Record<string, string> = {
+      english: 'en-IN', hindi: 'hi-IN', marathi: 'mr-IN', bengali: 'bn-IN', odia: 'or-IN'
+    };
+
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      // Fallback: just play the advisory text aloud
+      toast.info('Tip', 'Voice input not supported in this browser — playing advisory instead.');
+      handleVoicePlayback();
+      return;
+    }
+
+    setVoiceState('listening');
+    setVoiceTranscript('');
+    setVoiceAnswerText('');
+
+    const rec = new SR();
+    rec.lang = localeMap[language] || 'en-IN';
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.continuous = false;
+
+    rec.onresult = async (e: any) => {
+      const q = e.results[0][0].transcript;
+      setVoiceTranscript(q);
+      setVoiceState('thinking');
+
+      try {
+        const answer = await askGemini({
+          question: q,
+          farmerContext: { crops: allCrops, farms, weatherData: weather, distressData, advisories, language },
+        });
+        setVoiceAnswerText(answer);
+        setVoiceState('speaking');
+
+        const { translateText } = await import('./translate');
+        const translated = await translateText(answer, language);
+        await speakText(translated, language);
+
+        // Auto-reset after speech ends
+        const check = setInterval(() => {
+          if (!window.speechSynthesis.speaking) { setVoiceState('idle'); clearInterval(check); }
+        }, 300);
+      } catch {
+        setVoiceState('idle');
+      }
+    };
+
+    rec.onerror = (e: any) => {
+      console.warn('SpeechRecognition error:', e.error);
+      if (e.error !== 'aborted') toast.warning('Mic error', `Could not capture audio: ${e.error}`);
+      setVoiceState('idle');
+    };
+    rec.onend = () => {
+      if (voiceState === 'listening') setVoiceState('idle');
+    };
+
+    try { rec.start(); } catch (err) {
+      toast.warning('Mic unavailable', 'Could not access microphone.');
+      setVoiceState('idle');
+    }
+  };
+
+  // Translate dynamic advisory/alert text whenever language or data changes
+  useEffect(() => {
+    if (language === 'english' || advisories.length === 0) {
+      setTranslatedAdvisories(advisories);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { translateText } = await import('./translate');
+      const out = await Promise.all(advisories.map(async (adv: any) => ({
+        ...adv,
+        recommendation: await translateText(adv.recommendation || '', language),
+        reason: adv.reason ? await translateText(adv.reason, language) : '',
+        category: await translateText(adv.category || '', language),
+      })));
+      if (!cancelled) setTranslatedAdvisories(out);
+    })();
+    return () => { cancelled = true; };
+  }, [advisories, language]);
+
+  useEffect(() => {
+    if (language === 'english' || alerts.length === 0) {
+      setTranslatedAlerts(alerts);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { translateText } = await import('./translate');
+      const out = await Promise.all(alerts.map(async (al: any) => ({
+        ...al,
+        reason: await translateText(al.reason || '', language),
+        severity: await translateText(al.severity || '', language),
+      })));
+      if (!cancelled) setTranslatedAlerts(out);
+    })();
+    return () => { cancelled = true; };
+  }, [alerts, language]);
 
   // Language mapping
   const languageNames: Record<LanguageType, string> = {
@@ -600,14 +750,33 @@ if (cropData.length > 0) {
                 <h2 className="text-2xl font-bold font-sans my-0">Namaskar, {farmer?.name}!</h2>
                 <p className="text-slate-500 font-sans text-sm mt-1 mb-0">Farm Location: {farmer?.location_id || 'Not Set'}</p>
               </div>
-              <button 
-                onClick={refreshWeatherFromApi}
-                disabled={loadingWeather}
-                className="bg-stable text-white hover:bg-stable-dark font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-50"
-              >
-                <span className={`h-2.5 w-2.5 rounded-full bg-white ${loadingWeather ? 'animate-ping' : ''}`}></span>
-                {loadingWeather ? 'Syncing Weather...' : 'Refresh Weather Forecast'}
-              </button>
+              <div className="flex flex-wrap gap-2 items-center">
+                {/* Voice — read advisory */}
+                <button
+                  onClick={handleVoicePlayback}
+                  title="Read today's advisory aloud"
+                  className={`text-xs px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all border ${isVoicePlaying ? 'bg-high text-white border-high animate-pulse' : 'bg-earth-50 text-earth-dark border-earth-200 hover:bg-stable hover:text-white hover:border-stable'}`}
+                >
+                  <span>🔊</span> {isVoicePlaying ? 'Stop' : 'Read Advisory'}
+                </button>
+                {/* Voice — ask Farm AI */}
+                <button
+                  onClick={handleInstantMic}
+                  title="Speak a farming question"
+                  className="text-xs px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all border bg-stable-light text-stable-dark border-stable/30 hover:bg-stable hover:text-white"
+                >
+                  <span>🎙</span> Ask Gemini
+                </button>
+                {/* Weather refresh */}
+                <button
+                  onClick={refreshWeatherFromApi}
+                  disabled={loadingWeather}
+                  className="bg-slate-100 text-slate-600 hover:bg-stable hover:text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-50"
+                >
+                  <span className={`h-2.5 w-2.5 rounded-full bg-stable ${loadingWeather ? 'animate-ping' : ''}`}></span>
+                  {loadingWeather ? 'Syncing...' : 'Refresh Weather'}
+                </button>
+              </div>
             </div>
 
             {/* Farm & Crop Selector Strip */}
@@ -662,8 +831,8 @@ if (cropData.length > 0) {
                 </button>
                 <button 
                   onClick={() => {
-                    if (!selectedFarm) alert("Please register a farm first.");
-                    else setShowAddCropModal(true);
+                    if (!selectedFarm) { toast.warning("No farm selected", "Please add a farm first."); return; }
+                    setShowAddCropModal(true);
                   }}
                   className="px-3 py-1.5 bg-stable text-white hover:bg-stable-dark rounded-lg text-xs font-bold transition-all"
                 >
@@ -764,82 +933,193 @@ if (cropData.length > 0) {
             </div>
           </div>
         );
-      case 'crop':
+      case 'crop': {
+        const cropStageColors: Record<string, string> = {
+          'Germination': 'bg-blue-500',
+          'Vegetative Growth': 'bg-green-500',
+          'Flowering': 'bg-yellow-500',
+          'Fruit Development': 'bg-orange-500',
+          'Maturity': 'bg-red-500',
+          'Harvest': 'bg-stable',
+        };
+        const getCropStageColor = (stage: string) => {
+          for (const [k, v] of Object.entries(cropStageColors)) {
+            if ((stage || '').includes(k.split(' ')[0])) return v;
+          }
+          return 'bg-slate-400';
+        };
+
+        const cropEmojis: Record<string, string> = {
+          tomato: '🍅', wheat: '🌾', rice: '🌾', onion: '🧅', potato: '🥔',
+          maize: '🌽', sugarcane: '🎋', cotton: '🌿', soybean: '🫘',
+          groundnut: '🥜', chilli: '🌶️', grapes: '🍇', banana: '🍌', mango: '🥭',
+        };
+
         return (
-          <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold my-0">My Crop Advisory</h2>
-              <button 
-                onClick={() => {
-                  if (!selectedFarm) alert("Please register a farm first.");
-                  else setShowAddCropModal(true);
-                }}
-                className="px-3 py-1.5 bg-stable text-white hover:bg-stable-dark rounded-lg text-xs font-bold transition-all"
-              >
-                + Add Another Crop
-              </button>
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-bold my-0">My Crops</h2>
+                  <p className="text-slate-500 text-xs mt-1">
+                    {allCrops.length > 0
+                      ? `${allCrops.length} crop${allCrops.length > 1 ? 's' : ''} across ${farms.length} farm${farms.length > 1 ? 's' : ''}`
+                      : 'No crops registered yet'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    if (!selectedFarm) { toast.warning("No farm selected", "Please add a farm first."); return; }
+                    setShowAddCropModal(true);
+                  }}
+                  className="px-3 py-2 bg-stable text-white hover:bg-stable-dark rounded-xl text-xs font-bold transition-all shadow-sm"
+                >
+                  + Add Crop
+                </button>
+              </div>
             </div>
 
-            {selectedCrop ? (
-              <div className="relative h-48 w-full rounded-2xl overflow-hidden border border-earth-200 shadow-sm">
-                <img 
-                  src={getCropImage(selectedCrop.crop_type, selectedCrop.image_url)} 
-                  alt={selectedCrop.crop_type} 
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-end p-5">
-                  <div className="text-white text-left">
-                    <span className="text-[10px] bg-stable px-2 py-0.5 rounded-full font-bold uppercase">Healthy</span>
-                    <h3 className="text-xl font-bold mt-1 capitalize my-0">{selectedCrop.crop_type} ({selectedCrop.variety || 'Local'})</h3>
-                    <p className="text-slate-200 text-xs mt-1 mb-0">Sown: {selectedCrop.sowing_date} ({getSowingDaysAgo(selectedCrop.sowing_date)} days ago) • Stage: {selectedCrop.stage}</p>
+            {/* All Crops Grid */}
+            {allCrops.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {allCrops.map((crop: any) => (
+                  <div
+                    key={crop.id}
+                    onClick={() => {
+                      setSelectedCrop(crop);
+                      const farm = farms.find((f: any) => f.id === crop.farm_id);
+                      if (farm) setSelectedFarm(farm);
+                    }}
+                    className={`relative rounded-2xl overflow-hidden border cursor-pointer transition-all hover:shadow-lg hover:-translate-y-0.5 ${
+                      selectedCrop?.id === crop.id ? 'ring-2 ring-stable border-stable' : 'border-earth-200'
+                    }`}
+                  >
+                    {/* Crop Image */}
+                    <div className="relative h-40 w-full">
+                      <img
+                        src={getCropImage(crop.crop_type, crop.image_url)}
+                        alt={crop.crop_type}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                      {/* Stage badge */}
+                      <div className="absolute top-3 right-3">
+                        <span className={`text-[9px] text-white font-bold px-2 py-1 rounded-full uppercase ${getCropStageColor(crop.stage || '')}`}>
+                          {crop.stage || 'Unknown Stage'}
+                        </span>
+                      </div>
+                      {/* Crop name */}
+                      <div className="absolute bottom-3 left-3 text-white">
+                        <div className="text-lg leading-none">
+                          {cropEmojis[crop.crop_type?.toLowerCase()] || '🌱'}
+                        </div>
+                        <h3 className="font-bold text-sm capitalize mt-0.5 my-0">{crop.crop_type}</h3>
+                        <p className="text-[10px] text-slate-200 my-0">{crop.variety || 'Local variety'}</p>
+                      </div>
+                    </div>
+
+                    {/* Crop details */}
+                    <div className="bg-white p-4 space-y-2">
+                      <div className="flex items-center justify-between text-xs text-slate-500">
+                        <span>🌱 Sown {getSowingDaysAgo(crop.sowing_date)} days ago</span>
+                        <span className="text-[10px] bg-earth-100 text-earth-dark font-bold px-2 py-0.5 rounded-full">
+                          {crop.farm_name || `Farm ${crop.farm_id}`}
+                        </span>
+                      </div>
+                      {crop.farm_district && (
+                        <p className="text-[10px] text-slate-400">📍 {crop.farm_district} · {crop.farm_area} acres</p>
+                      )}
+                      {/* Advisories for this crop */}
+                      {advisories.filter((adv: any) => adv.farm_id === crop.farm_id).length > 0 && (
+                        <div className="pt-2 border-t border-slate-100">
+                          <p className="text-[10px] font-bold text-elevated-dark uppercase tracking-wide">⚠ Advisory</p>
+                          <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">
+                            {advisories.filter((adv: any) => adv.farm_id === crop.farm_id)[0]?.recommendation}
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
             ) : (
-              <div className="p-8 bg-earth-50 rounded-xl border border-earth-200 text-center">
-                <p className="text-slate-500 text-sm">No crops registered for this farm yet.</p>
-                <button 
-                  onClick={() => setShowAddCropModal(true)} 
-                  className="mt-3 px-4 py-2 bg-stable text-white hover:bg-stable-dark rounded-xl text-xs font-bold transition-all"
+              <div className="bg-white p-12 rounded-2xl border border-earth-200 text-center">
+                <p className="text-4xl mb-3">🌱</p>
+                <p className="text-slate-500 text-sm font-medium">No crops registered yet</p>
+                <p className="text-slate-400 text-xs mt-1 mb-4">Add your first farm and crop to get started</p>
+                <button
+                  onClick={() => setShowAddCropModal(true)}
+                  className="px-5 py-2.5 bg-stable text-white hover:bg-stable-dark rounded-xl text-sm font-bold transition-all"
                 >
                   Register First Crop
                 </button>
               </div>
             )}
 
-            {/* Advisory History */}
-            <div className="space-y-3">
-              <h3 className="font-bold text-slate-900 text-left my-0">Advisory Feed</h3>
-              <div className="border-l-2 border-stable pl-4 py-2 space-y-4 text-left">
-                {advisories.filter(adv => adv.farm_id === selectedFarm?.id).length > 0 ? (
-                  advisories.filter(adv => adv.farm_id === selectedFarm?.id).map((adv) => (
+            {/* Advisory Feed — all farms */}
+            {advisories.length > 0 && (
+              <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-3">
+                <h3 className="font-bold text-slate-900 my-0">Advisory Feed (All Farms)</h3>
+                <div className="border-l-2 border-stable pl-4 py-2 space-y-4">
+                  {advisories.map((adv: any) => (
                     <div key={adv.id} className="relative">
-                      <span className="absolute -left-[23px] top-1.5 bg-stable h-3 w-3 rounded-full border-2 border-white"></span>
+                      <span className="absolute -left-[23px] top-1.5 bg-stable h-3 w-3 rounded-full border-2 border-white" />
                       <div className="bg-white p-3 rounded-xl border border-earth-200 shadow-xs">
-                        <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">{adv.category} • Alert</p>
+                        <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">
+                          {adv.category} · Farm {adv.farm_id}
+                        </p>
                         <p className="text-slate-800 text-xs font-semibold mt-1">{adv.recommendation}</p>
                         <p className="text-slate-500 text-xs mt-0.5">{adv.reason}</p>
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-slate-400 text-xs py-2">
-                    No active alerts or dynamic warnings for this crop. Continue standard crop maintenance and monitoring.
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         );
+      }
+
       case 'market':
         return (
           <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">
-            <div>
-              <h2 className="text-xl font-bold my-0">Mandi Pricing & Net Realization</h2>
-              <p className="text-slate-500 text-xs mt-1 mb-0">
-                Optimized for net returns on crop: <span className="font-bold capitalize text-stable">{selectedCrop ? selectedCrop.crop_type : 'Tomato'}</span> (modal price minus transport/handling costs)
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+              <div>
+                <h2 className="text-xl font-bold my-0">Mandi Pricing &amp; Net Realization</h2>
+                <p className="text-slate-500 text-xs mt-1 mb-0">
+                  Net returns after transport &amp; handling costs
+                </p>
+              </div>
+              {allCrops.length > 1 && (
+                <select
+                  value={selectedCrop?.id || ''}
+                  onChange={(e) => {
+                    const crop = allCrops.find((c: any) => c.id === Number(e.target.value));
+                    if (crop) {
+                      setSelectedCrop(crop);
+                      const farm = farms.find((f: any) => f.id === crop.farm_id);
+                      if (farm) setSelectedFarm(farm);
+                    }
+                  }}
+                  className="text-xs border border-earth-200 rounded-lg px-3 py-2 bg-white text-slate-700 font-medium"
+                >
+                  {allCrops.map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {c.crop_type} — {c.farm_name || `Farm ${c.farm_id}`}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
+            {selectedCrop && (
+              <div className="text-xs bg-stable-light text-stable-dark font-semibold rounded-lg px-4 py-2 flex items-center gap-2">
+                <span className="capitalize">🌾 {selectedCrop.crop_type}</span>
+                <span className="text-slate-400">·</span>
+                <span>{selectedCrop.farm_name || `Farm ${selectedCrop.farm_id}`}</span>
+                {selectedCrop.stage && <><span className="text-slate-400">·</span><span>{selectedCrop.stage}</span></>}
+              </div>
+            )}
 
             {/* Mandi comparison table */}
             <div className="overflow-x-auto">
@@ -966,20 +1246,51 @@ if (cropData.length > 0) {
           <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">
             <h2 className="text-xl font-bold">{t.alertsTitle}</h2>
             <div className="space-y-4">
-              {/* Financial Distress Alert (Baseline Simulation) */}
-              <div className="flex gap-4 items-start p-4 bg-high-light rounded-xl border border-high-dark/10">
-                <span className="bg-high text-white p-2.5 rounded-xl"><AlertTriangle size={20} /></span>
-                <div>
-                  <div className="flex justify-between items-center">
-                    <h4 className="font-bold text-high-dark text-sm">Distress Alert: Expected Income Shortfall</h4>
-                    <span className="text-[10px] bg-high text-white font-bold px-2 py-0.5 rounded-full uppercase">Critical</span>
+              {/* Dynamic Distress Alert — only shown when score > 30 */}
+              {distressData && distressData.score >= 30 && (
+                <div className={`flex gap-4 items-start p-4 rounded-xl border ${
+                  distressData.score >= 70 ? 'bg-high-light border-high-dark/10' :
+                  distressData.score >= 50 ? 'bg-elevated-light border-elevated-dark/10' :
+                  'bg-watch-light border-watch-dark/10'
+                }`}>
+                  <span className={`p-2.5 rounded-xl text-white ${
+                    distressData.score >= 70 ? 'bg-high' : distressData.score >= 50 ? 'bg-elevated' : 'bg-watch'
+                  }`}><AlertTriangle size={20} /></span>
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <h4 className={`font-bold text-sm ${distressData.score >= 70 ? 'text-high-dark' : 'text-elevated-dark'}`}>
+                        Distress Alert: {distressData.risk_level} Risk Level
+                      </h4>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase text-white ${
+                        distressData.score >= 70 ? 'bg-high' : 'bg-elevated'
+                      }`}>{distressData.risk_level}</span>
+                    </div>
+                    {/* Dynamic narrative built from actual component scores */}
+                    <p className="text-slate-600 text-xs mt-1">
+                      {[
+                        distressData.weather_component > 25
+                          ? `Rainfall deficit is contributing to crop stress (weather risk: ${Math.round(distressData.weather_component)}/100)`
+                          : null,
+                        distressData.market_component > 25
+                          ? `${allCrops[0]?.crop_type || 'Crop'} market prices are below baseline (market risk: ${Math.round(distressData.market_component)}/100)`
+                          : null,
+                        distressData.yield_component > 25
+                          ? `Expected yield is lower than normal (yield risk: ${Math.round(distressData.yield_component)}/100)`
+                          : null,
+                        distressData.financial_component > 25 && cashFlow?.total_obligations > 0
+                          ? `Financial coverage ratio is tight (financial risk: ${Math.round(distressData.financial_component)}/100)`
+                          : null,
+                        distressData.urgency_component > 25 && cashFlow?.obligations?.length > 0
+                          ? `An obligation is due soon — check your financial resilience tab`
+                          : null,
+                      ].filter(Boolean).join('. ') || `Overall distress score is ${distressData.score}/100 — monitor conditions closely.`}
+                    </p>
+                    <button onClick={() => setActiveTab('risk-detail')} className="text-xs font-semibold text-high-dark mt-2.5 flex items-center gap-0.5 hover:underline">
+                      View Financial Resilience Details <ChevronRight size={14} />
+                    </button>
                   </div>
-                  <p className="text-slate-600 text-xs mt-1">Due to cumulative rainfall deficit (-31%) and local tomato price crash (-22%), your projected income may not cover your upcoming loan obligation of ₹60,000 due in 12 days.</p>
-                  <button onClick={() => setActiveTab('risk-detail')} className="text-xs font-semibold text-high-dark mt-2.5 flex items-center gap-0.5 hover:underline">
-                    View Financial Resilience Details <ChevronRight size={14} />
-                  </button>
                 </div>
-              </div>
+              )}
 
               {/* Dynamic Alerts (Pest Warnings) */}
               {alerts.length > 0 ? (
@@ -1007,92 +1318,155 @@ if (cropData.length > 0) {
         );
       case 'support': {
         const schemeTypeColors: Record<string, string> = {
-          'Insurance': 'bg-blue-50 text-blue-700',
-          'Direct Income': 'bg-green-50 text-green-700',
-          'Credit': 'bg-purple-50 text-purple-700',
-          'Market': 'bg-orange-50 text-orange-700',
-          'Subsidy': 'bg-yellow-50 text-yellow-700',
-          'Price Support': 'bg-red-50 text-red-700',
-          'State': 'bg-indigo-50 text-indigo-700',
-          'Infrastructure': 'bg-teal-50 text-teal-700',
+          'Insurance': 'bg-blue-50 text-blue-700 border-blue-200',
+          'Direct Income': 'bg-green-50 text-green-700 border-green-200',
+          'Credit': 'bg-purple-50 text-purple-700 border-purple-200',
+          'Market': 'bg-orange-50 text-orange-700 border-orange-200',
+          'Subsidy': 'bg-yellow-50 text-yellow-700 border-yellow-200',
+          'Price Support': 'bg-red-50 text-red-700 border-red-200',
+          'State': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+          'Infrastructure': 'bg-teal-50 text-teal-700 border-teal-200',
         };
         const getSchemeColor = (supportType: string) => {
           for (const key of Object.keys(schemeTypeColors)) {
             if (supportType.includes(key)) return schemeTypeColors[key];
           }
-          return 'bg-slate-50 text-slate-700';
+          return 'bg-slate-50 text-slate-700 border-slate-200';
+        };
+
+        const recommendedSchemes = schemes.filter((s: any) => s.is_recommended);
+        const otherSchemes = schemes.filter((s: any) => !s.is_recommended);
+
+        const SchemeCard = ({ scheme, highlight }: { scheme: any; highlight?: boolean }) => {
+          let description = '';
+          try {
+            const cond = JSON.parse(scheme.conditions || '{}');
+            description = cond.description || '';
+          } catch {}
+
+          return (
+            <div className={`p-5 rounded-xl border flex flex-col justify-between transition-all hover:shadow-md
+              ${highlight
+                ? 'bg-gradient-to-br from-stable-light/60 to-white border-stable/30 shadow-sm'
+                : 'bg-white border-earth-200 shadow-xs hover:border-stable/30'
+              }`}>
+              <div>
+                <div className="flex items-start gap-2 mb-2 flex-wrap">
+                  {highlight && (
+                    <span className="text-[9px] bg-stable text-white font-bold px-2 py-0.5 rounded-full uppercase shrink-0 mt-0.5 flex items-center gap-0.5">
+                      ⭐ Recommended
+                    </span>
+                  )}
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 mt-0.5 border ${getSchemeColor(scheme.support_type)}`}>
+                    {scheme.support_type.split('(')[0].trim()}
+                  </span>
+                  {scheme.state !== 'All' && (
+                    <span className="text-[9px] bg-earth-100 text-earth-dark font-bold px-2 py-0.5 rounded-full uppercase shrink-0 mt-0.5">
+                      {scheme.state} Only
+                    </span>
+                  )}
+                </div>
+                <h3 className="font-bold text-slate-900 text-sm leading-snug my-0">{scheme.name}</h3>
+                {description && (
+                  <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">{description}</p>
+                )}
+                {/* Relevance score bar */}
+                {scheme.relevance_score > 0 && (
+                  <div className="mt-2">
+                    <div className="flex justify-between text-[9px] text-slate-400 mb-0.5">
+                      <span>Relevance</span>
+                      <span className="font-bold text-stable">{scheme.relevance_score}%</span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-1">
+                      <div
+                        className="bg-stable rounded-full h-1 transition-all"
+                        style={{ width: `${Math.min(scheme.relevance_score, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center">
+                <span className="text-[9px] bg-stable-light text-stable font-bold px-2 py-0.5 rounded-full uppercase">
+                  {highlight ? '✓ Best Match' : 'Eligible'}
+                </span>
+                {scheme.verification_url && (
+                  <a href={scheme.verification_url} target="_blank" rel="noreferrer"
+                     className="text-xs font-semibold text-stable hover:text-stable-dark hover:underline transition-colors">
+                    Apply Portal →
+                  </a>
+                )}
+              </div>
+            </div>
+          );
         };
 
         return (
-          <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">
-            <div>
-              <h2 className="text-xl font-bold my-0">Matched Government Support Schemes</h2>
-              <p className="text-slate-500 text-xs mt-1 mb-0">Eligibility estimates based on crop type, distress score, and regional location</p>
+          <div className="space-y-6">
+            {/* Header + Distress Banner */}
+            <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-4">
+              <div>
+                <h2 className="text-xl font-bold my-0">Government Support Schemes</h2>
+                <p className="text-slate-500 text-xs mt-1 mb-0">AI-ranked by relevance to your crops, location & distress level</p>
+              </div>
+              {distressData && (
+                <div className={`p-4 rounded-xl border text-sm flex gap-4 items-center ${
+                  distressData.risk_level === 'Critical' || distressData.risk_level === 'High' ? 'bg-high-light border-high-dark/20 text-high-dark' :
+                  distressData.risk_level === 'Elevated' ? 'bg-watch-light border-watch-dark/20 text-watch-dark' :
+                  'bg-stable-light border-stable-dark/20 text-stable-dark'
+                }`}>
+                  <div className="text-3xl font-extrabold font-mono">{distressData.score}</div>
+                  <div>
+                    <div className="font-bold text-sm">Distress Level: {distressData.risk_level}</div>
+                    <div className="text-[11px] opacity-80 mt-0.5">Score 0-100 · Based on weather, yield, market, financial & urgency signals</div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Distress Summary Banner */}
-            {distressData && (
-              <div className={`p-4 rounded-xl border text-sm flex gap-4 items-center ${
-                distressData.risk_level === 'Critical' ? 'bg-high-light border-high-dark/20 text-high-dark' :
-                distressData.risk_level === 'High' ? 'bg-high-light border-high-dark/20 text-high-dark' :
-                distressData.risk_level === 'Elevated' ? 'bg-watch-light border-watch-dark/20 text-watch-dark' :
-                'bg-stable-light border-stable-dark/20 text-stable-dark'
-              }`}>
-                <div className="text-3xl font-extrabold font-mono">{distressData.score}</div>
-                <div>
-                  <div className="font-bold text-sm">Distress Level: {distressData.risk_level}</div>
-                  <div className="text-[11px] opacity-80 mt-0.5">Score 0-100 · Based on weather, yield, market, financial & urgency signals</div>
+            {/* Recommended Section */}
+            {recommendedSchemes.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">⭐</span>
+                  <h3 className="text-base font-bold text-slate-900 my-0">Recommended for You</h3>
+                  <span className="text-[10px] bg-stable text-white font-bold px-2 py-0.5 rounded-full">{recommendedSchemes.length}</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {recommendedSchemes.map((scheme: any) => (
+                    <SchemeCard key={scheme.id} scheme={scheme} highlight={true} />
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* Scheme Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {schemes.length > 0 ? schemes.map((scheme: any) => {
-                let description = '';
-                try {
-                  const cond = JSON.parse(scheme.conditions || '{}');
-                  description = cond.description || '';
-                } catch {}
-
-                return (
-                  <div key={scheme.id} className="bg-white p-5 rounded-xl border border-earth-200 shadow-xs flex flex-col justify-between hover:border-stable/40 hover:shadow-md transition-all">
-                    <div>
-                      <div className="flex items-start gap-2 mb-2">
-                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 mt-0.5 ${getSchemeColor(scheme.support_type)}`}>
-                          {scheme.support_type.split('(')[0].trim()}
-                        </span>
-                        {scheme.state !== 'All' && (
-                          <span className="text-[9px] bg-earth-100 text-earth-dark font-bold px-2 py-0.5 rounded-full uppercase shrink-0 mt-0.5">
-                            {scheme.state} Only
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="font-bold text-slate-900 text-sm leading-snug my-0">{scheme.name}</h3>
-                      {description && (
-                        <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{description}</p>
-                      )}
-                    </div>
-                    <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center">
-                      <span className="text-[9px] bg-stable-light text-stable font-bold px-2 py-0.5 rounded-full uppercase">Eligible</span>
-                      {scheme.verification_url && (
-                        <a href={scheme.verification_url} target="_blank" rel="noreferrer"
-                           className="text-xs font-semibold text-stable hover:text-stable-dark hover:underline transition-colors">
-                          Apply Portal →
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                );
-              }) : (
-                <div className="col-span-2 text-center py-10 text-slate-400 text-xs">
-                  Complete your farm profile to see matched schemes.
+            {/* All Schemes Section */}
+            {otherSchemes.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">📋</span>
+                  <h3 className="text-base font-bold text-slate-900 my-0">All Available Schemes</h3>
+                  <span className="text-[10px] bg-slate-200 text-slate-600 font-bold px-2 py-0.5 rounded-full">{otherSchemes.length}</span>
                 </div>
-              )}
-            </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {otherSchemes.map((scheme: any) => (
+                    <SchemeCard key={scheme.id} scheme={scheme} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {schemes.length === 0 && (
+              <div className="bg-white p-12 rounded-2xl border border-earth-200 text-center text-slate-400 text-sm">
+                Complete your farm profile to see matched schemes.
+              </div>
+            )}
           </div>
         );
       }
+
+
+
       case 'risk-detail':
         const normalIncome = cashFlow?.projected_net_income || 95000;
         const currentIncome = cashFlow?.projected_net_income || 62000;
@@ -1256,6 +1630,111 @@ if (cropData.length > 0) {
             </div>
           </div>
         );
+
+      case 'community': {
+        // Phase 20: Community District Risk Map
+        const [communityData, setCommunityData] = React.useState<any[]>([]);
+        const [communityLoading, setCommunityLoading] = React.useState(true);
+
+        React.useEffect(() => {
+          fetch(`${API_BASE}/api/v1/community/district-risk`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+            .then(r => r.ok ? r.json() : [])
+            .then(d => { setCommunityData(d); setCommunityLoading(false); })
+            .catch(() => setCommunityLoading(false));
+        }, [token]);
+
+        const riskColor = (level: string) => {
+          switch (level) {
+            case 'Critical': return '#ef4444';
+            case 'High': return '#f97316';
+            case 'Elevated': return '#f59e0b';
+            case 'Watch': return '#facc15';
+            default: return '#22c55e';
+          }
+        };
+
+        return (
+          <div className="p-4 md:p-6 space-y-5">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 my-0">🗺️ Community Risk Map</h2>
+                <p className="text-xs text-slate-500 mt-0.5">District-level farmer distress — anonymised aggregates</p>
+              </div>
+              <button
+                onClick={() => setActiveTab('home')}
+                className="text-xs text-slate-400 hover:text-slate-600 font-semibold"
+              >← Back</button>
+            </div>
+
+            {communityLoading ? (
+              <div className="flex items-center justify-center h-48">
+                <div className="animate-spin w-8 h-8 border-4 border-stable border-t-transparent rounded-full" />
+              </div>
+            ) : communityData.length === 0 ? (
+              <div className="text-center py-12 text-slate-400">
+                <p className="text-4xl mb-3">🗺️</p>
+                <p className="font-semibold">No community data yet</p>
+                <p className="text-xs mt-1">More farmers need to join your district first</p>
+              </div>
+            ) : (
+              <>
+                {/* Legend */}
+                <div className="flex flex-wrap gap-2">
+                  {[['Critical','#ef4444'],['High','#f97316'],['Elevated','#f59e0b'],['Stable','#22c55e']].map(([l,c]) => (
+                    <span key={l} className="flex items-center gap-1 text-xs font-semibold text-slate-600 bg-white border border-slate-100 rounded-full px-2 py-0.5 shadow-xs">
+                      <span style={{background:c}} className="w-2.5 h-2.5 rounded-full inline-block" />
+                      {l}
+                    </span>
+                  ))}
+                </div>
+
+                {/* District cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {communityData.map((d: any, i: number) => (
+                    <div key={i} className="bg-white rounded-2xl border border-earth-100 shadow-xs p-4 flex items-center gap-4">
+                      <div
+                        className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold text-lg flex-shrink-0 shadow-sm"
+                        style={{ background: riskColor(d.risk_level) }}
+                      >
+                        {Math.round(d.avg_score)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-slate-900 text-sm truncate">{d.district}</p>
+                        <p className="text-xs text-slate-400">{d.state}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span
+                            className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white"
+                            style={{ background: riskColor(d.risk_level) }}
+                          >{d.risk_level}</span>
+                          <span className="text-[10px] text-slate-400">{d.farmer_count} farmer{d.farmer_count !== 1 ? 's' : ''}</span>
+                        </div>
+                      </div>
+                      {/* Mini score bar */}
+                      <div className="w-24 flex-shrink-0">
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{ width: `${Math.min(d.avg_score, 100)}%`, background: riskColor(d.risk_level) }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5 text-right">{d.avg_score}/100</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-[10px] text-slate-400 text-center">
+                  All data is anonymised. District scores are averages across all farmers in that district.
+                </p>
+              </>
+            )}
+          </div>
+        );
+      }
+
       default:
         return <div>Not found</div>;
     }
@@ -1386,9 +1865,11 @@ if (cropData.length > 0) {
   }
 
   return (
-    <div className="min-h-screen bg-earth-50 flex flex-col md:flex-row">
-      {/* Sidebar Nav (Desktop widths >= md breakpoint) */}
-      <aside className="hidden md:flex flex-col w-64 bg-white border-r border-earth-200 p-6 space-y-8 flex-shrink-0">
+    <div className="h-screen bg-earth-50 flex flex-col md:flex-row overflow-hidden">
+      {/* Global Toast Notifications */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
+      {/* Sidebar Nav — fixed height, does NOT scroll with content */}
+      <aside className="hidden md:flex flex-col w-64 bg-white border-r border-earth-200 p-6 space-y-8 flex-shrink-0 h-screen overflow-y-auto">
         <div>
           <h1 className="text-xl font-black text-stable tracking-tight my-0">KrishiRakshak</h1>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Farm Risk Intelligence</p>
@@ -1425,6 +1906,12 @@ if (cropData.length > 0) {
           >
             <HelpCircle size={18} /> Schemes
           </button>
+          <button 
+            onClick={() => setActiveTab('community')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'community' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <span className="text-base">🗺️</span> Community Map
+          </button>
         </nav>
 
         <div className="pt-4 border-t border-slate-100 flex flex-col gap-2">
@@ -1438,7 +1925,7 @@ if (cropData.length > 0) {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-4 md:p-8 max-w-5xl mx-auto w-full pb-24 md:pb-8">
+      <main className="flex-1 p-4 md:p-8 max-w-5xl mx-auto w-full pb-24 md:pb-8 overflow-y-auto h-screen">
         {renderTabContent()}
       </main>
 
@@ -1469,6 +1956,12 @@ if (cropData.length > 0) {
           <Bell size={20} /> <span className="mt-1">Alerts</span>
         </button>
         <button 
+          onClick={() => setActiveTab('community')}
+          className={`flex flex-col items-center text-[10px] font-bold ${activeTab === 'community' ? 'text-stable' : 'text-slate-400'}`}
+        >
+          <span className="text-xl">🗺️</span> <span className="mt-0.5">Map</span>
+        </button>
+        <button 
           onClick={() => setActiveTab('profile')}
           className={`flex flex-col items-center text-[10px] font-bold ${activeTab === 'profile' ? 'text-stable' : 'text-slate-400'}`}
         >
@@ -1476,159 +1969,386 @@ if (cropData.length > 0) {
         </button>
       </nav>
 
-      {/* Floating Audio Assistance Trigger Button (Mobile-friendly Persistent) */}
-      <button 
-        onClick={handleVoicePlayback}
-        className={`fixed bottom-20 right-6 md:bottom-8 md:right-8 bg-stable text-white p-4 rounded-full shadow-lg hover:scale-105 transition-all z-50 border-2 border-white flex items-center justify-center ${isVoicePlaying ? 'bg-high animate-bounce' : 'hover:bg-stable-dark'}`}
-        aria-label="Speech Assist"
+
+      {/* ── Floating Mic Button — tap = instant voice record → AI answer → speak ── */}
+      <button
+        onClick={handleInstantMic}
+        title={
+          voiceState === 'idle' ? 'Tap to speak a question' :
+          voiceState === 'listening' ? 'Listening... tap to cancel' :
+          voiceState === 'thinking' ? 'Processing...' : 'Tap to stop'
+        }
+        className={`fixed bottom-20 right-6 md:bottom-8 md:right-8 text-white p-4 rounded-full shadow-xl transition-all z-50 border-2 border-white flex items-center justify-center
+          ${voiceState === 'listening' ? 'bg-high scale-110 animate-pulse' : ''}
+          ${voiceState === 'thinking' ? 'bg-elevated scale-105' : ''}
+          ${voiceState === 'speaking' ? 'bg-watch scale-110' : ''}
+          ${voiceState === 'idle' && !isVoicePlaying ? 'bg-stable hover:bg-stable-dark hover:scale-105' : ''}
+          ${isVoicePlaying && voiceState === 'idle' ? 'bg-watch animate-bounce' : ''}
+        `}
+        aria-label="Voice Assistant"
       >
-        <Mic size={24} />
+        {voiceState === 'thinking' ? (
+          <svg className="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+          </svg>
+        ) : <Mic size={24} />}
       </button>
 
-      {/* Add Farm Modal Overlay */}
-      {showAddFarmModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in text-left">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-earth-200 shadow-xl space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h3 className="text-lg font-bold text-slate-900 my-0">Register New Farm</h3>
-              <button 
-                onClick={() => setShowAddFarmModal(false)}
-                className="text-slate-400 hover:text-slate-600 font-bold text-sm"
-              >
-                ✕
-              </button>
+      {/* Floating voice answer card — shows listening animation + answer */}
+      {(voiceState !== 'idle' || voiceAnswerText) && (
+        <div className="fixed bottom-36 right-4 md:bottom-24 md:right-8 bg-white rounded-2xl shadow-2xl border border-earth-200 p-4 w-72 z-50 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1">
+              {voiceState === 'listening' && <span className="text-high animate-pulse">🎙 Listening</span>}
+              {voiceState === 'thinking' && <span className="text-elevated animate-pulse">⏳ Processing</span>}
+              {voiceState === 'speaking' && <span className="text-watch">🔊 Speaking</span>}
+              {voiceState === 'idle' && voiceAnswerText && <span className="text-stable">✓ Done</span>}
+            </p>
+            <button
+              onClick={() => { stopSpeech(); setVoiceState('idle'); setVoiceAnswerText(''); setVoiceTranscript(''); }}
+              className="text-slate-300 hover:text-slate-600 text-xs font-bold"
+            >✕</button>
+          </div>
+          {voiceState === 'listening' && (
+            <div className="flex gap-1 items-end justify-center py-2">
+              {[1,2,3,4,5].map(i => (
+                <div key={i} className="w-1.5 bg-high rounded-full animate-bounce" style={{height:`${10+i*5}px`,animationDelay:`${i*0.1}s`}} />
+              ))}
             </div>
-            
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Area (Acres)</label>
-                  <input 
-                    type="number" 
-                    step="0.1"
-                    value={newFarmArea} 
-                    onChange={(e) => setNewFarmArea(e.target.value)}
-                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Soil Type</label>
-                  <select 
-                    value={newFarmSoil} 
-                    onChange={(e) => setNewFarmSoil(e.target.value)}
-                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
-                  >
-                    <option value="loam">Loam</option>
-                    <option value="clay">Clay</option>
-                    <option value="sandy">Sandy</option>
-                    <option value="black">Black Cotton</option>
-                  </select>
-                </div>
-              </div>
+          )}
+          {voiceTranscript && (
+            <p className="text-xs text-slate-400 italic border-l-2 border-earth-200 pl-2">"{voiceTranscript}"</p>
+          )}
+          {voiceAnswerText && (
+            <p className="text-sm text-slate-800 leading-relaxed">{voiceAnswerText}</p>
+          )}
+          {voiceState === 'idle' && voiceAnswerText && (
+            <button
+              onClick={async () => {
+                const { translateText } = await import('./translate');
+                const tr = await translateText(voiceAnswerText, language);
+                speakText(tr, language);
+              }}
+              className="text-xs text-stable font-semibold flex items-center gap-1 hover:underline"
+            >
+              🔊 Play again
+            </button>
+          )}
+        </div>
+      )}
 
+      {/* ── Voice Q&A Modal ─────────────────────────────────────────────── */}
+      {showVoiceModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-end md:items-center justify-center p-3 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-earth-200 shadow-2xl space-y-5">
+
+            {/* Header */}
+            <div className="flex justify-between items-start">
               <div>
-                <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Irrigation Method</label>
-                <select 
-                  value={newFarmIrrigation} 
-                  onChange={(e) => setNewFarmIrrigation(e.target.value)}
-                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
-                >
-                  <option value="drip">Drip Irrigation</option>
-                  <option value="sprinkler">Sprinkler Irrigation</option>
-                  <option value="flood">Flood Irrigation</option>
-                  <option value="rainfed">Rainfed (None)</option>
-                </select>
+                <h3 className="text-lg font-bold text-slate-900 my-0 flex items-center gap-2">
+                  <span className="text-2xl">🎙</span> Ask Your Farm Advisor
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  AI-powered farm advisor · Speaks in your language
+                </p>
               </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-slate-500 text-[10px] font-bold uppercase mb-1">Block/Village</label>
-                  <input 
-                    type="text" 
-                    value={newFarmBlock} 
-                    onChange={(e) => setNewFarmBlock(e.target.value)}
-                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-500 text-[10px] font-bold uppercase mb-1">District</label>
-                  <input 
-                    type="text" 
-                    value={newFarmDistrict} 
-                    onChange={(e) => setNewFarmDistrict(e.target.value)}
-                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-500 text-[10px] font-bold uppercase mb-1">State</label>
-                  <span className="block text-xs py-2 text-slate-500 font-bold uppercase">Maharashtra</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-500 text-[10px] font-bold uppercase mb-1">Latitude</label>
-                  <input 
-                    type="text" 
-                    value={newFarmLat} 
-                    onChange={(e) => setNewFarmLat(e.target.value)}
-                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-500 text-[10px] font-bold uppercase mb-1">Longitude</label>
-                  <input 
-                    type="text" 
-                    value={newFarmLon} 
-                    onChange={(e) => setNewFarmLon(e.target.value)}
-                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl font-mono"
-                  />
-                </div>
-              </div>
-              <button 
-                type="button"
+              <button
                 onClick={() => {
-                  if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(
-                      (position) => {
-                        setNewFarmLat(position.coords.latitude.toFixed(4));
-                        setNewFarmLon(position.coords.longitude.toFixed(4));
-                      },
-                      (err) => {
-                        console.error(err);
-                        alert("Could not retrieve GPS coordinates. Please input them manually.");
-                      }
-                    );
+                  setShowVoiceModal(false);
+                  setVoiceQuestion('');
+                  setVoiceAnswer('');
+                  stopSpeech();
+                }}
+                className="text-slate-400 hover:text-slate-600 font-bold text-lg leading-none"
+              >✕</button>
+            </div>
+
+            {/* Suggestion chips */}
+            {!voiceAnswer && (
+              <div className="flex flex-wrap gap-2">
+                {[
+                  'Should I irrigate today?',
+                  'Is it safe to sell now?',
+                  'What pest risk do I have?',
+                  'What schemes am I eligible for?',
+                ].map(q => (
+                  <button
+                    key={q}
+                    onClick={() => setVoiceQuestion(q)}
+                    className="text-xs bg-earth-50 text-earth-dark border border-earth-200 px-3 py-1.5 rounded-full hover:bg-stable hover:text-white hover:border-stable transition-all"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Text input */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={voiceQuestion}
+                onChange={(e) => setVoiceQuestion(e.target.value)}
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter' && voiceQuestion.trim() && !voiceLoading) {
+                    setVoiceLoading(true);
+                    setVoiceAnswer('');
+                    const ans = await askGemini({
+                      question: voiceQuestion,
+                      farmerContext: { crops: allCrops, farms, weatherData: weather, distressData, advisories, language },
+                    });
+                    setVoiceAnswer(ans);
+                    setVoiceLoading(false);
+                    // Speak the answer in farmer's language
+                    const translated = await import('./translate').then(m => m.translateText(ans, language));
+                    speakText(translated, language);
                   }
                 }}
-                className="w-full py-1.5 border border-stable/30 hover:bg-stable-light text-stable rounded-lg text-[10px] font-bold transition-all"
+                placeholder="Type or ask a farming question..."
+                className="flex-1 border border-earth-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-stable"
+                disabled={voiceLoading}
+              />
+
+              {/* Mic button — speech recognition */}
+              <button
+                onClick={() => {
+                  const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+                  if (!SR) { toast.warning('Not supported', 'Voice input not supported in this browser. Please type your question.'); return; }
+                  const rec = new SR();
+                  rec.lang = language === 'hindi' ? 'hi-IN' : language === 'marathi' ? 'mr-IN' : language === 'bengali' ? 'bn-IN' : language === 'odia' ? 'or-IN' : 'en-IN';
+                  rec.interimResults = false;
+                  rec.maxAlternatives = 1;
+                  setVoiceListening(true);
+                  rec.start();
+                  rec.onresult = (e: any) => {
+                    const transcript = e.results[0][0].transcript;
+                    setVoiceQuestion(transcript);
+                    setVoiceListening(false);
+                  };
+                  rec.onerror = () => setVoiceListening(false);
+                  rec.onend = () => setVoiceListening(false);
+                }}
+                disabled={voiceListening || voiceLoading}
+                className={`p-2.5 rounded-xl border text-white transition-all ${voiceListening ? 'bg-high border-high animate-pulse' : 'bg-stable border-stable hover:bg-stable-dark'}`}
+                title="Speak your question"
               >
-                Auto-Detect coordinates via Device GPS
+                <Mic size={18} />
               </button>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-              <button 
-                onClick={() => setShowAddFarmModal(false)}
-                className="px-4 py-2 border border-slate-200 text-slate-500 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={async () => {
+            {/* Status indicators */}
+            {voiceListening && (
+              <p className="text-xs text-high font-semibold text-center animate-pulse">
+                🎙 Listening... speak your question
+              </p>
+            )}
+
+            {/* Ask button */}
+            <button
+              disabled={!voiceQuestion.trim() || voiceLoading}
+              onClick={async () => {
+                if (!voiceQuestion.trim()) return;
+                setVoiceLoading(true);
+                setVoiceAnswer('');
+                const ans = await askGemini({
+                  question: voiceQuestion,
+                  farmerContext: { crops: allCrops, farms, weatherData: weather, distressData, advisories, language },
+                });
+                setVoiceAnswer(ans);
+                setVoiceLoading(false);
+                const translated = await import('./translate').then(m => m.translateText(ans, language));
+                speakText(translated, language);
+              }}
+              className="w-full py-3 bg-stable text-white rounded-xl font-bold text-sm hover:bg-stable-dark disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+            >
+              {voiceLoading ? (
+                <><span className="animate-spin text-base">⏳</span> Getting answer...</>
+              ) : (
+                <><span>🎙</span> Ask Farm AI</>
+              )}
+            </button>
+
+            {/* Answer display */}
+            {voiceAnswer && (
+              <div className="bg-stable-light border border-stable/30 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold text-stable-dark uppercase tracking-widest">Farm Advisor Response</p>
+                  <button
+                    onClick={async () => {
+                      const translated = await import('./translate').then(m => m.translateText(voiceAnswer, language));
+                      speakText(translated, language);
+                    }}
+                    className="text-xs text-stable font-semibold flex items-center gap-1 hover:underline"
+                  >
+                    <span>🔊</span> Play
+                  </button>
+                </div>
+                <p className="text-sm text-slate-800 leading-relaxed">{voiceAnswer}</p>
+                <button
+                  onClick={() => { setVoiceQuestion(''); setVoiceAnswer(''); stopSpeech(); }}
+                  className="text-xs text-slate-400 hover:text-slate-600 underline"
+                >
+                  Ask another question
+                </button>
+              </div>
+            )}
+
+            {/* Tip */}
+            <p className="text-[10px] text-slate-400 text-center">
+              💡 Answers based on your real farm data — not generic advice
+            </p>
+          </div>
+        </div>
+      )}
+      {/* ────────────────────────────────────────────────────────────────── */}
+
+      {/* Add Farm Modal Overlay */}
+
+      {showAddFarmModal && (() => {
+        // MapPickerComponent is declared at module level above
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-3 z-50 animate-fade-in text-left">
+            <div className="bg-white rounded-3xl p-5 max-w-lg w-full border border-earth-200 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 my-0">🌾 Register New Farm</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Pin your farm on the map for accurate weather & advisory</p>
+                </div>
+                <button onClick={() => setShowAddFarmModal(false)} className="text-slate-400 hover:text-slate-600 font-bold text-sm">✕</button>
+              </div>
+
+              <div className="space-y-3">
+                {/* Farm Name */}
+                <div>
+                  <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Farm Name (optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Nashik Vineyard, Main Field…"
+                    value={newFarmName}
+                    onChange={(e) => setNewFarmName(e.target.value)}
+                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
+                  />
+                </div>
+
+                {/* State + District row */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-500 text-xs font-bold uppercase mb-1">State</label>
+                    <select
+                      value={newFarmState}
+                      onChange={(e) => {
+                        setNewFarmState(e.target.value);
+                        const dists = getDistrictsForState(e.target.value);
+                        if (dists.length > 0) {
+                          setNewFarmDistrict(dists[0].name);
+                          setNewFarmLat(dists[0].lat);
+                          setNewFarmLon(dists[0].lon);
+                        }
+                      }}
+                      className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
+                    >
+                      {getStateList().map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 text-xs font-bold uppercase mb-1">District</label>
+                    <select
+                      value={newFarmDistrict}
+                      onChange={(e) => {
+                        setNewFarmDistrict(e.target.value);
+                        const coords = getDistrictCoords(newFarmState, e.target.value);
+                        if (coords) { setNewFarmLat(coords.lat); setNewFarmLon(coords.lon); }
+                      }}
+                      className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
+                    >
+                      {getDistrictsForState(newFarmState).map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Map Picker */}
+                <div>
+                  <label className="block text-slate-500 text-xs font-bold uppercase mb-1">📍 Pinpoint Farm Location</label>
+                  <Suspense fallback={<div className="h-60 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 text-xs">Loading map…</div>}>
+                    <MapPickerComponent
+                      initialLat={newFarmLat}
+                      initialLon={newFarmLon}
+                      onLocationSelect={(lat, lon) => { setNewFarmLat(lat); setNewFarmLon(lon); }}
+                    />
+                  </Suspense>
+                </div>
+
+                {/* Area + Soil row */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Area (Acres)</label>
+                    <input
+                      type="number" step="0.1"
+                      value={newFarmArea}
+                      onChange={(e) => setNewFarmArea(e.target.value)}
+                      className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Soil Type</label>
+                    <select value={newFarmSoil} onChange={(e) => setNewFarmSoil(e.target.value)}
+                      className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl">
+                      <option value="loam">Loam</option>
+                      <option value="clay">Clay</option>
+                      <option value="sandy">Sandy</option>
+                      <option value="black">Black Cotton</option>
+                      <option value="red">Red Laterite</option>
+                      <option value="alluvial">Alluvial</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Irrigation */}
+                <div>
+                  <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Irrigation Method</label>
+                  <select value={newFarmIrrigation} onChange={(e) => setNewFarmIrrigation(e.target.value)}
+                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl">
+                    <option value="drip">Drip Irrigation</option>
+                    <option value="sprinkler">Sprinkler</option>
+                    <option value="flood">Flood / Canal</option>
+                    <option value="rainfed">Rainfed (No irrigation)</option>
+                    <option value="well">Well / Borewell</option>
+                  </select>
+                </div>
+
+                {/* GPS auto-detect button */}
+                <button type="button" onClick={() => {
+                  if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                      (pos) => { setNewFarmLat(parseFloat(pos.coords.latitude.toFixed(6))); setNewFarmLon(parseFloat(pos.coords.longitude.toFixed(6))); },
+                      () => toast.warning("GPS unavailable", "Could not get device location. Pin manually on the map.")
+                    );
+                  }
+                }} className="w-full py-1.5 border border-stable/30 hover:bg-stable/5 text-stable rounded-lg text-[10px] font-bold transition-all">
+                  📡 Use Device GPS to auto-centre map
+                </button>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button onClick={() => setShowAddFarmModal(false)}
+                  className="px-4 py-2 border border-slate-200 text-slate-500 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all">
+                  Cancel
+                </button>
+                <button onClick={async () => {
                   try {
                     const res = await fetch('http://127.0.0.1:8000/api/v1/farmers/me/farms', {
                       method: 'POST',
-                      headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                      },
+                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                       body: JSON.stringify({
                         area: parseFloat(newFarmArea),
                         soil_type: newFarmSoil,
                         irrigation: newFarmIrrigation,
-                        latitude: parseFloat(newFarmLat),
-                        longitude: parseFloat(newFarmLon)
+                        latitude: newFarmLat,
+                        longitude: newFarmLon,
+                        state: newFarmState,
+                        district: newFarmDistrict,
+                        name: newFarmName || `${newFarmDistrict} Farm`
                       })
                     });
                     if (res.ok) {
@@ -1636,113 +2356,127 @@ if (cropData.length > 0) {
                       setFarms(prev => [...prev, data]);
                       setSelectedFarm(data);
                       setShowAddFarmModal(false);
-                      alert("Farm registered successfully!");
+                      setHasFarm(true);
+                      localStorage.setItem('hasFarm', 'true');
+                      toast.success("Farm registered!", `${newFarmName || newFarmDistrict + ' Farm'} added successfully.`);
                     } else {
-                      alert("Failed to register farm with backend.");
+                      const err = await res.json().catch(() => ({}));
+                      toast.error("Farm registration failed", err.detail || `Server error ${res.status}. Please try again.`);
                     }
-                  } catch {
-                    alert("Network offline. Saved farm locally.");
-                    const mockFarm = { 
-                      id: Date.now(), 
-                      area: parseFloat(newFarmArea), 
-                      soil_type: newFarmSoil, 
-                      irrigation: newFarmIrrigation,
-                      latitude: parseFloat(newFarmLat),
-                      longitude: parseFloat(newFarmLon)
-                    };
-                    setFarms(prev => [...prev, mockFarm]);
-                    setSelectedFarm(mockFarm);
-                    setShowAddFarmModal(false);
+                  } catch (e) {
+                    toast.error("Connection failed", "Cannot reach backend on port 8000. Is uvicorn running?");
                   }
-                }}
-                className="px-4 py-2 bg-stable hover:bg-stable-dark text-white rounded-xl text-xs font-bold transition-all"
-              >
-                Register Farm
-              </button>
+                }} className="px-4 py-2 bg-stable hover:bg-stable-dark text-white rounded-xl text-xs font-bold transition-all">
+                  Register Farm
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+
+
+
+
+
 
       {/* Add Crop Modal Overlay */}
       {showAddCropModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in text-left">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-earth-200 shadow-xl space-y-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 animate-fade-in text-left">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-earth-200 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h3 className="text-lg font-bold text-slate-900 my-0">Register New Crop</h3>
-              <button 
-                onClick={() => setShowAddCropModal(false)}
-                className="text-slate-400 hover:text-slate-600 font-bold text-sm"
-              >
-                ✕
-              </button>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 my-0">🌱 Register New Crop</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Add a crop to one of your farms</p>
+              </div>
+              <button onClick={() => setShowAddCropModal(false)} className="text-slate-400 hover:text-slate-600 font-bold text-sm">✕</button>
             </div>
 
             <div className="space-y-3">
+              {/* Farm selector — always shown so user can pick which farm */}
+              <div>
+                <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Select Farm</label>
+                {farms.length === 0 ? (
+                  <div className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                    ⚠ No farms registered yet. Please add a farm first.
+                  </div>
+                ) : (
+                  <select
+                    value={cropFarmId ?? selectedFarm?.id ?? farms[0]?.id ?? ''}
+                    onChange={(e) => setCropFarmId(Number(e.target.value))}
+                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl font-medium"
+                  >
+                    {farms.map((f: any) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name || `Farm #${f.id}`} — {f.district || f.soil_type} ({f.area} ac)
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Crop type */}
               <div>
                 <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Crop Type</label>
-                <select 
-                  value={newCropType} 
-                  onChange={(e) => setNewCropType(e.target.value)}
-                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
-                >
-                  <option value="tomato">Tomato</option>
-                  <option value="wheat">Wheat</option>
-                  <option value="onion">Onion</option>
+                <select value={newCropType} onChange={(e) => setNewCropType(e.target.value)}
+                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl">
+                  <option value="tomato">🍅 Tomato</option>
+                  <option value="wheat">🌾 Wheat</option>
+                  <option value="onion">🧅 Onion</option>
+                  <option value="rice">🌾 Rice / Paddy</option>
+                  <option value="sugarcane">🎋 Sugarcane</option>
+                  <option value="cotton">🌿 Cotton</option>
+                  <option value="maize">🌽 Maize</option>
+                  <option value="soybean">🫘 Soybean</option>
+                  <option value="groundnut">🥜 Groundnut</option>
+                  <option value="potato">🥔 Potato</option>
+                  <option value="chilli">🌶 Chilli</option>
+                  <option value="grapes">🍇 Grapes</option>
+                  <option value="banana">🍌 Banana</option>
+                  <option value="mango">🥭 Mango</option>
                 </select>
               </div>
 
+              {/* Variety */}
               <div>
                 <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Variety Name</label>
-                <input 
-                  type="text" 
-                  value={newCropVariety} 
-                  onChange={(e) => setNewCropVariety(e.target.value)}
+                <input type="text" value={newCropVariety} onChange={(e) => setNewCropVariety(e.target.value)}
                   className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
-                  placeholder="e.g. PKM-1, Local Premium"
-                />
+                  placeholder="e.g. PKM-1, Local Premium, Hybrid-7" />
               </div>
 
+              {/* Sowing Date */}
               <div>
                 <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Sowing Date</label>
-                <input 
-                  type="date" 
-                  value={newCropSowingDate} 
-                  onChange={(e) => setNewCropSowingDate(e.target.value)}
-                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
-                />
+                <input type="date" value={newCropSowingDate} onChange={(e) => setNewCropSowingDate(e.target.value)}
+                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl" />
               </div>
 
+              {/* Image URL */}
               <div>
                 <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Crop Image URL (Optional)</label>
-                <input 
-                  type="url" 
-                  value={newCropImageUrl} 
-                  onChange={(e) => setNewCropImageUrl(e.target.value)}
+                <input type="url" value={newCropImageUrl} onChange={(e) => setNewCropImageUrl(e.target.value)}
                   className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl font-mono"
-                  placeholder="https://example.com/mycrop.jpg"
-                />
-                <p className="text-[10px] text-slate-400 mt-1">Leave empty to auto-assign a beautiful stock farm photo based on selected crop.</p>
+                  placeholder="https://example.com/mycrop.jpg" />
+                <p className="text-[10px] text-slate-400 mt-1">Leave empty to auto-assign a stock photo based on crop type.</p>
               </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-              <button 
-                onClick={() => setShowAddCropModal(false)}
-                className="px-4 py-2 border border-slate-200 text-slate-500 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all"
-              >
+              <button onClick={() => setShowAddCropModal(false)}
+                className="px-4 py-2 border border-slate-200 text-slate-500 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all">
                 Cancel
               </button>
-              <button 
+              <button
+                disabled={farms.length === 0}
                 onClick={async () => {
-                  if (!selectedFarm) return;
+                  const farmId = cropFarmId ?? selectedFarm?.id ?? farms[0]?.id;
+                  if (!farmId) { toast.error("No farm selected", "Please add a farm first before registering a crop."); return; }
                   try {
-                    const res = await fetch(`http://127.0.0.1:8000/api/v1/farms/${selectedFarm.id}/crops`, {
+                    const res = await fetch(`http://127.0.0.1:8000/api/v1/farms/${farmId}/crops`, {
                       method: 'POST',
-                      headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                      },
+                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                       body: JSON.stringify({
                         crop_type: newCropType,
                         variety: newCropVariety,
@@ -1752,36 +2486,36 @@ if (cropData.length > 0) {
                     });
                     if (res.ok) {
                       const data = await res.json();
-                      setCrops(prev => [...prev, data]);
-                      setSelectedCrop(data);
+                      // Refresh if this is the currently selected farm
+                      if (farmId === selectedFarm?.id) {
+                        setCrops(prev => [...prev, data]);
+                        setSelectedCrop(data);
+                      }
                       setShowAddCropModal(false);
-                      alert("Crop registered successfully!");
+                      toast.success("Crop registered!", `${newCropType} added to farm #${farmId}.`);
                     } else {
-                      alert("Failed to register crop with backend.");
+                      const err = await res.json().catch(() => ({}));
+                      toast.error("Crop registration failed", err.detail || `Error ${res.status}. Check farm ownership.`);
                     }
                   } catch {
-                    alert("Network offline. Saved crop locally.");
-                    const mockCrop = { 
-                      id: Date.now(), 
-                      crop_type: newCropType, 
-                      variety: newCropVariety,
-                      sowing_date: newCropSowingDate,
-                      image_url: newCropImageUrl || null,
-                      stage: 'Vegetative'
-                    };
-                    setCrops(prev => [...prev, mockCrop]);
-                    setSelectedCrop(mockCrop);
-                    setShowAddCropModal(false);
+                    toast.error("Connection failed", "Cannot reach backend on port 8000. Is uvicorn running?");
                   }
                 }}
-                className="px-4 py-2 bg-stable hover:bg-stable-dark text-white rounded-xl text-xs font-bold transition-all"
-              >
+                className="px-4 py-2 bg-stable hover:bg-stable-dark text-white rounded-xl text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                 Register Crop
               </button>
             </div>
           </div>
         </div>
       )}
+
+
+
+
+
+
+
+
 
       {/* Add Obligation Modal Overlay */}
       {showAddObligationModal && (
@@ -1858,13 +2592,13 @@ if (cropData.length > 0) {
                     });
                     if (res.ok) {
                       setShowAddObligationModal(false);
-                      alert("Obligation registered successfully!");
+                      toast.success("Obligation saved!", "Financial obligation added successfully.");
                       await fetchProjections();
                     } else {
-                      alert("Failed to save obligation with backend.");
+                      toast.error("Save failed", "Could not save obligation. Check backend.");
                     }
                   } catch {
-                    alert("Saved obligation locally (demo mode).");
+                    toast.info("Demo mode", "Obligation saved locally. Start the backend to persist.");
                     const mockOb = { 
                       id: Date.now(), 
                       amount: parseFloat(newObligationAmount), 

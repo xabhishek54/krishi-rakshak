@@ -68,6 +68,9 @@ class FarmCreate(BaseModel):
     irrigation: str
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    state: Optional[str] = None
+    district: Optional[str] = None
+    name: Optional[str] = None  # user-defined farm name
 
 class FarmResponse(BaseModel):
     id: int
@@ -77,6 +80,9 @@ class FarmResponse(BaseModel):
     irrigation: str
     latitude: Optional[float]
     longitude: Optional[float]
+    state: Optional[str] = None
+    district: Optional[str] = None
+    name: Optional[str] = None
     crops: List[CropResponse] = []
 
     class Config:
@@ -164,6 +170,8 @@ class SchemeResponse(BaseModel):
     conditions: str # JSON representation string
     support_type: str
     verification_url: Optional[str]
+    relevance_score: float = 0.0      # 0-100, higher = more relevant to this farmer
+    is_recommended: bool = False      # True if top-ranked by distress+crop context
 
     class Config:
         from_attributes = True
@@ -182,8 +190,8 @@ class MandiCompareResponse(BaseModel):
 class PriceCrashResponse(BaseModel):
     price_crash: bool
     price_change_pct: float
-    recent_7day_avg: float
-    baseline_30day_avg: float
+    recent_7day_avg: Optional[float] = None
+    baseline_30day_avg: Optional[float] = None
     reason: str
 
 # Price History Schema

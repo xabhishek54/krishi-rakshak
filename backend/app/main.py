@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from datetime import date, datetime, timedelta
 
-from app.database import engine, Base, get_db
+from app.database import engine, Base, get_db, SessionLocal
 from app import models, schemas, auth
 from app.weather import OpenMeteoProvider
 from app.advisory import evaluate_advisories
@@ -13,6 +13,9 @@ from app.mandi import seed_mandi_data, get_mandi_comparison, detect_price_crash,
 from app.yield_model import predict_yield_deviation
 from app.distress import calculate_distress_risk
 from app.schemes import seed_scheme_data
+from app.migrations import run_migrations
+from app.agmarknet import background_fetch_and_store  # Phase 19
+import asyncio
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -26,6 +29,11 @@ app = FastAPI(
 @app.on_event("startup")
 def startup_event():
     db = next(get_db())
+    # Auto-apply any missing schema columns before anything else
+    try:
+        run_migrations(db)
+    except Exception as e:
+        print("Migration failed:", e)
     try:
         seed_mandi_data(db)
     except Exception as e:
@@ -34,6 +42,16 @@ def startup_event():
         seed_scheme_data(db)
     except Exception as e:
         print("Scheme seeding failed:", e)
+
+    # Phase 19: Launch Agmarknet background price fetch (non-blocking)
+    async def _agmarknet_bg():
+        try:
+            n = await background_fetch_and_store(SessionLocal)
+            print(f"[Phase19] Agmarknet background fetch complete: {n} new price records")
+        except Exception as e:
+            print(f"[Phase19] Agmarknet fetch failed (non-critical): {e}")
+
+    asyncio.create_task(_agmarknet_bg())
 
 # Enable CORS
 app.add_middleware(
@@ -159,11 +177,21 @@ def create_farm(farm_in: schemas.FarmCreate, current_farmer: models.Farmer = Dep
         soil_type=farm_in.soil_type,
         irrigation=farm_in.irrigation,
         latitude=farm_in.latitude,
-        longitude=farm_in.longitude
+        longitude=farm_in.longitude,
+        state=farm_in.state,
+        district=farm_in.district,
+        name=farm_in.name
     )
     db.add(new_farm)
     db.commit()
     db.refresh(new_farm)
+
+    # Auto-update farmer's location_id from lat/lon ONLY if not already set
+    if farm_in.latitude and farm_in.longitude and not current_farmer.location_id:
+        location_id = f"{farm_in.latitude:.4f},{farm_in.longitude:.4f}"
+        current_farmer.location_id = location_id
+        db.commit()
+
     return new_farm
 
 @app.get("/api/v1/farmers/me/farms", response_model=List[schemas.FarmResponse])
@@ -300,13 +328,45 @@ def compare_mandis(
     current_farmer: models.Farmer = Depends(auth.get_current_farmer),
     db: Session = Depends(get_db)
 ):
-    farm = db.query(models.Farm).filter(models.Farm.farmer_id == current_farmer.id).first()
-    if not farm:
-        lat, lon = 20.08, 74.11
+    """Compare mandis using the farm closest to any mandi (not just the first farm)."""
+    import math
+
+    def _dist(lat1, lon1, lat2, lon2):
+        R = 6371
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+        return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    farms = db.query(models.Farm).filter(
+        models.Farm.farmer_id == current_farmer.id,
+        models.Farm.latitude.isnot(None),
+        models.Farm.longitude.isnot(None)
+    ).all()
+
+    mandis = db.query(models.Mandi).all()
+
+    if not farms or not mandis:
+        lat, lon = 20.08, 74.11  # default Nashik
     else:
-        lat, lon = farm.latitude, farm.longitude
-        
+        # Pick the farm with the minimum distance to its nearest mandi
+        best_farm = farms[0]
+        best_min_dist = float("inf")
+        for farm in farms:
+            if farm.latitude is None or farm.longitude is None:
+                continue
+            for mandi in mandis:
+                if mandi.latitude is None or mandi.longitude is None:
+                    continue
+                d = _dist(farm.latitude, farm.longitude, mandi.latitude, mandi.longitude)
+                if d < best_min_dist:
+                    best_min_dist = d
+                    best_farm = farm
+        lat = best_farm.latitude or 20.08
+        lon = best_farm.longitude or 74.11
+
     return get_mandi_comparison(db, crop, lat, lon)
+
 
 @app.get("/api/v1/market/price-crash", response_model=schemas.PriceCrashResponse)
 def get_price_crash(
@@ -446,40 +506,200 @@ def get_matching_schemes(
     current_farmer: models.Farmer = Depends(auth.get_current_farmer),
     db: Session = Depends(get_db)
 ):
-    """Return schemes that match the farmer's state, crop, and conditions."""
-    # Determine farmer's crop
-    farm = db.query(models.Farm).filter(models.Farm.farmer_id == current_farmer.id).first()
-    crop_type = "tomato"
-    if farm:
-        crop = db.query(models.Crop).filter(models.Crop.farm_id == farm.id).first()
-        if crop:
-            crop_type = crop.crop_type.lower()
+    """Return ALL schemes ranked by relevance to this farmer's context."""
+    import json
 
-    # Get distress to check if yield loss qualifies schemes
+    # Gather farmer context
+    farms = db.query(models.Farm).filter(models.Farm.farmer_id == current_farmer.id).all()
+    crop_types: set = set()
+    irrigation_types: set = set()
+    farmer_state = None
+    farm_area_total = 0.0
+
+    for farm in farms:
+        irrigation_types.add(farm.irrigation or "")
+        farmer_state = farm.state  # use last farm's state
+        farm_area_total += farm.area or 0
+        crops = db.query(models.Crop).filter(models.Crop.farm_id == farm.id).all()
+        for c in crops:
+            crop_types.add(c.crop_type.lower())
+
+    # Get latest distress score
     distress = db.query(models.DistressScore).filter(
         models.DistressScore.farmer_id == current_farmer.id
     ).order_by(models.DistressScore.created_at.desc()).first()
+    distress_score = distress.score if distress else 0
 
-    # Query schemes from DB, filter by crop and state
+    # Score each scheme
     all_schemes = db.query(models.Scheme).all()
-    matched = []
+    scored = []
+
     for scheme in all_schemes:
-        import json
         try:
             conditions = json.loads(scheme.conditions) if scheme.conditions else {}
         except (json.JSONDecodeError, TypeError):
             conditions = {}
 
-        # Check crop eligibility
         eligible_crops = conditions.get("crops", [])
-        if eligible_crops and crop_type not in eligible_crops:
-            continue
-
-        # Check minimum distress score requirement
         min_score = conditions.get("min_distress_score", 0)
-        if distress and distress.score < min_score:
-            continue
+        relevance = 0.0
 
-        matched.append(scheme)
+        # --- Scoring rules ---
 
-    return matched
+        # 1. Crop match (40 pts): scheme has no crop filter OR farmer grows it
+        if not eligible_crops:
+            relevance += 25  # universal scheme — broadly applicable
+        elif crop_types & set(c.lower() for c in eligible_crops):
+            relevance += 40  # direct crop match — most relevant
+
+        # 2. Distress urgency match (30 pts)
+        if min_score == 0:
+            relevance += 10  # always applicable
+        elif distress_score >= min_score:
+            # Bonus: more urgent if farmer's score >> threshold
+            urgency_bonus = min(20, (distress_score - min_score) * 0.5)
+            relevance += 10 + urgency_bonus
+
+        # 3. State match (15 pts)
+        if scheme.state == "All":
+            relevance += 5
+        elif farmer_state and scheme.state.lower() == farmer_state.lower():
+            relevance += 15
+
+        # 4. Irrigation type relevance (10 pts)
+        name_lower = scheme.name.lower()
+        if "drip" in name_lower or "sinchai" in name_lower or "irrigation" in name_lower:
+            if "drip" in irrigation_types or "sprinkler" in irrigation_types:
+                relevance += 10
+
+        # 5. Small/marginal farmer bonus (5 pts)
+        if farm_area_total <= 5:  # <= 5 acres = small farmer
+            if "small" in name_lower or "marginal" in name_lower or "kisan" in name_lower:
+                relevance += 5
+
+        scored.append((scheme, relevance))
+
+    # Sort descending by relevance
+    scored.sort(key=lambda x: x[1], reverse=True)
+
+    # Top 40% are "recommended"
+    n_recommended = max(1, len(scored) // 3)
+
+    result = []
+    for idx, (scheme, score) in enumerate(scored):
+        # Build response dict (since we need to add computed fields)
+        resp = schemas.SchemeResponse(
+            id=scheme.id,
+            name=scheme.name,
+            state=scheme.state,
+            conditions=scheme.conditions or "{}",
+            support_type=scheme.support_type,
+            verification_url=scheme.verification_url,
+            relevance_score=round(min(score, 100), 1),
+            is_recommended=(idx < n_recommended)
+        )
+        result.append(resp)
+
+    return result
+
+
+# ── Phase 19: Manual Agmarknet live price refresh ───────────────────────────
+
+@app.post("/api/v1/market/refresh-live-prices")
+async def refresh_live_prices(
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+    db: Session = Depends(get_db),
+):
+    """
+    Manually trigger Agmarknet live price fetch for top crops
+    (tomato, onion, wheat, potato, maize).
+    Stores results to market_prices table with source='agmarknet_live'.
+    Frontend can poll /api/v1/mandis/compare to see 'Live' badge when
+    price_date == today and source == 'agmarknet_live'.
+    """
+    try:
+        n = await background_fetch_and_store(SessionLocal)
+        return {
+            "status": "success",
+            "new_records": n,
+            "message": f"Fetched and stored {n} live price records from Agmarknet.",
+            "refreshed_at": datetime.utcnow().isoformat(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Agmarknet fetch failed: {e}")
+
+
+# ── Phase 20: Community District Risk Map ────────────────────────────────────
+
+@app.get("/api/v1/community/district-risk")
+def get_district_risk(db: Session = Depends(get_db)):
+    """
+    Aggregate distress scores by district for the community risk heatmap.
+    Returns: list of {district, state, avg_score, risk_level, farmer_count, lat, lon}
+    All scores are anonymised — no personal farmer data exposed.
+    """
+    # Aggregate: for each (district, state) pair, average the latest distress score
+    from sqlalchemy import func
+
+    # Join farmer → farm → latest distress score
+    subq = (
+        db.query(
+            models.Farmer.id.label("farmer_id"),
+            models.Farm.district.label("district"),
+            models.Farm.state.label("state"),
+            models.Farm.latitude.label("lat"),
+            models.Farm.longitude.label("lon"),
+        )
+        .join(models.Farm, models.Farm.farmer_id == models.Farmer.id)
+        .filter(models.Farm.district.isnot(None))
+        .subquery()
+    )
+
+    # Latest distress score per farmer
+    latest_ds = (
+        db.query(
+            models.DistressScore.farmer_id,
+            func.max(models.DistressScore.created_at).label("latest"),
+        )
+        .group_by(models.DistressScore.farmer_id)
+        .subquery()
+    )
+
+    rows = (
+        db.query(
+            subq.c.district,
+            subq.c.state,
+            func.avg(models.DistressScore.score).label("avg_score"),
+            func.count(models.DistressScore.farmer_id).label("farmer_count"),
+            func.avg(subq.c.lat).label("avg_lat"),
+            func.avg(subq.c.lon).label("avg_lon"),
+        )
+        .join(latest_ds, latest_ds.c.farmer_id == subq.c.farmer_id)
+        .join(
+            models.DistressScore,
+            (models.DistressScore.farmer_id == subq.c.farmer_id)
+            & (models.DistressScore.created_at == latest_ds.c.latest),
+        )
+        .group_by(subq.c.district, subq.c.state)
+        .all()
+    )
+
+    def risk_level(score: float) -> str:
+        if score >= 75: return "Critical"
+        if score >= 55: return "High"
+        if score >= 40: return "Elevated"
+        if score >= 25: return "Watch"
+        return "Stable"
+
+    return [
+        {
+            "district": r.district,
+            "state": r.state,
+            "avg_score": round(r.avg_score or 0, 1),
+            "risk_level": risk_level(r.avg_score or 0),
+            "farmer_count": r.farmer_count,
+            "lat": round(r.avg_lat or 0, 4),
+            "lon": round(r.avg_lon or 0, 4),
+        }
+        for r in rows
+    ]

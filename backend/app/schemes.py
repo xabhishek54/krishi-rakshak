@@ -92,14 +92,78 @@ SCHEMES = [
             "description": "Subsidizes micro-irrigation (drip/sprinkler) infrastructure. Covers 55-90% of cost for small/marginal farmers. Reduces water use by 40-50%."
         })
     },
+    {
+        "name": "Soil Health Card Scheme (SHC)",
+        "state": "All",
+        "support_type": "Subsidy (Soil Testing & Nutrient Advisory)",
+        "verification_url": "https://soilhealth.dac.gov.in",
+        "conditions": json.dumps({
+            "crops": [],
+            "min_distress_score": 0,
+            "description": "Free soil testing every 2 years. Provides crop-wise nutrient recommendations to optimize fertilizer use, saving 10-15% on input costs."
+        })
+    },
+    {
+        "name": "Rashtriya Krishi Vikas Yojana (RKVY)",
+        "state": "All",
+        "support_type": "Infrastructure Subsidy (Farm Mechanization)",
+        "verification_url": "https://rkvy.nic.in",
+        "conditions": json.dumps({
+            "crops": [],
+            "min_distress_score": 0,
+            "description": "Funds farm infrastructure, machinery purchase, and post-harvest facilities. States allocate district-level grants; apply via state agriculture department."
+        })
+    },
+    {
+        "name": "Punjab Paani Bachao Paisa Kamao",
+        "state": "Punjab",
+        "support_type": "State Direct Transfer (Water Conservation Incentive)",
+        "verification_url": "https://agripb.gov.in",
+        "conditions": json.dumps({
+            "crops": ["rice", "wheat", "sugarcane"],
+            "min_distress_score": 0,
+            "description": "Cash incentive of ₹7,000-₹9,000/acre for Punjab farmers who adopt direct seeded rice instead of transplanted paddy, reducing groundwater depletion."
+        })
+    },
+    {
+        "name": "Rythu Bandhu (Telangana / Andhra)",
+        "state": "Telangana",
+        "support_type": "State Direct Transfer (₹10,000/acre/season)",
+        "verification_url": "https://rythubandhu.telangana.gov.in",
+        "conditions": json.dumps({
+            "crops": [],
+            "min_distress_score": 0,
+            "description": "Investment support of ₹5,000 per acre per season (₹10,000/year) to all land-owning farmers in Telangana, regardless of crop."
+        })
+    },
+    {
+        "name": "Karnataka Raita Shakthi",
+        "state": "Karnataka",
+        "support_type": "State Subsidy (Farm Input Support ₹5,000/acre)",
+        "verification_url": "https://raitamitra.karnataka.gov.in",
+        "conditions": json.dumps({
+            "crops": [],
+            "min_distress_score": 0,
+            "description": "Karnataka's farmer relief scheme providing direct input subsidy of up to ₹5,000 per acre for small and marginal farmers."
+        })
+    },
+    {
+        "name": "Pradhan Mantri Annadata Aay SanraksHan Abhiyan (PM-AASHA)",
+        "state": "All",
+        "support_type": "Price Support (MSP Procurement Guarantee)",
+        "verification_url": "https://pmaasha.gov.in",
+        "conditions": json.dumps({
+            "crops": ["tomato", "onion", "potato", "wheat", "rice", "maize", "soybean", "groundnut", "cotton"],
+            "min_distress_score": 30,
+            "description": "Ensures farmers receive MSP for oilseeds, pulses, and copra. Covers price deficiency payments when market price falls below MSP."
+        })
+    },
 ]
 
 
+
 def seed_scheme_data(db: Session):
-    """Seed government scheme data if not already present."""
-    existing = db.query(models.Scheme).count()
-    if existing >= len(SCHEMES):
-        return
+    """Seed government scheme data — inserts any scheme not already present by name."""
 
     for s in SCHEMES:
         existing_scheme = db.query(models.Scheme).filter(

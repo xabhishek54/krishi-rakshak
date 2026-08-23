@@ -82,46 +82,75 @@ def evaluate_advisories(db: Session, farmer: models.Farmer) -> List[models.Advis
             crop_type = crop.crop_type.lower()
             crop_stage = crop.stage.lower() if crop.stage else "vegetative"
             
+            # Get today's humidity from observation (for advisory rules)
+            today_obs = weather_by_date.get(today, {})
+            current_humidity = today_obs.get("humidity", 0.0)
+            current_temp = today_obs.get("temperature", max_temp if max_temp > 0 else 0.0)
+            rain_probability_today = max(
+                (fc.rain_probability for fc in forecasts if fc.date <= today + timedelta(days=2)),
+                default=0.0
+            )
+
             # --- EVALUATE ADVISORY RULES ---
             for rule in rules_config.get("advisory_rules", []):
                 rule_crop = rule["crop"].lower()
                 rule_stage = rule["stage"].lower()
-                
+
                 # Check crop/stage match
                 crop_match = (rule_crop == "*" or rule_crop in crop_type)
-                stage_match = (rule_stage == "*" or rule_stage == crop_stage)
-                
+                stage_match = (rule_stage == "*" or rule_stage in crop_stage or crop_stage in rule_stage)
+
                 if crop_match and stage_match:
-                    conditions = rule["conditions"]
+                    conditions = rule.get("conditions", {})
                     match = True
-                    
-                    if "rain_forecast_24h_min" in conditions:
-                        if rain_next_24h < conditions["rain_forecast_24h_min"]:
-                            match = False
-                    if "temperature_max" in conditions:
-                        if max_temp < conditions["temperature_max"]:
-                            match = False
-                            
+
+                    # No conditions = always fire (unconditional stage advisory)
+                    if not conditions:
+                        match = True
+                    else:
+                        # Rainfall forecast threshold
+                        if "rain_forecast_24h_min" in conditions:
+                            if rain_next_24h < conditions["rain_forecast_24h_min"]:
+                                match = False
+                        # Temperature upper threshold
+                        if "temperature_max" in conditions:
+                            if max_temp < conditions["temperature_max"]:
+                                match = False
+                        # Temperature lower threshold
+                        if "temperature_min" in conditions:
+                            if current_temp < conditions["temperature_min"]:
+                                match = False
+                        # Current humidity minimum
+                        if "humidity_min" in conditions:
+                            if current_humidity < conditions["humidity_min"]:
+                                match = False
+                        # Rain probability minimum (from forecast)
+                        if "rain_probability_min" in conditions:
+                            if rain_probability_today < conditions["rain_probability_min"]:
+                                match = False
+
                     if match:
                         adv_payload = rule["advisory"]
-                        # Check if duplicate already exists
+                        # Dedup by farm + category + priority (avoid flooding with duplicates)
                         existing = db.query(models.Advisory).filter(
                             models.Advisory.farm_id == farm.id,
                             models.Advisory.recommendation == adv_payload["recommendation"]
                         ).first()
-                        
+
                         if not existing:
-                            priority_str = "high" if adv_payload["priority"] == 1 else "medium" if adv_payload["priority"] == 2 else "low"
+                            priority_str = ("high" if adv_payload["priority"] == 1
+                                           else "medium" if adv_payload["priority"] == 2
+                                           else "low")
                             new_adv = models.Advisory(
                                 farm_id=farm.id,
                                 category=adv_payload["category"],
                                 priority=priority_str,
                                 recommendation=adv_payload["recommendation"],
-                                reason=adv_payload["reason"]
+                                reason=adv_payload.get("reason", adv_payload.get("explanation", "")),
                             )
                             db.add(new_adv)
                             generated_advisories.append(new_adv)
-                            
+
             # --- EVALUATE PEST RULES ---
             for p_rule in rules_config.get("pest_rules", []):
                 p_crop = p_rule["crop"].lower()

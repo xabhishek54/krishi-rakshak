@@ -31,6 +31,9 @@ class Farm(Base):
     irrigation = Column(String, nullable=False) # drip, sprinkler, flood, rainfed
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
+    state = Column(String, nullable=True)
+    district = Column(String, nullable=True)
+    name = Column(String, nullable=True)  # user-defined farm name
 
     # Relationships
     farmer = relationship("Farmer", back_populates="farms")
@@ -97,6 +100,7 @@ class MarketPrice(Base):
     max_price = Column(Float, nullable=False)
     modal_price = Column(Float, nullable=False)
     arrivals = Column(Float, default=0.0)
+    source = Column(String, default="seeded")  # 'seeded' | 'agmarknet_live'
 
     # Relationships
     mandi = relationship("Mandi", back_populates="prices")
