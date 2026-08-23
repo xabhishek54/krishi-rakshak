@@ -751,7 +751,8 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     rec.onerror = (e: any) => {
       console.warn('SpeechRecognition error:', e.error);
       if (e.error === 'network') {
-        toast.warning('Network Issue', 'Voice speech recognition requires internet connection. Please type your question in the Assistant box.');
+        toast.warning('Voice needs internet', 'Chrome voice recognition requires internet. Opening chat so you can type your question.');
+        setShowVoiceModal(true);
       } else if (e.error === 'not-allowed') {
         toast.warning('Permission Denied', 'Please allow microphone access in your browser settings.');
       } else if (e.error !== 'aborted') {
@@ -2528,6 +2529,23 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               >
                 <Lock size={16} /> Authenticate Account
               </button>
+
+              {/* Demo Account Quick Fill */}
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-earth-200" />
+                </div>
+                <div className="relative flex justify-center text-[10px] uppercase">
+                  <span className="bg-white px-2 text-slate-400 font-bold">or try demo</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setLoginPhone('+919876543210'); setLoginPassword('demo1234'); }}
+                className="w-full border border-earth-200 text-slate-600 py-3 rounded-2xl text-sm font-bold hover:bg-earth-50 transition-colors flex items-center justify-center gap-2"
+              >
+                🚜 Try Demo Account
+              </button>
             </form>
           ) : (
             <form onSubmit={handleRegisterSubmit} className="space-y-4 text-left">
@@ -3417,7 +3435,13 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                       toast.success("Obligation saved!", "Financial obligation added successfully.");
                       await fetchProjections();
                     } else {
-                      toast.error("Save failed", "Could not save obligation. Check backend.");
+                      const errData = await res.json().catch(() => ({}));
+                      const msg = errData?.detail
+                        ? (Array.isArray(errData.detail)
+                            ? errData.detail.map((d: any) => d.msg).join(', ')
+                            : String(errData.detail))
+                        : 'Could not save obligation.';
+                      toast.error("Save failed", msg);
                     }
                   } catch {
                     toast.info("Demo mode", "Obligation saved locally. Start the backend to persist.");
