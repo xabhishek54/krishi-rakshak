@@ -79,6 +79,9 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   // Community Risk Map state (top-level to follow React hooks rules)
   const [communityData, setCommunityData] = useState<any[]>([]);
   const [communityLoading, setCommunityLoading] = useState<boolean>(true);
+  // PWA offline indicator
+  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
   // Obligation Overlay Modal States
   const [showAddObligationModal, setShowAddObligationModal] = useState<boolean>(false);
@@ -732,6 +735,18 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
       .then(d => { setCommunityData(d); setCommunityLoading(false); })
       .catch(() => setCommunityLoading(false));
   }, [activeTab, token]);
+
+  // PWA: online/offline detection
+  useEffect(() => {
+    const goOnline  = () => { setIsOnline(true);  setLastSyncTime(new Date().toLocaleTimeString('en-IN')); };
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener('online',  goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online',  goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
 
   // Language mapping
   const languageNames: Record<LanguageType, string> = {
@@ -2205,6 +2220,15 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     <div className="h-screen bg-earth-50 flex flex-col md:flex-row overflow-hidden">
       {/* Global Toast Notifications */}
       <ToastContainer toasts={toasts} removeToast={removeToast} />
+
+      {/* Offline Banner */}
+      {!isOnline && (
+        <div className="fixed top-0 left-0 right-0 z-[200] bg-slate-900 text-white text-xs font-bold text-center py-2 px-4 flex items-center justify-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-high animate-pulse inline-block" />
+          You're offline — showing cached data{lastSyncTime ? ` · Last synced ${lastSyncTime}` : ''}
+        </div>
+      )}
+
       {/* Sidebar Nav — fixed height, does NOT scroll with content */}
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-earth-200 p-6 space-y-8 flex-shrink-0 h-screen overflow-y-auto">
         <div>

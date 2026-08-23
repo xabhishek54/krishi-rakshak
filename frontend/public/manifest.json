@@ -1,0 +1,78 @@
+{
+  "name": "KrishiRakshak — Farm Risk Intelligence",
+  "short_name": "KrishiRakshak",
+  "description": "AI-powered early-warning and advisory system for Indian farmers. Real-time weather, mandi prices, distress alerts, and government scheme matching.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8f7f4",
+  "theme_color": "#4a7c59",
+  "orientation": "portrait-primary",
+  "lang": "en-IN",
+  "categories": ["agriculture", "finance", "weather"],
+  "icons": [
+    {
+      "src": "/icons/icon-72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "My Advisories",
+      "short_name": "Advisories",
+      "url": "/?tab=home",
+      "description": "View today's farm advisories"
+    },
+    {
+      "name": "Mandi Prices",
+      "short_name": "Market",
+      "url": "/?tab=market",
+      "description": "Check live mandi prices"
+    }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false
+}
