@@ -420,29 +420,22 @@ def get_cash_flow_projection(
     current_farmer: models.Farmer = Depends(auth.get_current_farmer),
     db: Session = Depends(get_db)
 ):
-    # Find farmer's active farm and crop
-    farm = db.query(models.Farm).filter(models.Farm.farmer_id == current_farmer.id).first()
+    farms = db.query(models.Farm).filter(models.Farm.farmer_id == current_farmer.id).all()
     
-    # Base calibration parameters per acre: (yield_quintals, price_per_quintal, cost_per_acre)
+    total_yield = 0.0
+    total_revenue = 0.0
+    total_cost = 0.0
+    total_area = 0.0
+    
     crop_params = {
         "tomato": (12.0, 2600.0, 12000.0),
         "wheat": (16.0, 2100.0, 9000.0),
         "onion": (14.0, 1800.0, 10000.0)
     }
     
-    farm_area = 2.5 # fallback
-    crop_type = "tomato"
-    
-    if farm:
-        farm_area = farm.area
-        crop = db.query(models.Crop).filter(models.Crop.farm_id == farm.id).first()
-        if crop:
-            crop_type = crop.crop_type.lower()
-            
-    # Calculate weather deviations dynamically
-    rain_dev = -15.0 # dry bias default
-    temp_dev = 1.0  # warmer default
-    
+    # Calculate weather deviations
+    rain_dev = -15.0
+    temp_dev = 1.0
     if current_farmer.location_id:
         today_date = date.today()
         forecasts = db.query(models.WeatherForecast).filter(
@@ -458,35 +451,73 @@ def get_cash_flow_projection(
             avg_temp = sum(f.temperature for f in forecasts) / len(forecasts)
             temp_dev = avg_temp - 22.0
             temp_dev = min(max(temp_dev, -6.0), 6.0)
-            
-    soil_type = "loam"
-    irrigation = "drip"
-    if farm:
-        soil_type = farm.soil_type
-        irrigation = farm.irrigation
+
+    for farm in farms:
+        crops = db.query(models.Crop).filter(models.Crop.farm_id == farm.id).all()
+        farm_area = farm.area or 1.0
+        soil_type = farm.soil_type or "loam"
+        irrigation = farm.irrigation or "drip"
         
-    yield_dev_pct = predict_yield_deviation(crop_type, soil_type, irrigation, rain_dev, temp_dev)
-    scale_factor = 1.0 + (yield_dev_pct / 100.0)
-    
-    p_yield_per_acre, p_price, p_cost_per_acre = crop_params.get(crop_type, (12.0, 2600.0, 12000.0))
-    
-    projected_yield = farm_area * p_yield_per_acre * scale_factor
-    projected_rev = projected_yield * p_price
-    projected_cost = farm_area * p_cost_per_acre
-    projected_net_inc = projected_rev - projected_cost
-    
+        if not crops:
+            # Fallback tomato
+            yield_dev = predict_yield_deviation("tomato", soil_type, irrigation, rain_dev, temp_dev)
+            p_yield_per_acre, p_price, p_cost_per_acre = crop_params["tomato"]
+            scale_factor = 1.0 + (yield_dev / 100.0)
+            
+            projected_yield = farm_area * p_yield_per_acre * scale_factor
+            projected_rev = projected_yield * p_price
+            projected_cost = farm_area * p_cost_per_acre
+            
+            total_yield += projected_yield
+            total_revenue += projected_rev
+            total_cost += projected_cost
+            total_area += farm_area
+            continue
+            
+        crop_area = farm_area / len(crops)
+        for crop in crops:
+            c_type = crop.crop_type.lower()
+            yield_dev = predict_yield_deviation(c_type, soil_type, irrigation, rain_dev, temp_dev)
+            
+            p_yield_per_acre, p_price, p_cost_per_acre = crop_params.get(c_type, (15.0, 2000.0, 10000.0))
+            
+            # Fetch latest mandi price
+            latest_prices = db.query(models.MarketPrice).filter(
+                models.MarketPrice.crop == c_type
+            ).order_by(models.MarketPrice.date.desc()).all()
+            actual_mandi_price = 0.0
+            if latest_prices:
+                avg_modal = sum(p.modal_price for p in latest_prices[:3]) / len(latest_prices[:3])
+                if avg_modal > 0:
+                    actual_mandi_price = avg_modal
+            
+            if actual_mandi_price > 0:
+                p_price = actual_mandi_price
+                    
+            scale_factor = 1.0 + (yield_dev / 100.0)
+            projected_yield = crop_area * p_yield_per_acre * scale_factor
+            projected_rev = projected_yield * p_price
+            projected_cost = crop_area * p_cost_per_acre
+            
+            total_yield += projected_yield
+            total_revenue += projected_rev
+            total_cost += projected_cost
+            total_area += crop_area
+
+    net_income = total_revenue - total_cost
     obligations = db.query(models.FinancialObligation).filter(models.FinancialObligation.farmer_id == current_farmer.id).all()
     total_ob = sum(ob.amount for ob in obligations)
     
-    surplus = projected_net_inc - total_ob
+    surplus = net_income - total_ob
     has_shortfall = surplus < 0
+    avg_price = total_revenue / total_yield if total_yield > 0 else 0.0
     
     return {
-        "projected_yield_quintals": round(projected_yield, 1),
-        "expected_price_per_quintal": round(p_price, 2),
-        "projected_revenue": round(projected_rev, 2),
-        "cultivation_cost": round(projected_cost, 2),
-        "projected_net_income": round(projected_net_inc, 2),
+        "projected_yield_quintals": round(total_yield, 1),
+        "expected_price_per_quintal": round(avg_price, 2),
+        "projected_revenue": round(total_revenue, 2),
+        "cultivation_cost": round(total_cost, 2),
+        "projected_net_income": round(net_income, 2),
         "total_obligations": round(total_ob, 2),
         "cash_flow_surplus": round(surplus, 2),
         "has_shortfall": has_shortfall,
@@ -795,3 +826,67 @@ def estimate_yield(
             "worst": {"yield_q": worst_q, "revenue": worst_rev},
         },
     }
+
+
+# ── Phase 27: Delete Operations ───────────────────────────────────────────────
+
+@app.delete("/api/v1/farms/{farm_id}")
+def delete_farm(
+    farm_id: int,
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+    db: Session = Depends(get_db)
+):
+    """Delete a farm and all its crops."""
+    farm = db.query(models.Farm).filter(
+        models.Farm.id == farm_id,
+        models.Farm.farmer_id == current_farmer.id
+    ).first()
+    if not farm:
+        raise HTTPException(status_code=404, detail="Farm not found or unauthorized")
+        
+    # Delete associated crops first
+    db.query(models.Crop).filter(models.Crop.farm_id == farm_id).delete()
+    
+    # Delete farm
+    db.delete(farm)
+    db.commit()
+    return {"message": "Farm deleted successfully"}
+
+
+@app.delete("/api/v1/crops/{crop_id}")
+def delete_crop(
+    crop_id: int,
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+    db: Session = Depends(get_db)
+):
+    """Delete a crop."""
+    crop = db.query(models.Crop).join(models.Farm).filter(
+        models.Crop.id == crop_id,
+        models.Farm.farmer_id == current_farmer.id
+    ).first()
+    if not crop:
+        raise HTTPException(status_code=404, detail="Crop not found or unauthorized")
+        
+    db.delete(crop)
+    db.commit()
+    return {"message": "Crop deleted successfully"}
+
+
+@app.delete("/api/v1/obligations/{obligation_id}")
+def delete_obligation(
+    obligation_id: int,
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+    db: Session = Depends(get_db)
+):
+    """Delete a financial obligation."""
+    ob = db.query(models.FinancialObligation).filter(
+        models.FinancialObligation.id == obligation_id,
+        models.FinancialObligation.farmer_id == current_farmer.id
+    ).first()
+    if not ob:
+        raise HTTPException(status_code=404, detail="Obligation not found or unauthorized")
+        
+    db.delete(ob)
+    db.commit()
+    return {"message": "Obligation deleted successfully"}
+

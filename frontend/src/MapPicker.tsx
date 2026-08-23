@@ -1,10 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 interface MapPickerProps {
   initialLat?: number;
   initialLon?: number;
   onLocationSelect: (lat: number, lon: number) => void;
 }
+
+// Fix default icon paths
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
 
 export default function MapPicker({ initialLat = 20.08, initialLon = 74.11, onLocationSelect }: MapPickerProps) {
   const mapRef = useRef<any>(null);
@@ -14,63 +24,45 @@ export default function MapPicker({ initialLat = 20.08, initialLon = 74.11, onLo
   const [leafletLoaded, setLeafletLoaded] = useState(false);
 
   useEffect(() => {
-    // Dynamically import leaflet to avoid SSR issues
-    let L: any;
-    let map: any;
+    if (!containerRef.current || mapRef.current) return;
 
-    async function initMap() {
-      if (!containerRef.current || mapRef.current) return;
+    const map = L.map(containerRef.current, {
+      center: [initialLat, initialLon],
+      zoom: 12,
+      zoomControl: true,
+    });
 
-      // Import leaflet dynamically
-      const leafletModule = await import('leaflet');
-      L = leafletModule.default;
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map);
 
-      // Fix default icon paths
-      delete (L.Icon.Default.prototype as any)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-      });
+    // Place initial marker
+    const marker = L.marker([initialLat, initialLon], { draggable: true }).addTo(map);
+    marker.bindPopup('📍 Your farm location').openPopup();
 
-      map = L.map(containerRef.current, {
-        center: [initialLat, initialLon],
-        zoom: 12,
-        zoomControl: true,
-      });
+    // Drag to move
+    marker.on('dragend', () => {
+      const pos = marker.getLatLng();
+      const newLat = parseFloat(pos.lat.toFixed(6));
+      const newLon = parseFloat(pos.lng.toFixed(6));
+      setCoords({ lat: newLat, lon: newLon });
+      onLocationSelect(newLat, newLon);
+    });
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 19,
-      }).addTo(map);
+    // Click to move marker
+    map.on('click', (e: any) => {
+      const { lat, lng } = e.latlng;
+      marker.setLatLng([lat, lng]);
+      const newLat = parseFloat(lat.toFixed(6));
+      const newLon = parseFloat(lng.toFixed(6));
+      setCoords({ lat: newLat, lon: newLon });
+      onLocationSelect(newLat, newLon);
+    });
 
-      // Place initial marker
-      const marker = L.marker([initialLat, initialLon], { draggable: true }).addTo(map);
-      marker.bindPopup('📍 Your farm location').openPopup();
-
-      // Drag to move
-      marker.on('dragend', () => {
-        const pos = marker.getLatLng();
-        setCoords({ lat: parseFloat(pos.lat.toFixed(6)), lon: parseFloat(pos.lng.toFixed(6)) });
-        onLocationSelect(parseFloat(pos.lat.toFixed(6)), parseFloat(pos.lng.toFixed(6)));
-      });
-
-      // Click to move marker
-      map.on('click', (e: any) => {
-        const { lat, lng } = e.latlng;
-        marker.setLatLng([lat, lng]);
-        const newLat = parseFloat(lat.toFixed(6));
-        const newLon = parseFloat(lng.toFixed(6));
-        setCoords({ lat: newLat, lon: newLon });
-        onLocationSelect(newLat, newLon);
-      });
-
-      mapRef.current = map;
-      markerRef.current = marker;
-      setLeafletLoaded(true);
-    }
-
-    initMap();
+    mapRef.current = map;
+    markerRef.current = marker;
+    setLeafletLoaded(true);
 
     return () => {
       if (mapRef.current) {
@@ -92,15 +84,10 @@ export default function MapPicker({ initialLat = 20.08, initialLon = 74.11, onLo
 
   return (
     <div className="space-y-2">
-      {/* Leaflet CSS */}
-      <link
-        rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      />
       <div className="relative rounded-xl overflow-hidden border border-earth-200">
-        <div ref={containerRef} style={{ height: '240px', width: '100%' }} />
+        <div ref={containerRef} style={{ height: '240px', width: '100%', zIndex: 1 }} />
         {!leafletLoaded && (
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-100">
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-100" style={{ zIndex: 2 }}>
             <div className="text-slate-400 text-xs flex flex-col items-center gap-2">
               <div className="w-6 h-6 border-2 border-stable border-t-transparent rounded-full animate-spin" />
               Loading map…

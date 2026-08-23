@@ -5,7 +5,9 @@ import { getStateList, getDistrictsForState, getDistrictCoords } from './india_l
 import { speakText, stopSpeech, buildVoiceText, askGemini } from './voice';
 
 // Lazy-loaded map picker — load once at module level to avoid remounting
-const MapPickerComponent = lazy(() => import('./MapPicker'));
+import MapPickerComponent from './MapPicker';
+import CommunityMap from './CommunityMap';
+const API_BASE = 'http://127.0.0.1:8000';
 import { 
   Home as HomeIcon, 
   Sprout, 
@@ -17,16 +19,23 @@ import {
   AlertTriangle,
   ChevronRight,
   TrendingDown,
+  TrendingUp,
   Lock,
   LogOut,
   CloudRain,
   Thermometer,
-  Droplets
+  Droplets,
+  Trash2,
+  Calculator,
+  DollarSign,
+  PiggyBank,
+  Wheat,
+  BarChart3
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 // Type declarations
-type TabType = 'home' | 'crop' | 'market' | 'alerts' | 'support' | 'risk-detail' | 'profile' | 'community';
+type TabType = 'home' | 'crop' | 'market' | 'alerts' | 'support' | 'risk-detail' | 'profile' | 'community' | 'yield' | 'financial';
 type LanguageType = 'english' | 'hindi' | 'odia' | 'bengali' | 'marathi';
 
 interface FarmerProfile {
@@ -530,6 +539,72 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     setActiveTab('home');
   };
 
+  // ── Delete handlers ────────────────────────────────────────────────────────
+  const handleDeleteFarm = async (farmId: number) => {
+    if (!window.confirm('Delete this farm and all its crops? This cannot be undone.')) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/farms/${farmId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const updated = farms.filter(f => f.id !== farmId);
+        setFarms(updated);
+        setSelectedFarm(updated[0] || null);
+        setCrops([]);
+        setSelectedCrop(null);
+        toast.success('Farm deleted', 'Farm and its crops have been removed.');
+      } else {
+        toast.error('Delete failed', 'Could not delete farm. Try again.');
+      }
+    } catch (err) {
+      toast.error('Error', 'Network error while deleting farm.');
+    }
+  };
+
+  const handleDeleteCrop = async (cropId: number) => {
+    if (!window.confirm('Delete this crop? This cannot be undone.')) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/crops/${cropId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const updatedCrops = crops.filter(c => c.id !== cropId);
+        setCrops(updatedCrops);
+        setSelectedCrop(updatedCrops[0] || null);
+        toast.success('Crop deleted', 'Crop entry removed successfully.');
+      } else {
+        toast.error('Delete failed', 'Could not delete crop. Try again.');
+      }
+    } catch (err) {
+      toast.error('Error', 'Network error while deleting crop.');
+    }
+  };
+
+  const handleDeleteObligation = async (obligationId: number) => {
+    if (!window.confirm('Delete this obligation?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/obligations/${obligationId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        // Refresh cash flow
+        if (token) {
+          fetch(`${API_BASE}/api/v1/distress/cashflow`, {
+            headers: { Authorization: `Bearer ${token}` }
+          }).then(r => r.json()).then(setCashFlow).catch(() => {});
+        }
+        toast.success('Obligation deleted', 'Financial obligation removed.');
+      } else {
+        toast.error('Delete failed', 'Could not delete obligation.');
+      }
+    } catch (err) {
+      toast.error('Error', 'Network error while deleting obligation.');
+    }
+  };
+
   // Login
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -861,13 +936,22 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-2 justify-end">
+              <div className="flex gap-2 justify-end flex-wrap">
                 <button 
                   onClick={() => setShowAddFarmModal(true)}
                   className="px-3 py-1.5 border border-stable/30 text-stable hover:bg-stable-light rounded-lg text-xs font-bold transition-all"
                 >
                   + Add Farm
                 </button>
+                {selectedFarm && (
+                  <button 
+                    onClick={() => handleDeleteFarm(selectedFarm.id)}
+                    title="Delete selected farm"
+                    className="px-2.5 py-1.5 border border-high/30 text-high hover:bg-high-light rounded-lg text-xs font-bold transition-all flex items-center gap-1"
+                  >
+                    <Trash2 size={13} /> Farm
+                  </button>
+                )}
                 <button 
                   onClick={() => {
                     if (!selectedFarm) { toast.warning("No farm selected", "Please add a farm first."); return; }
@@ -877,6 +961,15 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                 >
                   + Add Crop
                 </button>
+                {selectedCrop && (
+                  <button 
+                    onClick={() => handleDeleteCrop(selectedCrop.id)}
+                    title="Delete selected crop"
+                    className="px-2.5 py-1.5 border border-high/30 text-high hover:bg-high-light rounded-lg text-xs font-bold transition-all flex items-center gap-1"
+                  >
+                    <Trash2 size={13} /> Crop
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1924,9 +2017,18 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                             Due: {ob.due_date} · <span className={urgent ? 'text-high font-bold' : 'text-slate-400'}>{daysLeft > 0 ? `${daysLeft} days` : 'Overdue'}</span>
                           </p>
                         </div>
-                        <span className={`p-2 rounded-lg ${urgent ? 'text-high bg-high-light' : 'text-elevated bg-elevated-light'}`}>
-                          <AlertTriangle size={18} />
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`p-2 rounded-lg ${urgent ? 'text-high bg-high-light' : 'text-elevated bg-elevated-light'}`}>
+                            <AlertTriangle size={18} />
+                          </span>
+                          <button
+                            onClick={() => handleDeleteObligation(ob.id)}
+                            title="Delete obligation"
+                            className="p-2 rounded-lg text-high hover:bg-high-light transition-colors"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
                       </div>
                     );
                   })
@@ -2033,6 +2135,8 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               </div>
             ) : (
               <>
+                <CommunityMap districts={communityData} />
+
                 {/* Legend */}
                 <div className="flex flex-wrap gap-2">
                   {[['Critical','#ef4444'],['High','#f97316'],['Elevated','#f59e0b'],['Stable','#22c55e']].map(([l,c]) => (
@@ -2087,9 +2191,417 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         );
       }
 
+
+      // ── YIELD CALCULATOR TAB ─────────────────────────────────────────────
+      case 'yield': {
+        const CROP_DEFAULTS: Record<string, { baseYield: number; costPerAcre: number; msp: number; unit: string }> = {
+          tomato:   { baseYield: 120, costPerAcre: 18000, msp: 800,  unit: 'q/acre' },
+          wheat:    { baseYield: 20,  costPerAcre: 12000, msp: 2275, unit: 'q/acre' },
+          rice:     { baseYield: 22,  costPerAcre: 14000, msp: 2183, unit: 'q/acre' },
+          onion:    { baseYield: 80,  costPerAcre: 16000, msp: 600,  unit: 'q/acre' },
+          potato:   { baseYield: 100, costPerAcre: 15000, msp: 500,  unit: 'q/acre' },
+          soybean:  { baseYield: 12,  costPerAcre: 8000,  msp: 4600, unit: 'q/acre' },
+          maize:    { baseYield: 25,  costPerAcre: 9000,  msp: 1870, unit: 'q/acre' },
+          cotton:   { baseYield: 10,  costPerAcre: 20000, msp: 6620, unit: 'q/acre' },
+          sugarcane:{ baseYield: 400, costPerAcre: 22000, msp: 315,  unit: 'q/acre' },
+          mustard:  { baseYield: 10,  costPerAcre: 7000,  msp: 5650, unit: 'q/acre' },
+        };
+
+        const irrigationMultiplier: Record<string, number> = { flood: 1.0, drip: 1.15, sprinkler: 1.10, none: 0.75 };
+        const soilMultiplier: Record<string, number> = { loam: 1.0, clay: 0.90, sandy: 0.80, black: 1.10, red: 0.85 };
+
+        const calcYield = async () => {
+          setYieldLoading(true);
+          try {
+            const params = new URLSearchParams({
+              crop_type: yieldCrop,
+              area_acres: String(yieldArea),
+              rainfall_deviation: String(yieldRainfall),
+              soil_type: yieldSoil,
+              irrigation_type: yieldIrrigation,
+            });
+            const res = await fetch(`${API_BASE}/api/v1/yield/estimate?${params}`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+              const data = await res.json();
+              // Calculate input cost and profit
+              const defaults = CROP_DEFAULTS[yieldCrop] || CROP_DEFAULTS.tomato;
+              const inputCost = Math.round(defaults.costPerAcre * yieldArea);
+              const profit = Math.round(data.projected_gross_revenue - inputCost);
+              const roi = inputCost > 0 ? ((profit / inputCost) * 100).toFixed(1) : '0';
+              setYieldResult({
+                qPerAcre: data.estimated_yield_q_per_acre,
+                totalQ: data.estimated_total_yield_q,
+                pricePerQ: data.modal_price_per_q,
+                revenue: data.projected_gross_revenue,
+                inputCost,
+                profit,
+                roi,
+                defaults
+              });
+              toast.success("Yield estimated", "Estimation calculated using ML Model.");
+              setYieldLoading(false);
+              return;
+            } else {
+              const err = await res.json();
+              toast.warning("Server calculation failed", err.detail || "Falling back to local simulation.");
+            }
+          } catch (err) {
+            toast.warning("Offline / Server issue", "Using local offline model.");
+          }
+
+          // Fallback algorithm
+          const defaults = CROP_DEFAULTS[yieldCrop] || CROP_DEFAULTS.tomato;
+          const rainfallFactor = 1 + (yieldRainfall / 200);
+          const irrigMult = irrigationMultiplier[yieldIrrigation] || 1.0;
+          const soilMult = soilMultiplier[yieldSoil] || 1.0;
+          const qPerAcre = parseFloat((defaults.baseYield * irrigMult * soilMult * rainfallFactor).toFixed(1));
+          const totalQ = parseFloat((qPerAcre * yieldArea).toFixed(1));
+          const pricePerQ = mandiPrices.find(p => p.commodity?.toLowerCase().includes(yieldCrop.slice(0,4)))?.modal_price || defaults.msp;
+          const revenue = Math.round(totalQ * pricePerQ);
+          const inputCost = Math.round(defaults.costPerAcre * yieldArea);
+          const profit = revenue - inputCost;
+          const roi = inputCost > 0 ? ((profit / inputCost) * 100).toFixed(1) : '0';
+          setYieldResult({ qPerAcre, totalQ, pricePerQ, revenue, inputCost, profit, roi, defaults });
+          setYieldLoading(false);
+        };
+
+        return (
+          <div className="space-y-5 pb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 my-0 flex items-center gap-2"><Calculator size={22} className="text-stable" /> Yield Calculator</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Estimate harvest, revenue &amp; profit for any crop × farm combination</p>
+              </div>
+            </div>
+
+            {/* Input Form */}
+            <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
+              <h3 className="font-bold text-slate-800 text-sm mb-4 uppercase tracking-wider">Crop &amp; Field Parameters</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Crop</label>
+                  <select value={yieldCrop} onChange={e => setYieldCrop(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-earth-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40">
+                    {Object.keys(CROP_DEFAULTS).map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Area (Acres)</label>
+                  <input type="number" min={0.1} step={0.1} value={yieldArea} onChange={e => setYieldArea(parseFloat(e.target.value)||1)}
+                    className="w-full px-3 py-2 rounded-xl border border-earth-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Soil Type</label>
+                  <select value={yieldSoil} onChange={e => setYieldSoil(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-earth-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40">
+                    <option value="loam">Loam (Best)</option>
+                    <option value="black">Black Cotton</option>
+                    <option value="clay">Clay</option>
+                    <option value="sandy">Sandy</option>
+                    <option value="red">Red</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Irrigation</label>
+                  <select value={yieldIrrigation} onChange={e => setYieldIrrigation(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-earth-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40">
+                    <option value="drip">Drip (+15%)</option>
+                    <option value="sprinkler">Sprinkler (+10%)</option>
+                    <option value="flood">Flood (Baseline)</option>
+                    <option value="none">Rain-fed (-25%)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Rainfall Deviation (mm)</label>
+                  <input type="number" step={10} value={yieldRainfall} onChange={e => setYieldRainfall(parseFloat(e.target.value)||0)}
+                    placeholder="+50 above avg / -30 below"
+                    className="w-full px-3 py-2 rounded-xl border border-earth-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40" />
+                  <p className="text-[10px] text-slate-400 mt-1">Positive = surplus rain, Negative = deficit</p>
+                </div>
+                <div className="flex items-end">
+                  <button onClick={calcYield}
+                    className="w-full px-4 py-2.5 bg-stable text-white rounded-xl font-bold text-sm hover:bg-stable-dark transition-colors flex items-center justify-center gap-2">
+                    <Calculator size={16} /> Calculate
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Results */}
+            {yieldResult && (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[
+                    { label: 'Yield per Acre', value: `${yieldResult.qPerAcre} q`, icon: '🌾', color: 'text-stable' },
+                    { label: 'Total Harvest', value: `${yieldResult.totalQ} q`, icon: '📦', color: 'text-slate-800' },
+                    { label: 'Market Price', value: `₹${Number(yieldResult.pricePerQ).toLocaleString('en-IN')}/q`, icon: '📊', color: 'text-elevated' },
+                    { label: 'Est. Revenue', value: `₹${Number(yieldResult.revenue).toLocaleString('en-IN')}`, icon: '💰', color: 'text-watch' },
+                  ].map(item => (
+                    <div key={item.label} className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm text-center">
+                      <p className="text-2xl mb-1">{item.icon}</p>
+                      <p className="text-xs text-slate-400 uppercase font-bold">{item.label}</p>
+                      <p className={`text-lg font-extrabold mt-0.5 ${item.color}`}>{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-4">
+                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-sm">Profit &amp; Loss Breakdown</h3>
+                  <div className="space-y-2">
+                    {[
+                      { label: 'Gross Revenue', value: yieldResult.revenue, positive: true },
+                      { label: `Input Costs (seed, fert, labour — ₹${Number(yieldResult.defaults.costPerAcre).toLocaleString('en-IN')}/acre)`, value: -yieldResult.inputCost, positive: false },
+                      { label: 'Net Profit', value: yieldResult.profit, positive: yieldResult.profit >= 0, bold: true },
+                    ].map(row => (
+                      <div key={row.label} className={`flex justify-between items-center py-2 ${row.bold ? 'border-t-2 border-slate-100 pt-3 mt-1' : ''}`}>
+                        <span className={`text-sm ${row.bold ? 'font-extrabold text-slate-900' : 'font-medium text-slate-600'}`}>{row.label}</span>
+                        <span className={`text-sm font-bold ${row.positive ? 'text-stable' : 'text-high'} ${row.bold ? 'text-base' : ''}`}>
+                          {row.value >= 0 ? '' : '−'} ₹{Math.abs(row.value).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className={`flex items-center gap-2 p-3 rounded-xl text-sm font-bold ${yieldResult.profit >= 0 ? 'bg-stable-light text-stable-dark' : 'bg-high-light text-high-dark'}`}>
+                    {yieldResult.profit >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+                    ROI: {yieldResult.roi}% — {yieldResult.profit >= 0
+                      ? `Good margin. For every ₹1 invested, you earn ₹${(1 + yieldResult.profit/yieldResult.inputCost).toFixed(2)}.`
+                      : 'Loss-making at current prices. Consider reducing input costs or switching variety.'}
+                  </div>
+
+                  {/* Fill with my registered farms */}
+                  {farms.length > 0 && (
+                    <div>
+                      <p className="text-xs text-slate-400 font-bold uppercase mb-2">Quick fill from my farms</p>
+                      <div className="flex flex-wrap gap-2">
+                        {farms.map((f: any, i: number) => (
+                          <button key={f.id} onClick={() => { setYieldArea(f.area); setYieldSoil(f.soil_type); setYieldIrrigation(f.irrigation_type || 'drip'); }}
+                            className="px-3 py-1.5 text-xs border border-earth-200 rounded-lg hover:bg-earth-50 font-semibold">
+                            Farm #{i+1} ({f.area}ac, {f.soil_type})
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Crop comparison table */}
+                <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
+                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-sm mb-3">Compare All Crops at {yieldArea} Acres</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-slate-400 font-bold uppercase text-[10px]">
+                          <th className="text-left py-1.5">Crop</th>
+                          <th className="text-right py-1.5">Est. Yield (q)</th>
+                          <th className="text-right py-1.5">Revenue</th>
+                          <th className="text-right py-1.5">Input Cost</th>
+                          <th className="text-right py-1.5">Net Profit</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {Object.entries(CROP_DEFAULTS).map(([crop, def]) => {
+                          const iMult = irrigationMultiplier[yieldIrrigation] || 1.0;
+                          const sMult = soilMultiplier[yieldSoil] || 1.0;
+                          const rfFactor = 1 + (yieldRainfall / 200);
+                          const qty = parseFloat((def.baseYield * iMult * sMult * rfFactor * yieldArea).toFixed(1));
+                          const rev = Math.round(qty * def.msp);
+                          const cost = Math.round(def.costPerAcre * yieldArea);
+                          const net = rev - cost;
+                          return (
+                            <tr key={crop} className={`${crop === yieldCrop ? 'bg-stable/5 font-bold' : ''}`}>
+                              <td className="py-2 capitalize">{crop} {crop === yieldCrop ? '←' : ''}</td>
+                              <td className="text-right py-2">{qty}</td>
+                              <td className="text-right py-2">₹{rev.toLocaleString('en-IN')}</td>
+                              <td className="text-right py-2 text-slate-400">₹{cost.toLocaleString('en-IN')}</td>
+                              <td className={`text-right py-2 font-bold ${net >= 0 ? 'text-stable' : 'text-high'}`}>₹{net.toLocaleString('en-IN')}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      }
+
+      // ── FINANCIAL RESILIENCE TAB ─────────────────────────────────────────────
+      case 'financial': {
+        const totalFarmArea = farms.reduce((s: number, f: any) => s + (f.area || 0), 0);
+        const totalObligations = cashFlow?.obligations?.reduce((s: number, o: any) => s + o.amount, 0) || 0;
+        const avgDistress = distressData?.score ?? 0;
+
+        // Estimate annual income from all crops using current mandi prices + NDVI data
+        const cropRevenues = allCrops.map((cr: any) => {
+          const matchFarm = farms.find((f: any) => f.id === cr.farm_id);
+          const area = matchFarm?.area || 1;
+          const CROP_YIELD: Record<string, number> = {
+            tomato:80, wheat:20, rice:22, onion:70, potato:90, soybean:12, maize:25, cotton:10, sugarcane:350, mustard:10
+          };
+          const COST: Record<string, number> = {
+            tomato:18000, wheat:12000, rice:14000, onion:16000, potato:15000, soybean:8000, maize:9000, cotton:20000, sugarcane:22000, mustard:7000
+          };
+          const MSP: Record<string, number> = {
+            tomato:800, wheat:2275, rice:2183, onion:600, potato:500, soybean:4600, maize:1870, cotton:6620, sugarcane:315, mustard:5650
+          };
+          const ct = cr.crop_type?.toLowerCase() || 'wheat';
+          const baseQ = (CROP_YIELD[ct] || 20) * area;
+          const pricePerQ = MSP[ct] || 2000;
+          const revenue = Math.round(baseQ * pricePerQ);
+          const cost = Math.round((COST[ct] || 12000) * area);
+          return { crop: cr.crop_type, area, revenue, cost, profit: revenue - cost };
+        });
+
+        const totalRevenue = cropRevenues.reduce((s: number, c: any) => s + c.revenue, 0);
+        const totalCost = cropRevenues.reduce((s: number, c: any) => s + c.cost, 0);
+        const totalProfit = totalRevenue - totalCost - totalObligations;
+
+        const resilienceScore = Math.max(0, Math.min(100,
+          50
+          + (totalProfit > 0 ? 20 : -20)
+          + (totalFarmArea >= 5 ? 10 : totalFarmArea >= 2 ? 5 : 0)
+          + (totalObligations === 0 ? 15 : totalObligations < 50000 ? 5 : -10)
+          - Math.round(avgDistress * 0.3)
+        ));
+
+        const rColor = resilienceScore >= 70 ? '#22c55e' : resilienceScore >= 45 ? '#f59e0b' : '#ef4444';
+        const rLabel = resilienceScore >= 70 ? 'Strong' : resilienceScore >= 45 ? 'Moderate' : 'Vulnerable';
+
+        return (
+          <div className="space-y-5 pb-6">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 my-0 flex items-center gap-2"><PiggyBank size={22} className="text-stable" /> Financial Resilience</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Comprehensive farm profit analysis &amp; financial health score</p>
+            </div>
+
+            {/* Resilience Score */}
+            <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm flex items-center gap-6">
+              <div className="relative flex-shrink-0">
+                <svg width={100} height={100} viewBox="0 0 100 100">
+                  <circle cx={50} cy={50} r={44} fill="none" stroke="#f1f5f9" strokeWidth={10} />
+                  <circle cx={50} cy={50} r={44} fill="none" stroke={rColor} strokeWidth={10}
+                    strokeDasharray={`${(resilienceScore / 100) * 276.5} 276.5`}
+                    strokeLinecap="round"
+                    transform="rotate(-90 50 50)" />
+                  <text x={50} y={54} textAnchor="middle" fontSize={22} fontWeight="bold" fill="#1e293b">{resilienceScore}</text>
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-2xl font-extrabold" style={{ color: rColor }}>{rLabel}</h3>
+                <p className="text-sm text-slate-500 mt-1">Financial resilience score based on your farm size, crop portfolio, obligations &amp; distress risk</p>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {[
+                    totalFarmArea >= 2 ? '✅ Sufficient farm area' : '⚠️ Small farm area',
+                    totalProfit > 0 ? '✅ Profitable season' : '❌ Loss-making at MSP',
+                    totalObligations === 0 ? '✅ Debt-free' : `⚠️ ₹${(totalObligations/1000).toFixed(0)}K obligation`,
+                  ].map(m => <span key={m} className="text-xs bg-slate-50 border border-slate-100 rounded-full px-2 py-0.5 text-slate-600">{m}</span>)}
+                </div>
+              </div>
+            </div>
+
+            {/* Profit Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { label: 'Total Farm Area', value: `${totalFarmArea.toFixed(1)} Acres`, icon: '🌱' },
+                { label: 'Gross Revenue', value: `₹${totalRevenue.toLocaleString('en-IN')}`, icon: '💰' },
+                { label: 'Total Input Cost', value: `₹${totalCost.toLocaleString('en-IN')}`, icon: '📉', neg: true },
+                { label: 'Net Profit', value: `₹${Math.abs(totalProfit).toLocaleString('en-IN')}`, icon: totalProfit >= 0 ? '🟢' : '🔴', neg: totalProfit < 0 },
+              ].map(c => (
+                <div key={c.label} className={`bg-white p-5 rounded-2xl border shadow-sm text-center ${c.neg ? 'border-high/20' : 'border-earth-200'}`}>
+                  <p className="text-2xl mb-1">{c.icon}</p>
+                  <p className="text-[10px] text-slate-400 uppercase font-bold">{c.label}</p>
+                  <p className={`text-base font-extrabold mt-0.5 ${c.neg ? 'text-high' : 'text-stable'}`}>{c.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Per-crop breakdown */}
+            {cropRevenues.length > 0 ? (
+              <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
+                <h3 className="font-bold text-slate-800 uppercase tracking-wider text-sm mb-3">Per-Crop Profit Breakdown</h3>
+                <div className="space-y-3">
+                  {cropRevenues.map((cr: any, i: number) => {
+                    const pct = totalRevenue > 0 ? (cr.revenue / totalRevenue) * 100 : 0;
+                    return (
+                      <div key={i} className="space-y-1">
+                        <div className="flex justify-between text-xs font-semibold">
+                          <span className="capitalize text-slate-700">{cr.crop} <span className="text-slate-400">({cr.area} ac)</span></span>
+                          <span className={cr.profit >= 0 ? 'text-stable font-bold' : 'text-high font-bold'}>
+                            {cr.profit >= 0 ? '+' : '−'}₹{Math.abs(cr.profit).toLocaleString('en-IN')} net
+                          </span>
+                        </div>
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-stable rounded-full transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                        <div className="flex justify-between text-[10px] text-slate-400">
+                          <span>Revenue: ₹{cr.revenue.toLocaleString('en-IN')}</span>
+                          <span>Cost: ₹{cr.cost.toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm text-center text-slate-400">
+                <PiggyBank size={40} className="mx-auto mb-2 text-slate-200" />
+                <p className="font-semibold">No crops registered yet</p>
+                <p className="text-xs mt-1">Add a farm and crops to see your profit breakdown</p>
+                <button onClick={() => setActiveTab('home')} className="mt-3 px-4 py-2 bg-stable text-white text-xs font-bold rounded-xl">Add Farm →</button>
+              </div>
+            )}
+
+            {/* Obligations */}
+            {cashFlow?.obligations?.length > 0 && (
+              <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-sm">Debt Obligations</h3>
+                  <span className="text-xs font-bold text-high">Total: ₹{totalObligations.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="space-y-2">
+                  {cashFlow.obligations.map((ob: any) => (
+                    <div key={ob.id} className="flex justify-between items-center text-sm border-b border-slate-50 pb-2">
+                      <div>
+                        <span className="font-semibold text-slate-700 capitalize">{ob.type}</span>
+                        <span className="text-slate-400 text-xs ml-2">Due: {ob.due_date}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-high">₹{Number(ob.amount).toLocaleString('en-IN')}</span>
+                        <button onClick={() => handleDeleteObligation(ob.id)} className="p-1 text-slate-300 hover:text-high transition-colors"><Trash2 size={13} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-400 mt-3">
+                  After deducting obligations, net position: <strong className={totalProfit >= 0 ? 'text-stable' : 'text-high'}>
+                    ₹{Math.abs(totalProfit).toLocaleString('en-IN')} {totalProfit >= 0 ? 'surplus' : 'deficit'}
+                  </strong>
+                </p>
+              </div>
+            )}
+
+            {/* Action CTA */}
+            <div className="flex gap-3 flex-wrap">
+              <button onClick={() => setActiveTab('yield')} className="flex items-center gap-2 px-4 py-2.5 bg-stable text-white rounded-xl text-sm font-bold hover:bg-stable-dark transition-colors">
+                <Calculator size={16} /> Open Yield Calculator
+              </button>
+              <button onClick={() => setActiveTab('risk-detail')} className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors">
+                <BarChart3 size={16} /> Distress Detail
+              </button>
+            </div>
+          </div>
+        );
+      }
+
       default:
         return <div>Not found</div>;
     }
+
   };
 
   // Auth layout if token is missing
@@ -2273,6 +2785,18 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           >
             <span className="text-base">🗺️</span> Community Map
           </button>
+          <button 
+            onClick={() => setActiveTab('yield')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'yield' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Calculator size={18} /> Yield Calculator
+          </button>
+          <button 
+            onClick={() => setActiveTab('financial')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'financial' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <PiggyBank size={18} /> Financial Health
+          </button>
         </nav>
 
         <div className="pt-4 border-t border-slate-100 flex flex-col gap-2">
@@ -2316,11 +2840,17 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         >
           <Bell size={20} /> <span className="mt-1">Alerts</span>
         </button>
-        <button 
-          onClick={() => setActiveTab('community')}
-          className={`flex flex-col items-center text-[10px] font-bold ${activeTab === 'community' ? 'text-stable' : 'text-slate-400'}`}
+         <button 
+          onClick={() => setActiveTab('yield')}
+          className={`flex flex-col items-center text-[10px] font-bold ${activeTab === 'yield' ? 'text-stable' : 'text-slate-400'}`}
         >
-          <span className="text-xl">🗺️</span> <span className="mt-0.5">Map</span>
+          <Calculator size={20} /> <span className="mt-1">Yield</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('financial')}
+          className={`flex flex-col items-center text-[10px] font-bold ${activeTab === 'financial' ? 'text-stable' : 'text-slate-400'}`}
+        >
+          <PiggyBank size={20} /> <span className="mt-1">Finance</span>
         </button>
         <button 
           onClick={() => setActiveTab('profile')}
@@ -2631,13 +3161,11 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                 {/* Map Picker */}
                 <div>
                   <label className="block text-slate-500 text-xs font-bold uppercase mb-1">📍 Pinpoint Farm Location</label>
-                  <Suspense fallback={<div className="h-60 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 text-xs">Loading map…</div>}>
-                    <MapPickerComponent
-                      initialLat={newFarmLat}
-                      initialLon={newFarmLon}
-                      onLocationSelect={(lat, lon) => { setNewFarmLat(lat); setNewFarmLon(lon); }}
-                    />
-                  </Suspense>
+                  <MapPickerComponent
+                    initialLat={newFarmLat}
+                    initialLon={newFarmLon}
+                    onLocationSelect={(lat, lon) => { setNewFarmLat(lat); setNewFarmLon(lon); }}
+                  />
                 </div>
 
                 {/* Area + Soil row */}
