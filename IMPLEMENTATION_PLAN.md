@@ -174,3 +174,50 @@ Last updated: 2026-08-23T12:05 IST
 - DB: 14 schemes seeded, all migrations applied
 - Demo account: `+919876543210 / demo1234` — Ramesh Patil, Nashik Maharashtra
   - 2 farms, 3 crops, 2 obligations, distress 40.4/100 Elevated, 3 real advisories
+
+---
+
+## Phase 26 Completed — PWA (2026-08-23)
+
+### Service Worker (`public/sw.js`)
+- Cache-first strategy for app shell (HTML/CSS/JS assets)
+- Network-first with **IndexedDB fallback** for 7 key API routes:
+  - `/api/v1/advisories`, `/api/v1/farmers/me/distress`, `/api/v1/weather/*`
+  - `/api/v1/mandis/compare`, `/api/v1/farmers/me/schemes`, `/api/v1/alerts`
+  - `/api/v1/farmers/me/projections`
+- Stale responses include `_offline: true` and `_age_minutes` field
+- Message handler: `GET_LAST_SYNC` returns last DB write timestamp
+- Background update: `skipWaiting()` on new SW install
+
+### Manifest (`public/manifest.json`)
+- `display: standalone`, `theme_color: #4a7c59`
+- 8 PWA icon sizes (72–512px) from branded wheat+shield icon
+- Shortcuts: Advisories (`/?tab=home`) and Market (`/?tab=market`)
+- Full Apple meta tags for iOS Safari install
+
+### `index.html` Updates
+- Complete SEO: title, description, keywords, Open Graph
+- Manifest link + Apple meta tags
+- Google Fonts: Inter + Outfit (preconnect)
+- SW registration: `navigator.serviceWorker.register('/sw.js')` on window load, with 60s update polling
+
+### Offline Banner (App.tsx)
+- `isOnline` state (`navigator.onLine`)
+- `window.addEventListener('online' / 'offline')` for real-time detection
+- Fixed-top dark banner with animated red pulse dot
+- Shows: `"You're offline — showing cached data · Last synced HH:MM:SS"`
+
+### Phase 25 Completed — Yield Calculator
+- `POST /api/v1/yield/estimate` endpoint returning:
+  - ML-predicted yield deviation (RandomForest)
+  - Estimated yield q/acre and total q
+  - Projected gross revenue at live mandi price
+  - Three scenarios (best +15%, base, worst −15%)
+- UI on Crop tab: crop/area/soil/irrigation inputs + rainfall slider
+- Results: 3-column stats grid + revenue card + scenario bar chart
+
+### Build Status (2026-08-23)
+- `npm run build` → ✓ 0 TS errors
+- All React hooks at top-level component scope (no hooks-in-switch violations)
+- SW registered and caching on page load
+- Demo account verified: `+919876543210` / `demo1234`
