@@ -68,6 +68,18 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     const [distressData, setDistressData] = useState<any>(null);
     const [schemes, setSchemes] = useState<any[]>([]);
 
+  // Yield Calculator state (top-level to follow React hooks rules)
+  const [yieldCrop, setYieldCrop] = useState<string>('tomato');
+  const [yieldArea, setYieldArea] = useState<number>(1.0);
+  const [yieldRainfall, setYieldRainfall] = useState<number>(0);
+  const [yieldSoil, setYieldSoil] = useState<string>('loam');
+  const [yieldIrrigation, setYieldIrrigation] = useState<string>('drip');
+  const [yieldResult, setYieldResult] = useState<any>(null);
+  const [yieldLoading, setYieldLoading] = useState<boolean>(false);
+  // Community Risk Map state (top-level to follow React hooks rules)
+  const [communityData, setCommunityData] = useState<any[]>([]);
+  const [communityLoading, setCommunityLoading] = useState<boolean>(true);
+
   // Obligation Overlay Modal States
   const [showAddObligationModal, setShowAddObligationModal] = useState<boolean>(false);
   const [newObligationAmount, setNewObligationAmount] = useState<string>('30000');
@@ -709,6 +721,18 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     return () => { cancelled = true; };
   }, [alerts, language]);
 
+  // Community risk map: fetch when tab becomes active
+  useEffect(() => {
+    if (activeTab !== 'community' || !token) return;
+    setCommunityLoading(true);
+    fetch(`${API_BASE}/api/v1/community/district-risk`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { setCommunityData(d); setCommunityLoading(false); })
+      .catch(() => setCommunityLoading(false));
+  }, [activeTab, token]);
+
   // Language mapping
   const languageNames: Record<LanguageType, string> = {
     english: 'English',
@@ -1077,6 +1101,166 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                 </div>
               </div>
             )}
+
+            {/* ── Yield Calculator ── */}
+            {(()=> {
+              const runYieldCalc = async () => {
+                setYieldLoading(true);
+                try {
+                  const params = new URLSearchParams({
+                    crop_type: yieldCrop,
+                    area_acres: String(yieldArea),
+                    rainfall_deviation: String(yieldRainfall),
+                    soil_type: yieldSoil,
+                    irrigation_type: yieldIrrigation,
+                  });
+                  const r = await fetch(`${API_BASE}/api/v1/yield/estimate?${params}`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                  });
+                  if (r.ok) setYieldResult(await r.json());
+                } catch (e) {}
+                setYieldLoading(false);
+              };
+
+              return (
+                <div className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-slate-900 my-0">🧮 Yield Calculator</h3>
+                    <span className="text-[10px] bg-stable/10 text-stable font-bold px-2 py-0.5 rounded-full">ML Model</span>
+                  </div>
+                  <p className="text-xs text-slate-400">Estimate your crop yield and projected revenue based on current conditions.</p>
+
+                  {/* Inputs */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Crop</label>
+                      <select
+                        value={yieldCrop}
+                        onChange={e => setYieldCrop(e.target.value)}
+                        className="w-full text-xs border border-earth-200 rounded-lg px-2 py-1.5 bg-white text-slate-700"
+                      >
+                        {['tomato','onion','wheat','potato','maize','rice','cotton','soybean'].map(c => (
+                          <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Area (acres)</label>
+                      <input
+                        type="number" min="0.1" step="0.1"
+                        value={yieldArea}
+                        onChange={e => setYieldArea(Number(e.target.value))}
+                        className="w-full text-xs border border-earth-200 rounded-lg px-2 py-1.5"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Soil Type</label>
+                      <select
+                        value={yieldSoil}
+                        onChange={e => setYieldSoil(e.target.value)}
+                        className="w-full text-xs border border-earth-200 rounded-lg px-2 py-1.5 bg-white text-slate-700"
+                      >
+                        {['loam','clay','sandy','black'].map(s => (
+                          <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Irrigation</label>
+                      <select
+                        value={yieldIrrigation}
+                        onChange={e => setYieldIrrigation(e.target.value)}
+                        className="w-full text-xs border border-earth-200 rounded-lg px-2 py-1.5 bg-white text-slate-700"
+                      >
+                        {['drip','sprinkler','flood','rainfed'].map(i => (
+                          <option key={i} value={i}>{i.charAt(0).toUpperCase()+i.slice(1)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">
+                        Rainfall vs. Normal: <span className={yieldRainfall < 0 ? 'text-high' : 'text-stable'}>{yieldRainfall > 0 ? '+' : ''}{yieldRainfall}%</span>
+                      </label>
+                      <input
+                        type="range" min="-60" max="60" step="5"
+                        value={yieldRainfall}
+                        onChange={e => setYieldRainfall(Number(e.target.value))}
+                        className="w-full accent-stable"
+                      />
+                      <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
+                        <span>−60% (severe drought)</span><span>0% (normal)</span><span>+60% (excess)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={runYieldCalc}
+                    disabled={yieldLoading}
+                    className="w-full py-2.5 bg-stable text-white text-sm font-bold rounded-xl hover:bg-stable-dark transition-colors disabled:opacity-60"
+                  >
+                    {yieldLoading ? '⏳ Calculating…' : '🧮 Estimate Yield & Revenue'}
+                  </button>
+
+                  {/* Results */}
+                  {yieldResult && (
+                    <div className="space-y-3 pt-3 border-t border-earth-50">
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div className="bg-earth-50 rounded-xl p-3">
+                          <p className="text-[10px] text-slate-400 uppercase font-bold">Yield/Acre</p>
+                          <p className="text-lg font-black text-slate-900">{yieldResult.estimated_yield_q_per_acre}<span className="text-xs font-semibold text-slate-400"> q</span></p>
+                          <p className="text-[10px] text-slate-400">baseline {yieldResult.baseline_yield_q_per_acre}q</p>
+                        </div>
+                        <div className="bg-earth-50 rounded-xl p-3">
+                          <p className="text-[10px] text-slate-400 uppercase font-bold">Total Yield</p>
+                          <p className="text-lg font-black text-slate-900">{yieldResult.estimated_total_yield_q}<span className="text-xs font-semibold text-slate-400"> q</span></p>
+                          <p className="text-[10px] text-slate-400">{yieldResult.area_acres} acres</p>
+                        </div>
+                        <div className={`rounded-xl p-3 ${yieldResult.yield_deviation_pct < 0 ? 'bg-high-light' : 'bg-stable/10'}`}>
+                          <p className="text-[10px] text-slate-400 uppercase font-bold">ML Deviation</p>
+                          <p className={`text-lg font-black ${yieldResult.yield_deviation_pct < 0 ? 'text-high' : 'text-stable'}`}>
+                            {yieldResult.yield_deviation_pct > 0 ? '+' : ''}{yieldResult.yield_deviation_pct}%
+                          </p>
+                          <p className="text-[10px] text-slate-400">vs baseline</p>
+                        </div>
+                      </div>
+
+                      {/* Revenue */}
+                      <div className="bg-gradient-to-r from-stable to-stable-dark text-white rounded-xl p-4">
+                        <p className="text-xs font-bold opacity-70">Projected Gross Revenue</p>
+                        <p className="text-2xl font-black">₹{yieldResult.projected_gross_revenue.toLocaleString('en-IN')}</p>
+                        <p className="text-[10px] opacity-70 mt-0.5">
+                          @ ₹{yieldResult.modal_price_per_q}/q · {yieldResult.price_source}
+                        </p>
+                      </div>
+
+                      {/* Scenario bars */}
+                      <div className="space-y-2">
+                        <p className="text-[10px] text-slate-400 uppercase font-bold">Revenue Scenarios (±15%)</p>
+                        {[
+                          { label: 'Best Case (+15%)', val: yieldResult.scenario.best.revenue, color: '#22c55e', q: yieldResult.scenario.best.yield_q },
+                          { label: 'Base Estimate',    val: yieldResult.scenario.base.revenue, color: '#3b82f6', q: yieldResult.scenario.base.yield_q },
+                          { label: 'Worst Case (−15%)',val: yieldResult.scenario.worst.revenue,color: '#ef4444', q: yieldResult.scenario.worst.yield_q },
+                        ].map(s => (
+                          <div key={s.label} className="flex items-center gap-2">
+                            <span className="text-[10px] w-32 text-slate-500 shrink-0">{s.label}</span>
+                            <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full"
+                                style={{ width: `${(s.val / yieldResult.scenario.best.revenue) * 100}%`, background: s.color }}
+                              />
+                            </div>
+                            <span className="text-[10px] font-bold text-slate-700 w-20 text-right shrink-0">
+                              ₹{Math.round(s.val).toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         );
       }
@@ -1796,17 +1980,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
 
       case 'community': {
         // Phase 20: Community District Risk Map
-        const [communityData, setCommunityData] = React.useState<any[]>([]);
-        const [communityLoading, setCommunityLoading] = React.useState(true);
-
-        React.useEffect(() => {
-          fetch(`${API_BASE}/api/v1/community/district-risk`, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
-            .then(r => r.ok ? r.json() : [])
-            .then(d => { setCommunityData(d); setCommunityLoading(false); })
-            .catch(() => setCommunityLoading(false));
-        }, [token]);
+        // State + fetch are at top-level (communityData, communityLoading, useEffect)
 
         const riskColor = (level: string) => {
           switch (level) {
