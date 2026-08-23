@@ -41,7 +41,24 @@
 
     <!-- Service Worker Registration -->
     <script>
-      if ('serviceWorker' in navigator) {
+      if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(regs => {
+            for (let reg of regs) {
+              reg.unregister();
+              console.log('[Dev mode] Unregistered SW:', reg.scope);
+            }
+          });
+        }
+        if ('caches' in window) {
+          caches.keys().then(keys => {
+            keys.forEach(k => {
+              caches.delete(k);
+              console.log('[Dev mode] Cleared Cache:', k);
+            });
+          });
+        }
+      } else if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js', { scope: '/' })
             .then(reg => {
