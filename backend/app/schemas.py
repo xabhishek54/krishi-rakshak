@@ -221,4 +221,20 @@ class CashFlowResponse(BaseModel):
     has_shortfall: bool
     obligations: List[FinancialObligationResponse]
 
+class DistressScoreResponse(BaseModel):
+    id: int
+    farmer_id: int
+    score: float
+    weather_component: float
+    market_component: float
+    yield_component: float
+    financial_component: float
+    urgency_component: float
+    risk_level: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 

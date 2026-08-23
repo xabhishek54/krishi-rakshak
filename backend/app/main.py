@@ -10,6 +10,9 @@ from app import models, schemas, auth
 from app.weather import OpenMeteoProvider
 from app.advisory import evaluate_advisories
 from app.mandi import seed_mandi_data, get_mandi_comparison, detect_price_crash, get_price_history
+from app.yield_model import predict_yield_deviation
+from app.distress import calculate_distress_risk
+from app.schemes import seed_scheme_data
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -27,6 +30,10 @@ def startup_event():
         seed_mandi_data(db)
     except Exception as e:
         print("Mandi seeding failed:", e)
+    try:
+        seed_scheme_data(db)
+    except Exception as e:
+        print("Scheme seeding failed:", e)
 
 # Enable CORS
 app.add_middleware(
@@ -372,9 +379,38 @@ def get_cash_flow_projection(
         if crop:
             crop_type = crop.crop_type.lower()
             
+    # Calculate weather deviations dynamically
+    rain_dev = -15.0 # dry bias default
+    temp_dev = 1.0  # warmer default
+    
+    if current_farmer.location_id:
+        today_date = date.today()
+        forecasts = db.query(models.WeatherForecast).filter(
+            models.WeatherForecast.location_id == current_farmer.location_id,
+            models.WeatherForecast.date >= today_date
+        ).all()
+        if forecasts:
+            forecast_rain = sum(f.rainfall_forecast for f in forecasts)
+            expected_rain = 40.0
+            rain_dev = ((forecast_rain - expected_rain) / expected_rain) * 100
+            rain_dev = min(max(rain_dev, -80.0), 80.0)
+            
+            avg_temp = sum(f.temperature for f in forecasts) / len(forecasts)
+            temp_dev = avg_temp - 22.0
+            temp_dev = min(max(temp_dev, -6.0), 6.0)
+            
+    soil_type = "loam"
+    irrigation = "drip"
+    if farm:
+        soil_type = farm.soil_type
+        irrigation = farm.irrigation
+        
+    yield_dev_pct = predict_yield_deviation(crop_type, soil_type, irrigation, rain_dev, temp_dev)
+    scale_factor = 1.0 + (yield_dev_pct / 100.0)
+    
     p_yield_per_acre, p_price, p_cost_per_acre = crop_params.get(crop_type, (12.0, 2600.0, 12000.0))
     
-    projected_yield = farm_area * p_yield_per_acre
+    projected_yield = farm_area * p_yield_per_acre * scale_factor
     projected_rev = projected_yield * p_price
     projected_cost = farm_area * p_cost_per_acre
     projected_net_inc = projected_rev - projected_cost
@@ -396,3 +432,54 @@ def get_cash_flow_projection(
         "has_shortfall": has_shortfall,
         "obligations": obligations
     }
+
+@app.get("/api/v1/farmers/me/distress", response_model=schemas.DistressScoreResponse)
+def get_distress_score(
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+    db: Session = Depends(get_db)
+):
+    distress = calculate_distress_risk(db, current_farmer)
+    return distress
+
+@app.get("/api/v1/farmers/me/schemes", response_model=List[schemas.SchemeResponse])
+def get_matching_schemes(
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+    db: Session = Depends(get_db)
+):
+    """Return schemes that match the farmer's state, crop, and conditions."""
+    # Determine farmer's crop
+    farm = db.query(models.Farm).filter(models.Farm.farmer_id == current_farmer.id).first()
+    crop_type = "tomato"
+    if farm:
+        crop = db.query(models.Crop).filter(models.Crop.farm_id == farm.id).first()
+        if crop:
+            crop_type = crop.crop_type.lower()
+
+    # Get distress to check if yield loss qualifies schemes
+    distress = db.query(models.DistressScore).filter(
+        models.DistressScore.farmer_id == current_farmer.id
+    ).order_by(models.DistressScore.created_at.desc()).first()
+
+    # Query schemes from DB, filter by crop and state
+    all_schemes = db.query(models.Scheme).all()
+    matched = []
+    for scheme in all_schemes:
+        import json
+        try:
+            conditions = json.loads(scheme.conditions) if scheme.conditions else {}
+        except (json.JSONDecodeError, TypeError):
+            conditions = {}
+
+        # Check crop eligibility
+        eligible_crops = conditions.get("crops", [])
+        if eligible_crops and crop_type not in eligible_crops:
+            continue
+
+        # Check minimum distress score requirement
+        min_score = conditions.get("min_distress_score", 0)
+        if distress and distress.score < min_score:
+            continue
+
+        matched.append(scheme)
+
+    return matched

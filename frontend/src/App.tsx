@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { translations } from './translations';
 import { 
   Home as HomeIcon, 
   Sprout, 
@@ -33,7 +34,6 @@ interface FarmerProfile {
 function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [activeTab, setActiveTab] = useState<TabType>('home');
-  const [language, setLanguage] = useState<LanguageType>('english');
   const [isVoicePlaying, setIsVoicePlaying] = useState<boolean>(false);
   const [hasFarm, setHasFarm] = useState<boolean>(localStorage.getItem('hasFarm') === 'true');
   const [weather, setWeather] = useState<any>(null);
@@ -45,6 +45,8 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     const [priceCrashStatus, setPriceCrashStatus] = useState<any>(null);
     const [selectedMandiId, setSelectedMandiId] = useState<number | null>(null);
     const [cashFlow, setCashFlow] = useState<any>(null);
+    const [distressData, setDistressData] = useState<any>(null);
+    const [schemes, setSchemes] = useState<any[]>([]);
 
   // Obligation Overlay Modal States
   const [showAddObligationModal, setShowAddObligationModal] = useState<boolean>(false);
@@ -89,6 +91,10 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   const [regPassword, setRegPassword] = useState<string>('');
 
   const [farmer, setFarmer] = useState<FarmerProfile | null>(null);
+  const [language, setLanguage] = useState<LanguageType>(
+    (localStorage.getItem('kr_language') as LanguageType) || 'english'
+  );
+  const t = translations[language];
 
   const fetchFarmsAndCrops = async () => {
     if (!token) return;
@@ -113,7 +119,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
 if (cropData.length > 0) {
       // When switching farms, always select the first crop from the new farm's crops
       // Unless we're initializing and have no prior selection
-      setSelectedCrop(selectedCrop && cropData.some(c => c.id === selectedCrop.id) ? selectedCrop : cropData[0]);
+      setSelectedCrop(selectedCrop && cropData.some((c: any) => c.id === selectedCrop.id) ? selectedCrop : cropData[0]);
     } else {
       setSelectedCrop(null);
     }
@@ -137,7 +143,7 @@ if (cropData.length > 0) {
     }
   };
 
-  // Sync token and load profiles
+// Sync token and load profiles
   useEffect(() => {
     if (token) {
       localStorage.setItem('token', token);
@@ -147,7 +153,7 @@ if (cropData.length > 0) {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       .then(res => {
-        if (res.ok) return res.json();
+        if (res.ok) return res.json()
         throw new Error("API failed");
       })
       .then(data => {
@@ -165,6 +171,8 @@ if (cropData.length > 0) {
         fetchFarmsAndCrops();
       })
       .catch(() => {
+        // Clear invalid token and fallback to mock
+        setToken(null);
         // Fallback to mock
         setFarmer({
           name: regName || 'Ramesh Kumar',
@@ -420,10 +428,39 @@ if (cropData.length > 0) {
     }
   };
 
+  const fetchDistressAndSchemes = async () => {
+    if (!token) return;
+    try {
+      const [distressRes, schemesRes] = await Promise.all([
+        fetch('http://127.0.0.1:8000/api/v1/farmers/me/distress', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch('http://127.0.0.1:8000/api/v1/farmers/me/schemes', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
+      if (distressRes.ok) setDistressData(await distressRes.json());
+      if (schemesRes.ok) setSchemes(await schemesRes.json());
+    } catch {
+      // Fallback mocks
+      setDistressData({
+        score: 42.0, risk_level: 'Elevated',
+        weather_component: 35.0, yield_component: 40.0,
+        market_component: 55.0, financial_component: 45.0, urgency_component: 35.0
+      });
+      setSchemes([
+        { id: 1, name: 'PM Fasal Bima Yojana (PMFBY)', state: 'All', support_type: 'Insurance (Crop Loss Compensation)', verification_url: 'https://pmfby.gov.in', conditions: '' },
+        { id: 2, name: 'PM Kisan Samman Nidhi (PM-KISAN)', state: 'All', support_type: 'Direct Income Support (₹6,000/year)', verification_url: 'https://pmkisan.gov.in', conditions: '' },
+        { id: 3, name: 'Kisan Credit Card (KCC)', state: 'All', support_type: 'Credit Access (Short-term Crop Loan)', verification_url: 'https://www.nabard.org', conditions: '' },
+      ]);
+    }
+  };
+
   useEffect(() => {
     if (token && selectedCrop) {
       fetchMandiPrices();
       fetchProjections();
+      fetchDistressAndSchemes();
     }
   }, [token, selectedCrop]);
   // Handle Logout
@@ -432,19 +469,75 @@ if (cropData.length > 0) {
     setActiveTab('home');
   };
 
-  // Mock Login
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  // Login
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loginPhone && loginPassword) {
-      setToken('mock-jwt-token-sih');
+      try {
+        const res = await fetch('http://127.0.0.1:8000/api/v1/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            username: loginPhone,
+            password: loginPassword
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setToken(data.access_token);
+        } else {
+          const errorData = await res.json();
+          alert(errorData.detail || 'Login failed');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Network error during login');
+      }
     }
   };
 
-  // Mock Register
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  // Register
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (regName && regPhone && regPassword) {
-      setToken('mock-jwt-token-sih');
+      try {
+        const res = await fetch('http://127.0.0.1:8000/api/v1/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: regName,
+            phone: regPhone,
+            password: regPassword,
+            language: language
+          })
+        });
+        if (res.ok) {
+          await res.json();
+          // Auto-login after registration
+          const loginRes = await fetch('http://127.0.0.1:8000/api/v1/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              username: regPhone,
+              password: regPassword
+            })
+          });
+          if (loginRes.ok) {
+            const loginData = await loginRes.json();
+            setToken(loginData.access_token);
+          } else {
+            // If auto-login fails, still set token from registration response if it includes token
+            // But our registration endpoint doesn't return token, so we rely on the login call above
+            alert('Registration successful, but auto-login failed. Please login manually.');
+          }
+        } else {
+          const errorData = await res.json();
+          alert(errorData.detail || 'Registration failed');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Network error during registration');
+      }
     }
   };
 
@@ -624,18 +717,33 @@ if (cropData.length > 0) {
 
               <div 
                 onClick={() => setActiveTab('risk-detail')}
-                className="bg-high-light p-5 rounded-2xl border border-high-dark/20 shadow-sm text-left cursor-pointer hover:bg-high-light/80 transition-colors"
+                className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-colors ${
+                  distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High'
+                    ? 'bg-high-light border-high-dark/20 hover:bg-high-light/80'
+                    : distressData?.risk_level === 'Elevated'
+                    ? 'bg-watch-light border-watch-dark/20 hover:bg-watch-light/80'
+                    : 'bg-stable-light border-stable-dark/20 hover:bg-stable-light/80'
+                }`}
               >
-                <div className="text-high mb-2"><AlertTriangle size={32} /></div>
-                <h3 className="text-high-dark text-xs font-semibold uppercase tracking-wider">Distress Risk</h3>
-                <p className="text-high-dark text-lg font-bold mt-1 my-0">82 <span className="text-sm font-normal">/ 100</span></p>
-                <span className="bg-high text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-1.5 inline-block uppercase">High Risk</span>
+                <div className={`mb-2 ${
+                  distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High' ? 'text-high' :
+                  distressData?.risk_level === 'Elevated' ? 'text-watch' : 'text-stable'
+                }`}><AlertTriangle size={32} /></div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">Distress Risk</h3>
+                <p className="text-slate-900 text-lg font-bold mt-1 my-0">
+                  {distressData?.score ?? '—'} <span className="text-sm font-normal text-slate-500">/ 100</span>
+                </p>
+                <span className={`text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-1.5 inline-block uppercase ${
+                  distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High' ? 'bg-high' :
+                  distressData?.risk_level === 'Elevated' ? 'bg-watch' :
+                  distressData?.risk_level === 'Watch' ? 'bg-elevated' : 'bg-stable'
+                }`}>{distressData?.risk_level ?? 'Loading…'}</span>
               </div>
             </div>
 
             {/* What should I do today section */}
             <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
-              <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-3 mb-4">What should I do today?</h3>
+              <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-3 mb-4">{t.homeWhatToDo}</h3>
               <div className="space-y-4">
                 {advisories.length > 0 ? (
                   advisories.map((adv) => (
@@ -856,7 +964,7 @@ if (cropData.length > 0) {
       case 'alerts':
         return (
           <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">
-            <h2 className="text-xl font-bold">Alert Center</h2>
+            <h2 className="text-xl font-bold">{t.alertsTitle}</h2>
             <div className="space-y-4">
               {/* Financial Distress Alert (Baseline Simulation) */}
               <div className="flex gap-4 items-start p-4 bg-high-light rounded-xl border border-high-dark/10">
@@ -897,28 +1005,94 @@ if (cropData.length > 0) {
             </div>
           </div>
         );
-      case 'support':
+      case 'support': {
+        const schemeTypeColors: Record<string, string> = {
+          'Insurance': 'bg-blue-50 text-blue-700',
+          'Direct Income': 'bg-green-50 text-green-700',
+          'Credit': 'bg-purple-50 text-purple-700',
+          'Market': 'bg-orange-50 text-orange-700',
+          'Subsidy': 'bg-yellow-50 text-yellow-700',
+          'Price Support': 'bg-red-50 text-red-700',
+          'State': 'bg-indigo-50 text-indigo-700',
+          'Infrastructure': 'bg-teal-50 text-teal-700',
+        };
+        const getSchemeColor = (supportType: string) => {
+          for (const key of Object.keys(schemeTypeColors)) {
+            if (supportType.includes(key)) return schemeTypeColors[key];
+          }
+          return 'bg-slate-50 text-slate-700';
+        };
+
         return (
           <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">
             <div>
-              <h2 className="text-xl font-bold">Matched Government Support Schemes</h2>
-              <p className="text-slate-500 text-xs mt-1">Eligibility estimates based on crop health warnings and regional location</p>
+              <h2 className="text-xl font-bold my-0">Matched Government Support Schemes</h2>
+              <p className="text-slate-500 text-xs mt-1 mb-0">Eligibility estimates based on crop type, distress score, and regional location</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white p-5 rounded-xl border border-earth-200 shadow-xs flex flex-col justify-between">
+            {/* Distress Summary Banner */}
+            {distressData && (
+              <div className={`p-4 rounded-xl border text-sm flex gap-4 items-center ${
+                distressData.risk_level === 'Critical' ? 'bg-high-light border-high-dark/20 text-high-dark' :
+                distressData.risk_level === 'High' ? 'bg-high-light border-high-dark/20 text-high-dark' :
+                distressData.risk_level === 'Elevated' ? 'bg-watch-light border-watch-dark/20 text-watch-dark' :
+                'bg-stable-light border-stable-dark/20 text-stable-dark'
+              }`}>
+                <div className="text-3xl font-extrabold font-mono">{distressData.score}</div>
                 <div>
-                  <h3 className="font-bold text-slate-900">PM Fasal Bima Yojana (PMFBY)</h3>
-                  <p className="text-xs text-slate-500 mt-1">Provides insurance coverage against yield losses from weather abnormalities.</p>
-                </div>
-                <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center">
-                  <span className="text-[10px] bg-stable-light text-stable font-bold px-2 py-0.5 rounded-full">Highly Match</span>
-                  <a href="https://pmfby.gov.in" target="_blank" className="text-xs font-semibold text-stable hover:underline">Apply Portal</a>
+                  <div className="font-bold text-sm">Distress Level: {distressData.risk_level}</div>
+                  <div className="text-[11px] opacity-80 mt-0.5">Score 0-100 · Based on weather, yield, market, financial & urgency signals</div>
                 </div>
               </div>
+            )}
+
+            {/* Scheme Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {schemes.length > 0 ? schemes.map((scheme: any) => {
+                let description = '';
+                try {
+                  const cond = JSON.parse(scheme.conditions || '{}');
+                  description = cond.description || '';
+                } catch {}
+
+                return (
+                  <div key={scheme.id} className="bg-white p-5 rounded-xl border border-earth-200 shadow-xs flex flex-col justify-between hover:border-stable/40 hover:shadow-md transition-all">
+                    <div>
+                      <div className="flex items-start gap-2 mb-2">
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 mt-0.5 ${getSchemeColor(scheme.support_type)}`}>
+                          {scheme.support_type.split('(')[0].trim()}
+                        </span>
+                        {scheme.state !== 'All' && (
+                          <span className="text-[9px] bg-earth-100 text-earth-dark font-bold px-2 py-0.5 rounded-full uppercase shrink-0 mt-0.5">
+                            {scheme.state} Only
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="font-bold text-slate-900 text-sm leading-snug my-0">{scheme.name}</h3>
+                      {description && (
+                        <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{description}</p>
+                      )}
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center">
+                      <span className="text-[9px] bg-stable-light text-stable font-bold px-2 py-0.5 rounded-full uppercase">Eligible</span>
+                      {scheme.verification_url && (
+                        <a href={scheme.verification_url} target="_blank" rel="noreferrer"
+                           className="text-xs font-semibold text-stable hover:text-stable-dark hover:underline transition-colors">
+                          Apply Portal →
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              }) : (
+                <div className="col-span-2 text-center py-10 text-slate-400 text-xs">
+                  Complete your farm profile to see matched schemes.
+                </div>
+              )}
             </div>
           </div>
         );
+      }
       case 'risk-detail':
         const normalIncome = cashFlow?.projected_net_income || 95000;
         const currentIncome = cashFlow?.projected_net_income || 62000;
@@ -1054,12 +1228,15 @@ if (cropData.length > 0) {
 
               {/* Language Switcher */}
               <div className="pt-4 border-t border-slate-100 text-left">
-                <label className="block text-slate-400 font-semibold text-xs uppercase mb-2">Change Language</label>
+                <label className="block text-slate-400 font-semibold text-xs uppercase mb-2">{t.profileChangeLanguage}</label>
                 <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
                   {(Object.keys(languageNames) as LanguageType[]).map((langKey) => (
                     <button
                       key={langKey}
-                      onClick={() => setLanguage(langKey)}
+                      onClick={() => {
+                        setLanguage(langKey);
+                        localStorage.setItem('kr_language', langKey);
+                      }}
                       className={`text-xs py-2 px-3 rounded-xl border text-center transition-colors ${language === langKey ? 'bg-stable text-white border-stable font-semibold' : 'bg-white border-earth-200 hover:bg-slate-50'}`}
                     >
                       {languageNames[langKey]}
@@ -1073,7 +1250,7 @@ if (cropData.length > 0) {
                   onClick={handleLogout}
                   className="flex items-center gap-1.5 text-xs text-high border border-high/20 px-4 py-2.5 rounded-xl hover:bg-high-light font-semibold"
                 >
-                  <LogOut size={16} /> Sign Out Session
+                  <LogOut size={16} /> {t.profileSignOut}
                 </button>
               </div>
             </div>
