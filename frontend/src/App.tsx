@@ -915,7 +915,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-3 mb-4">{t.homeWhatToDo}</h3>
               <div className="space-y-4">
                 {advisories.length > 0 ? (
-                  advisories.map((adv) => (
+                  (translatedAdvisories.length > 0 ? translatedAdvisories : advisories).map((adv) => (
                     <div key={adv.id} className="flex gap-4 items-start p-3 bg-earth-50 rounded-xl">
                       <span className={`p-2 rounded-lg mt-0.5 text-white flex items-center justify-center ${
                         adv.priority === 'high' ? 'bg-high' : adv.priority === 'medium' ? 'bg-elevated' : 'bg-stable'
@@ -1062,7 +1062,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-3">
                 <h3 className="font-bold text-slate-900 my-0">Advisory Feed (All Farms)</h3>
                 <div className="border-l-2 border-stable pl-4 py-2 space-y-4">
-                  {advisories.map((adv: any) => (
+                  {(translatedAdvisories.length > 0 ? translatedAdvisories : advisories).map((adv: any) => (
                     <div key={adv.id} className="relative">
                       <span className="absolute -left-[23px] top-1.5 bg-stable h-3 w-3 rounded-full border-2 border-white" />
                       <div className="bg-white p-3 rounded-xl border border-earth-200 shadow-xs">
@@ -1294,7 +1294,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
 
               {/* Dynamic Alerts (Pest Warnings) */}
               {alerts.length > 0 ? (
-                alerts.map((al) => (
+                (translatedAlerts.length > 0 ? translatedAlerts : alerts).map((al) => (
                   <div key={al.id} className={`flex gap-4 items-start p-4 rounded-xl border ${
                     al.severity === 'Critical' ? 'bg-high-light border-high-dark/10' : 'bg-elevated-light border-elevated-dark/10'
                   }`}>
@@ -1467,115 +1467,278 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
 
 
 
-      case 'risk-detail':
-        const normalIncome = cashFlow?.projected_net_income || 95000;
-        const currentIncome = cashFlow?.projected_net_income || 62000;
-        const stressIncome = Math.round(currentIncome * 0.7);
+      case 'risk-detail': {
+        const normalIncome   = cashFlow?.projected_net_income || 95000;
+        const currentIncome  = cashFlow?.projected_net_income || 62000;
+        const stressIncome   = Math.round(currentIncome * 0.7);
         const totalObligations = cashFlow?.total_obligations || 0;
-        
+
         const getRatioText = (inc: number, ob: number) => {
-          if (ob === 0) return "N/A (No Debt)";
+          if (ob === 0) return 'N/A (No Debt)';
           const r = inc / ob;
-          if (r >= 1.2) return `${r.toFixed(2)}x (Secure)`;
-          if (r >= 1.0) return `${r.toFixed(2)}x (Tight)`;
-          return `${r.toFixed(2)}x (Deficit)`;
+          if (r >= 1.2) return `${r.toFixed(2)}× (Secure)`;
+          if (r >= 1.0) return `${r.toFixed(2)}× (Tight)`;
+          return `${r.toFixed(2)}× (Deficit)`;
+        };
+        const getRatioColor = (inc: number, ob: number) => {
+          if (ob === 0) return 'text-stable';
+          const r = inc / ob;
+          if (r >= 1.2) return 'text-stable';
+          if (r >= 1.0) return 'text-watch';
+          return 'text-high';
         };
 
-        const getRatioColor = (inc: number, ob: number) => {
-          if (ob === 0) return "text-stable";
-          const r = inc / ob;
-          if (r >= 1.2) return "text-stable";
-          if (r >= 1.0) return "text-watch";
-          return "text-high";
-        };
+        // 5-pillar data from distressData
+        const pillars = [
+          {
+            key: 'weather',
+            label: '🌦️ Weather Risk',
+            score: distressData?.weather_component ?? null,
+            weight: '25%',
+            color: '#3b82f6',
+            what: 'Measures cumulative rainfall deficit/surplus and temperature extremes over the past 30 days relative to seasonal norms.',
+            how: 'Score = max(0, min(100, |(Actual Rain − Expected Rain)| / Expected × 100 + TempDeviation × 2))',
+            causes: [
+              'Rainfall deficit >30% from seasonal average',
+              'Heatwave days (>40°C) during crop growth',
+              'Excess rainfall >50% causing waterlogging risk',
+              'High humidity (>80%) sustained for >3 days',
+            ],
+          },
+          {
+            key: 'market',
+            label: '📉 Market Risk',
+            score: distressData?.market_component ?? null,
+            weight: '25%',
+            color: '#f97316',
+            what: `Tracks price crash severity for the farmer's crops vs. the 30-day rolling average at nearest mandis.`,
+            how: 'Score = max(0, min(100, Price Drop % × 2.5)) summed across all crops × weighted by area',
+            causes: [
+              'Tomato/onion price crash >15% in 7 days',
+              'Bumper harvest in nearby districts (supply glut)',
+              'Transport strike affecting mandi arrivals',
+              'Import of competing produce reducing prices',
+            ],
+          },
+          {
+            key: 'yield',
+            label: '🌾 Yield Risk',
+            score: distressData?.yield_component ?? null,
+            weight: '20%',
+            color: '#22c55e',
+            what: 'Predicts yield deviation from baseline using weather anomalies, pest alerts, and crop growth stage.',
+            how: 'Score = Σ (Stage Risk Factor × Weather Anomaly × Pest Alert Weight) across all active crops',
+            causes: [
+              'Active pest/disease alert (Late Blight, aphids)',
+              'Waterlogging during flowering stage',
+              'Heat stress above 40°C at fruit development',
+              'Insufficient irrigation during critical stages',
+            ],
+          },
+          {
+            key: 'financial',
+            label: '💰 Financial Pressure',
+            score: distressData?.financial_component ?? null,
+            weight: '20%',
+            color: '#ef4444',
+            what: 'Evaluates upcoming loan obligations vs. projected income under current and stress scenarios.',
+            how: 'Score = max(0, 100 − (Projected Income / Total Obligations × 50))',
+            causes: [
+              'KCC loan or input credit due within 30 days',
+              'Projected income below obligation amount',
+              'Multiple overlapping debt deadlines',
+              'Rising input costs (fertiliser, diesel) reducing margins',
+            ],
+          },
+          {
+            key: 'urgency',
+            label: '⏰ Urgency Factor',
+            score: distressData?.urgency_component ?? null,
+            weight: '10%',
+            color: '#a855f7',
+            what: 'Time-pressure amplifier — obligations due within 15 days increase the overall distress score significantly.',
+            how: 'Score = (Obligations due <7 days × 30) + (Obligations due 7–15 days × 20) + (Obligations due 15–30 days × 10)',
+            causes: [
+              'Input credit due within 5 days',
+              'KCC loan approaching deadline',
+              'Multiple obligations within the same 2-week window',
+              'Harvest not yet complete before obligation date',
+            ],
+          },
+        ];
+
+        const overallScore = distressData?.score ?? null;
+        const riskLevel = distressData?.risk_level ?? 'Unknown';
+        const riskBg = riskLevel === 'Critical' ? 'bg-high' : riskLevel === 'High' ? 'bg-high' :
+                       riskLevel === 'Elevated' ? 'bg-watch' : riskLevel === 'Watch' ? 'bg-elevated' : 'bg-stable';
 
         return (
-          <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6 text-left">
-            <button onClick={() => setActiveTab('home')} className="text-xs font-semibold text-slate-500 hover:underline">← Back to Home</button>
-            <div className="flex justify-between items-center flex-wrap gap-2">
-              <h2 className="text-xl font-bold my-0">Farm Financial Resilience</h2>
-              <span className={`text-white text-xs font-bold px-3 py-1 rounded-full uppercase ${
-                cashFlow?.has_shortfall ? 'bg-high' : 'bg-stable'
-              }`}>
-                {cashFlow?.has_shortfall ? 'Deficit Risk' : 'Resilient'}
-              </span>
+          <div className="p-4 md:p-6 space-y-6 text-left">
+            <button onClick={() => setActiveTab('home')} className="text-xs font-semibold text-slate-500 hover:underline flex items-center gap-1">
+              ← Back to Home
+            </button>
+
+            {/* ── Overall Score Card ── */}
+            <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-5 shadow-lg">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-xs text-slate-400 uppercase font-bold tracking-widest">Composite Distress Score</p>
+                  <div className="flex items-end gap-2 mt-1">
+                    <span className="text-5xl font-black">{overallScore !== null ? Math.round(overallScore) : '—'}</span>
+                    <span className="text-slate-400 text-sm pb-1.5">/100</span>
+                  </div>
+                </div>
+                <div className={`${riskBg} px-4 py-2 rounded-xl text-sm font-black uppercase tracking-wide shadow`}>
+                  {riskLevel}
+                </div>
+              </div>
+              {/* Overall bar */}
+              <div className="h-3 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: `${Math.min(overallScore ?? 0, 100)}%`,
+                    background: overallScore !== null && overallScore >= 75 ? '#ef4444' :
+                                overallScore !== null && overallScore >= 55 ? '#f97316' :
+                                overallScore !== null && overallScore >= 40 ? '#f59e0b' : '#22c55e',
+                  }}
+                />
+              </div>
+              <p className="text-[10px] text-slate-400 mt-2">
+                Formula: Distress Score = Weather(25%) + Market(25%) + Yield(20%) + Financial(20%) + Urgency(10%)
+              </p>
             </div>
 
-            <div className="p-4 bg-earth-50 rounded-xl border border-earth-200 text-xs">
-              📊 **Resilience Definition:** Estimates whether expected farm earnings cover upcoming financial obligations under normal, current, and stressed scenarios.
+            {/* ── 5-Pillar Breakdown ── */}
+            <div className="space-y-3">
+              <h3 className="font-bold text-slate-900 text-base">Pillar-Level Breakdown</h3>
+              {pillars.map(p => (
+                <div key={p.key} className="bg-white rounded-2xl border border-earth-100 shadow-xs overflow-hidden">
+                  {/* Pillar header */}
+                  <div className="flex items-center justify-between p-4 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-slate-900">{p.label}</span>
+                      <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full font-semibold">{p.weight} weight</span>
+                    </div>
+                    <span className="text-xl font-black" style={{ color: p.color }}>
+                      {p.score !== null ? Math.round(p.score) : '—'}
+                    </span>
+                  </div>
+                  {/* Progress bar */}
+                  <div className="px-4 pb-2">
+                    <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${Math.min(p.score ?? 0, 100)}%`, background: p.color }}
+                      />
+                    </div>
+                  </div>
+                  {/* Detail */}
+                  <details className="group">
+                    <summary className="px-4 pb-3 text-[11px] text-stable font-semibold cursor-pointer hover:underline list-none flex items-center gap-1">
+                      <span className="group-open:hidden">▶ What drives this?</span>
+                      <span className="hidden group-open:inline">▼ Hide detail</span>
+                    </summary>
+                    <div className="px-4 pb-4 space-y-3 border-t border-earth-50 pt-3">
+                      <div>
+                        <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">What it measures</p>
+                        <p className="text-xs text-slate-700">{p.what}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Calculation</p>
+                        <code className="text-[10px] text-stable-dark bg-earth-50 px-2 py-1 rounded-lg block font-mono">{p.how}</code>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Common causes</p>
+                        <ul className="space-y-1">
+                          {p.causes.map((c, i) => (
+                            <li key={i} className="text-xs text-slate-600 flex gap-1.5"><span className="text-slate-300">•</span>{c}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              ))}
             </div>
 
-            {/* Scenarios Table */}
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Scenario</th>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Projected Net Income</th>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Obligations Due</th>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Coverage Ratio</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  <tr className="bg-white">
-                    <td className="px-4 py-3 font-semibold">Normal Baseline</td>
-                    <td className="px-4 py-3 font-mono">₹{normalIncome}</td>
-                    <td className="px-4 py-3 font-mono">₹{totalObligations}</td>
-                    <td className={`px-4 py-3 font-bold ${getRatioColor(normalIncome, totalObligations)}`}>
-                      {getRatioText(normalIncome, totalObligations)}
-                    </td>
-                  </tr>
-                  <tr className="bg-white">
-                    <td className="px-4 py-3 font-semibold">Current Forecast</td>
-                    <td className="px-4 py-3 font-mono">₹{currentIncome}</td>
-                    <td className="px-4 py-3 font-mono">₹{totalObligations}</td>
-                    <td className={`px-4 py-3 font-bold ${getRatioColor(currentIncome, totalObligations)}`}>
-                      {getRatioText(currentIncome, totalObligations)}
-                    </td>
-                  </tr>
-                  <tr className="bg-high-light font-semibold">
-                    <td className="px-4 py-3 font-bold text-high-dark">Stress Scenario (-30%)</td>
-                    <td className="px-4 py-3 text-high-dark font-mono">₹{stressIncome}</td>
-                    <td className="px-4 py-3 text-high-dark font-mono">₹{totalObligations}</td>
-                    <td className={`px-4 py-3 font-extrabold ${getRatioColor(stressIncome, totalObligations)}`}>
-                      {getRatioText(stressIncome, totalObligations)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            {/* ── Financial Scenarios Table ── */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold text-slate-900 my-0">Financial Resilience Scenarios</h3>
+                <span className={`text-white text-xs font-bold px-3 py-1 rounded-full uppercase ${cashFlow?.has_shortfall ? 'bg-high' : 'bg-stable'}`}>
+                  {cashFlow?.has_shortfall ? 'Deficit Risk' : 'Resilient'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">Shows whether projected farm income covers your upcoming loan/input obligations under 3 scenarios.</p>
+              <div className="overflow-x-auto rounded-xl border border-earth-100">
+                <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Scenario</th>
+                      <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Net Income</th>
+                      <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Obligations</th>
+                      <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Coverage</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {[
+                      { label: '📈 Normal Baseline', inc: normalIncome, cls: '' },
+                      { label: '🌤 Current Forecast', inc: currentIncome, cls: '' },
+                      { label: '⚠️ Stress (−30%)', inc: stressIncome, cls: 'bg-high-light' },
+                    ].map(row => (
+                      <tr key={row.label} className={row.cls}>
+                        <td className="px-4 py-3 font-semibold text-xs">{row.label}</td>
+                        <td className="px-4 py-3 font-mono text-xs">₹{row.inc.toLocaleString('en-IN')}</td>
+                        <td className="px-4 py-3 font-mono text-xs">₹{totalObligations.toLocaleString('en-IN')}</td>
+                        <td className={`px-4 py-3 font-bold text-xs ${getRatioColor(row.inc, totalObligations)}`}>
+                          {getRatioText(row.inc, totalObligations)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
-            {/* Obligations Section */}
-            <div className="space-y-4 pt-4 border-t border-slate-100">
+            {/* ── Obligations ── */}
+            <div className="space-y-3 pt-2 border-t border-slate-100">
               <div className="flex justify-between items-center">
-                <h3 className="text-base font-bold text-slate-900 my-0">Upcoming Financial Obligations</h3>
-                <button 
+                <h3 className="text-base font-bold text-slate-900 my-0">Upcoming Obligations</h3>
+                <button
                   onClick={() => setShowAddObligationModal(true)}
                   className="px-3 py-1 bg-stable text-white hover:bg-stable-dark rounded-lg text-xs font-bold transition-all"
-                >
-                  + Add Obligation
-                </button>
+                >+ Add</button>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {cashFlow?.obligations && cashFlow.obligations.length > 0 ? (
-                  cashFlow.obligations.map((ob: any) => (
-                    <div key={ob.id} className="p-4 rounded-xl border border-earth-200 bg-white flex justify-between items-center shadow-xs">
-                      <div>
-                        <span className="text-[9px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full uppercase">{ob.type}</span>
-                        <h4 className="font-bold text-slate-800 text-sm mt-1 mb-0">₹{ob.amount}</h4>
-                        <p className="text-slate-400 text-[10px] mt-0.5 mb-0">Due Date: {ob.due_date}</p>
+                  cashFlow.obligations.map((ob: any) => {
+                    const dueDate = new Date(ob.due_date);
+                    const daysLeft = Math.ceil((dueDate.getTime() - Date.now()) / 86400000);
+                    const urgent = daysLeft <= 7;
+                    return (
+                      <div key={ob.id} className={`p-4 rounded-xl border flex justify-between items-center shadow-xs ${urgent ? 'bg-high-light border-high-dark/10' : 'bg-white border-earth-200'}`}>
+                        <div>
+                          <span className="text-[9px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full uppercase">{ob.type}</span>
+                          <h4 className="font-bold text-slate-800 text-sm mt-1 mb-0">₹{Number(ob.amount).toLocaleString('en-IN')}</h4>
+                          <p className="text-slate-400 text-[10px] mt-0.5">
+                            Due: {ob.due_date} · <span className={urgent ? 'text-high font-bold' : 'text-slate-400'}>{daysLeft > 0 ? `${daysLeft} days` : 'Overdue'}</span>
+                          </p>
+                        </div>
+                        <span className={`p-2 rounded-lg ${urgent ? 'text-high bg-high-light' : 'text-elevated bg-elevated-light'}`}>
+                          <AlertTriangle size={18} />
+                        </span>
                       </div>
-                      <span className="text-high bg-high-light p-2 rounded-lg"><AlertTriangle size={18} /></span>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
-                  <p className="text-slate-400 text-xs py-2">No debt obligations registered. Your cash flows are fully unencumbered!</p>
+                  <p className="text-slate-400 text-xs py-2 col-span-2">No debt obligations registered. Cash flows are unencumbered.</p>
                 )}
               </div>
             </div>
           </div>
         );
+      }
       case 'profile':
         return (
           <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">

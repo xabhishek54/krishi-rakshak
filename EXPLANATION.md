@@ -205,3 +205,85 @@ export DATABASE_URL=postgresql://user:password@host:port/db
 ```
 
 SQLAlchemy switches to PostgreSQL automatically. All FK relations and migrations are production-ready.
+
+---
+
+## New Features (2026-08-23 Update)
+
+### 13. Instant Voice Q&A — "Farm AI" (`handleInstantMic`)
+- The voice button now opens instantly into listening mode with zero modals.
+- **Pipeline**: tap mic → browser SpeechRecognition starts (no confirmation needed) → farmer speaks → transcript sent to Gemini 3.1 Flash Lite with full farm context (crops, weather, advisories, distress) → answer text → translated to farmer language → spoken via Web Speech API.
+- Floating overlay card shows: waveform animation (listening), "Thinking…" indicator, answer text, "Play again" button.
+- Branding: never says "Gemini". UI labels it "Farm AI" or "Farm Advisor".
+- Fallback: if SpeechRecognition not available in browser, falls back to reading advisory text aloud.
+
+### 14. Distress Score 5-Pillar Detail View (`risk-detail` tab)
+The risk-detail tab now shows full transparency into how distress is calculated:
+
+**Overall Score Card**: dark gradient card with animated bar, shows composite score prominently.
+
+**5 Pillars** (expandable cards with `<details>` element):
+| Pillar | Weight | What it measures |
+|--------|--------|-----------------|
+| 🌦️ Weather Risk | 25% | Rainfall deficit/surplus + temperature extremes vs seasonal norms |
+| 📉 Market Risk | 25% | Price crash severity vs 30-day rolling mandi average |
+| 🌾 Yield Risk | 20% | ML yield deviation from baseline (RandomForest model) |
+| 💰 Financial Pressure | 20% | Loan/obligation coverage gap vs projected income |
+| ⏰ Urgency Factor | 10% | Time-pressure amplifier for near-deadline obligations |
+
+Each pillar shows: current score (animated bar), what it measures (plain language), calculation formula (monospace), common causes (bullet list).
+
+**Financial Scenarios Table**: 3 rows — Normal / Current / Stress(−30%) — each showing net income, total obligations, coverage ratio (x.xx×).
+
+**Obligation Cards**: show ₹ amount, type, due date, days remaining. Cards due ≤7 days are highlighted red.
+
+### 15. Advisory Engine — Real Condition Matching
+The advisory engine now fires based on real monsoon conditions:
+- **humidity_min**: fires when observed humidity exceeds threshold (real today's observation)
+- **rain_probability_min**: fires when forecast rain probability exceeds threshold
+- **temperature_min**: fires when temperature is below threshold
+- **Empty conditions `{}`**: unconditional rule — fires for any farm with that crop at that stage, every time
+
+Current Nashik weather (27°C, 71% humidity, 69% rain probability) generates 3 real advisories:
+1. **[MEDIUM] crop_management**: Monitor tomato fruit quality — unconditional stage advisory
+2. **[HIGH] pest**: Apply preventive fungicide to tomato — humidity >70% triggers monsoon fungal risk
+3. **[HIGH] irrigation**: Reduce tomato irrigation — rain probability >60%
+
+### 16. Community District Risk Map (`community` tab)
+- New tab showing anonymised district-level distress aggregates.
+- Backend: SQL aggregate (avg distress score by district, joined from Farm.district).
+- Frontend: coloured district cards (Critical=red, High=orange, Elevated=yellow, Stable=green) with animated score bars.
+- Live data: Nashik 35.8/100 (Watch, 3 farmers), Rourkela 26.5/100 (Watch, 1 farmer).
+- Privacy: only aggregated scores shared, no individual farmer data.
+
+### 17. Agmarknet Background Price Fetch (Phase 19)
+- `background_fetch_and_store()` runs at server startup via `asyncio.create_task()`.
+- Uses `asyncio.to_thread()` to run the blocking HTTP request in a thread pool.
+- Fetches live modal/min/max prices for tomato, onion, wheat, potato, maize from Agmarknet API.
+- Stores to `market_prices` table with `source='agmarknet_live'`.
+- Manual refresh: `POST /api/v1/market/refresh-live-prices` (authenticated).
+
+### 18. Translation Wired to All Advisory/Alert Renders
+- `translatedAdvisories` and `translatedAlerts` are now actually used in all 3 render locations.
+- Fallback: if translation hasn't loaded yet, renders raw English text.
+- Language change → useEffect re-translates all advisory recommendation + reason fields.
+
+### 19. Demo Account (Fully Engine-Driven)
+Credentials: `+919876543210` / `demo1234`
+
+| Field | Value |
+|-------|-------|
+| Name | Ramesh Patil |
+| Language | Marathi |
+| Location | Nashik, Maharashtra |
+| Farm 1 | Nashik Main Farm — 3.5 acres, loam, drip |
+| Farm 2 | Pimpalgaon Plot — 1.8 acres, black cotton, sprinkler |
+| Crop 1 | Tomato (Namdhari NS-585) — 52 days, Fruit Development |
+| Crop 2 | Onion (Nasik Red) — 35 days, Vegetative Growth |
+| Crop 3 | Wheat (HD-2967) — 20 days, Germination |
+| Obligation 1 | ₹45,000 KCC loan repayment (18 days) |
+| Obligation 2 | ₹12,000 input credit (5 days) |
+| Weather | Live from Open-Meteo: 27°C, 71% humidity, 1.3mm rain |
+| Advisories | 3 real advisories from rule engine |
+| Distress | 40.4/100 Elevated (real computation) |
+

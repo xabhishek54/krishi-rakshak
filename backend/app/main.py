@@ -703,3 +703,95 @@ def get_district_risk(db: Session = Depends(get_db)):
         }
         for r in rows
     ]
+
+
+# ── Phase 25: Yield Calculator ───────────────────────────────────────────────
+
+# Baseline yields in quintals/acre (conservative estimates for India)
+BASELINE_YIELD = {
+    "tomato": 80.0,   # q/acre
+    "wheat":  16.0,
+    "onion":  60.0,
+    "potato": 100.0,
+    "maize":  18.0,
+    "rice":   20.0,
+    "cotton": 7.0,
+    "soybean": 8.0,
+}
+
+@app.post("/api/v1/yield/estimate")
+def estimate_yield(
+    crop_type: str,
+    area_acres: float,
+    rainfall_deviation: float = 0.0,   # % vs seasonal avg (negative = deficit)
+    temp_deviation: float = 0.0,        # degrees C vs normal
+    soil_type: str = "loam",
+    irrigation_type: str = "drip",
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+    db: Session = Depends(get_db),
+):
+    """
+    Phase 25: Yield Calculator.
+    Returns estimated yield, projected revenue, and scenario range for the given crop + inputs.
+    """
+    # 1. Predict yield deviation using ML model
+    deviation_pct = predict_yield_deviation(
+        crop_type=crop_type,
+        soil_type=soil_type,
+        irrigation_type=irrigation_type,
+        rainfall_deviation=rainfall_deviation,
+        temp_deviation=temp_deviation,
+    )
+
+    # 2. Baseline yield (q/acre)
+    baseline_q_per_acre = BASELINE_YIELD.get(crop_type.lower(), 15.0)
+
+    # 3. Current estimated yield
+    current_q_per_acre = baseline_q_per_acre * (1 + deviation_pct / 100)
+    current_q_per_acre = max(0.0, round(current_q_per_acre, 2))
+
+    # 4. Total yield
+    total_q = round(current_q_per_acre * area_acres, 2)
+
+    # 5. Get current mandi modal price for this crop (nearest available)
+    mandi_price_row = (
+        db.query(models.MarketPrice)
+        .filter(models.MarketPrice.crop.ilike(f"%{crop_type}%"))
+        .order_by(models.MarketPrice.date.desc())
+        .first()
+    )
+    modal_price_per_q = mandi_price_row.modal_price if mandi_price_row else 2000.0
+    price_source = "Agmarknet (live)" if mandi_price_row else "Default estimate"
+
+    # 6. Revenue projection
+    gross_revenue = round(total_q * modal_price_per_q, 2)
+
+    # 7. Scenario range (±15%)
+    best_q = round(total_q * 1.15, 2)
+    worst_q = round(total_q * 0.85, 2)
+    best_rev = round(best_q * modal_price_per_q, 2)
+    worst_rev = round(worst_q * modal_price_per_q, 2)
+
+    return {
+        "crop_type": crop_type,
+        "area_acres": area_acres,
+        "soil_type": soil_type,
+        "irrigation_type": irrigation_type,
+        "rainfall_deviation_pct": rainfall_deviation,
+        "temp_deviation_c": temp_deviation,
+        # Yield outputs
+        "baseline_yield_q_per_acre": baseline_q_per_acre,
+        "yield_deviation_pct": deviation_pct,
+        "estimated_yield_q_per_acre": current_q_per_acre,
+        "estimated_total_yield_q": total_q,
+        # Revenue outputs
+        "modal_price_per_q": modal_price_per_q,
+        "price_source": price_source,
+        "projected_gross_revenue": gross_revenue,
+        # Scenario range
+        "scenario": {
+            "best": {"yield_q": best_q, "revenue": best_rev},
+            "base": {"yield_q": total_q, "revenue": gross_revenue},
+            "worst": {"yield_q": worst_q, "revenue": worst_rev},
+        },
+    }
