@@ -921,7 +921,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                         : f.latitude ? `${f.latitude.toFixed(2)}°N ${f.longitude?.toFixed(2)}°E` : '';
                       return (
                         <option key={f.id} value={f.id}>
-                          Farm #{i+1} ({f.area} Ac · {f.soil_type.toUpperCase()}{loc ? ' · ' + loc : ''})
+                          Farm #{i+1} ({f.area} Ac · {(f.soil_type || 'loam').toUpperCase()}{loc ? ' · ' + loc : ''})
                         </option>
                       );
                     })}
@@ -941,7 +941,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                       className="text-xs font-bold px-3 py-1.5 rounded-lg border border-earth-200 bg-earth-50 focus:outline-none w-full"
                     >
                       {crops.map((cr) => (
-                        <option key={cr.id} value={cr.id}>{cr.crop_type.toUpperCase()} ({cr.variety || 'Local'})</option>
+                        <option key={cr.id} value={cr.id}>{(cr.crop_type || '').toUpperCase()} ({cr.variety || 'Local'})</option>
                       ))}
                     </select>
                   ) : (
@@ -1519,7 +1519,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                     </span>
                   )}
                   <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 mt-0.5 border ${getSchemeColor(scheme.support_type)}`}>
-                    {scheme.support_type.split('(')[0].trim()}
+                    {(scheme.support_type || '').split('(')[0].trim()}
                   </span>
                   {scheme.state !== 'All' && (
                     <span className="text-[9px] bg-earth-100 text-earth-dark font-bold px-2 py-0.5 rounded-full uppercase shrink-0 mt-0.5">
@@ -2693,7 +2693,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               onChange={(e) => setLanguage(e.target.value as any)}
               className="text-xs font-bold px-3 py-1.5 rounded-xl border border-earth-200 bg-white text-slate-600 focus:outline-none"
             >
-              {Object.entries(LANGUAGES).map(([key, name]) => (
+              {Object.entries({ english: '🇬🇧 English', hindi: '🇮🇳 Hindi', marathi: '🇮🇳 Marathi', bengali: '🇮🇳 Bengali', odia: '🇮🇳 Odia' }).map(([key, name]) => (
                 <option key={key} value={key}>{name}</option>
               ))}
             </select>
