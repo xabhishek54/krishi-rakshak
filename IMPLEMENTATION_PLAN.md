@@ -221,3 +221,10 @@ Last updated: 2026-08-23T12:05 IST
 - All React hooks at top-level component scope (no hooks-in-switch violations)
 - SW registered and caching on page load
 - Demo account verified: `+919876543210` / `demo1234`
+
+### Phase 27 Completed — Grouping, RADIO & Seeding Upgrades (2026-08-23)
+- **Crop Grouping**: Combined multiple plantings of the same crop type under a single type card, with expandable details per planting.
+- **Inline Crop Deletions**: Allowed deleting plantings directly from the details list inside the My Crops tab.
+- **RADIO Voice**: Renamed voice assistant to RADIO/KrishiRadio, replaced mic with Radio icon, and added fallback toast notifications for transcription/network errors.
+- **Header Refresh Icon**: Added a manual sync button in the global top header, and background auto-refresh checking (15m interval) on startup.
+- **Upgraded Demo Seeder**: Re-architected seeder to write directly to SQLite via SQLAlchemy on startup, seeding 5 farms, 6 crops (with duplicate Tomato plantings to test grouping), and 4 obligations.

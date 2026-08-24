@@ -16,6 +16,7 @@ export interface Translations {
   homeDistressCard: string;
   homeWhatToDo: string;
   homeNoAdvisories: string;
+  homeRecommendedActions: string;
 
   // Crop tab
   cropTitle: string;

@@ -55,12 +55,15 @@ KrishiRakshak unifies these risk signals into a single **Distress Score** and se
 - Retrieves 7-day hourly precipitation + temperature forecasts.
 - Computes rainfall deficit vs. 40mm weekly expected baseline.
 - Cached to DB; re-fetched via `POST /api/v1/weather/{location_id}/refresh`.
+- **Top Header Manual Refresh**: Manual sync icon in global top header triggers live updates.
+- **Background Auto-Refresh**: Dynamically triggers live background refresh on startup if cached weather is older than 15 minutes.
 
 ### 2. Advisory & Pest Rule Engine (`advisory.py`)
 - **Deterministic rule-based** (not LLM): crop type + growth stage + rainfall thresholds → recommendation.
 - Growth stage derived from sowing date (days since planting → mapped to stages).
 - Pest risk: 3-day cumulative rainfall + temperature range triggers species-specific alerts.
-- Advisory now generated **per (farm, crop) pair** — all crops shown simultaneously.
+- **Crop Grouping Layout**: Grouped by crop type (e.g. Tomato card) showing total acreage and plantings. Expands to list specific planting details (variety, farm name, stage, sowing days ago, advisory warnings).
+- **Inline Delete**: Deletes individual planting records directly within the My Crops tab layout.
 
 ### 3. APMC Mandi Economics (`mandi.py`)
 - **Net Return = Modal Price − Transport Cost − Mandi Commission (2%)**
@@ -210,12 +213,12 @@ SQLAlchemy switches to PostgreSQL automatically. All FK relations and migrations
 
 ## New Features (2026-08-23 Update)
 
-### 13. Instant Voice Q&A — "Farm AI" (`handleInstantMic`)
-- The voice button now opens instantly into listening mode with zero modals.
-- **Pipeline**: tap mic → browser SpeechRecognition starts (no confirmation needed) → farmer speaks → transcript sent to Gemini 3.1 Flash Lite with full farm context (crops, weather, advisories, distress) → answer text → translated to farmer language → spoken via Web Speech API.
-- Floating overlay card shows: waveform animation (listening), "Thinking…" indicator, answer text, "Play again" button.
-- Branding: never says "Gemini". UI labels it "Farm AI" or "Farm Advisor".
-- Fallback: if SpeechRecognition not available in browser, falls back to reading advisory text aloud.
+### 13. Instant Voice Q&A — "KrishiRadio" (`handleInstantMic`)
+- The voice button now opens instantly into listening mode branded as **KrishiRadio** / **RADIO**.
+- **Pipeline**: tap RADIO → browser SpeechRecognition starts (no confirmation needed) → farmer speaks → transcript sent to Gemini 3.1 Flash Lite with full farm context (crops, weather, advisories, distress) → answer text → translated to farmer language → spoken via Web Speech API.
+- Floating overlay card shows: waveform animation (listening), "Broadcasting…" indicator, answer text, "Play again" button.
+- Branding: never says "Gemini". UI labels it "KrishiRadio" or "RADIO Advisor".
+- Fallback: if SpeechRecognition not available in browser, falls back to reading advisory text aloud. Automatically opens the voice assistant chat panel on network errors so user can type.
 
 ### 14. Distress Score 5-Pillar Detail View (`risk-detail` tab)
 The risk-detail tab now shows full transparency into how distress is calculated:
@@ -268,22 +271,29 @@ Current Nashik weather (27°C, 71% humidity, 69% rain probability) generates 3 r
 - Fallback: if translation hasn't loaded yet, renders raw English text.
 - Language change → useEffect re-translates all advisory recommendation + reason fields.
 
-### 19. Demo Account (Fully Engine-Driven)
-Credentials: `+919876543210` / `demo1234`
+### 19. Demo Account (Fully Engine-Driven Seeding)
+Credentials: `+919876543210` / `demo1234` (Use the "🚜 Try Demo Account" button to pre-fill instantly)
 
 | Field | Value |
 |-------|-------|
 | Name | Ramesh Patil |
 | Language | Marathi |
 | Location | Nashik, Maharashtra |
-| Farm 1 | Nashik Main Farm — 3.5 acres, loam, drip |
-| Farm 2 | Pimpalgaon Plot — 1.8 acres, black cotton, sprinkler |
+| Farm 1 | Nashik Main Farm — 4.5 acres, loam, drip |
+| Farm 2 | Pimpalgaon Plot — 3.0 acres, black cotton, sprinkler |
+| Farm 3 | Jalgaon Banana Orchard — 5.5 acres, clay, flood |
+| Farm 4 | Nagpur Cotton Field — 6.0 acres, black cotton, rainfed |
+| Farm 5 | Pune Vegetable Garden — 2.5 acres, sandy loam, drip |
 | Crop 1 | Tomato (Namdhari NS-585) — 52 days, Fruit Development |
 | Crop 2 | Onion (Nasik Red) — 35 days, Vegetative Growth |
-| Crop 3 | Wheat (HD-2967) — 20 days, Germination |
+| Crop 3 | Wheat (HD-2967) — 20 days, Tillering |
+| Crop 4 | Grapes (Thompson Seedless) — 120 days, Maturity |
+| Crop 5 | Cotton (BT Cotton) — 75 days, Fruit Development |
+| Crop 6 | Tomato (Abhinav) — 10 days, Germination |
 | Obligation 1 | ₹45,000 KCC loan repayment (18 days) |
 | Obligation 2 | ₹12,000 input credit (5 days) |
-| Weather | Live from Open-Meteo: 27°C, 71% humidity, 1.3mm rain |
-| Advisories | 3 real advisories from rule engine |
-| Distress | 40.4/100 Elevated (real computation) |
-
+| Obligation 3 | ₹15,000 tractor lease (25 days) |
+| Obligation 4 | ₹6,000 labor wages (3 days) |
+| Weather | Live/Seeded weather: observations for Nashik, Jalgaon, Nagpur, Pune |
+| Advisories | Multi-farm advisories generated from the real-time rule engine |
+| Distress | Real calculated scores based on multi-farm scenarios |

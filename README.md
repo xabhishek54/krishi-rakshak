@@ -51,3 +51,9 @@ npm run dev
 ```
 
 Once started, the frontend application will be accessible at `http://localhost:5173`. It is designed mobile-first, but is fully responsive across tablet and desktop breakpoints.
+
+# Backend
+cd backend && .venv/bin/python -m uvicorn app.main:app --reload --port 8000
+
+# Frontend (new terminal)
+cd frontend && npm run dev -- --port 5173
