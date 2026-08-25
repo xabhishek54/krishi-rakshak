@@ -1199,551 +1199,415 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                               <p className="text-[11px] text-slate-400 my-0">29°C · 20% rain prob.</p>
                             </div>
                           </div>
-                          <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                            Suitable for farm work
-                          </span>
+                    onClick={() => setActiveTab('market')}
+                    className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm hover:border-stable transition-colors text-left flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="text-elevated mb-1 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <ShoppingCart size={24} />
+                          <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider my-0">{t.marketTitle}</h3>
                         </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Secondary Grid: Market Economics & Distress Score */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <button 
-                  onClick={() => setActiveTab('market')}
-                  className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm hover:border-stable transition-colors text-left flex items-center justify-between"
-                >
-                  <div>
-                    <div className="text-elevated mb-1 flex items-center gap-2">
-                      <ShoppingCart size={24} />
-                      <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider my-0">{t.marketTitle}</h3>
+                        <ChevronRight size={18} className="text-slate-400" />
+                      </div>
+                      <p className="text-slate-500 text-[11px] font-medium my-0">
+                        📍 {selectedCrop ? capitalize(selectedCrop.crop_type) : 'Tomato'} · Pimpalgaon Mandi
+                      </p>
+                      <p className="text-slate-900 text-2xl font-extrabold mt-2 my-0">
+                        ₹{mandiPrices.length > 0 ? mandiPrices[0].modal_price : '2,290'} <span className="text-xs font-normal text-slate-500">/q</span>
+                      </p>
                     </div>
-                    <p className="text-slate-900 text-xl font-extrabold mt-1 my-0">
-                      ₹{mandiPrices.length > 0 ? mandiPrices[0].modal_price : '2,290'} <span className="text-xs font-normal text-slate-500">/q</span>
-                    </p>
-                    <span className="text-high text-[10px] font-bold mt-1 inline-flex items-center gap-0.5">
-                      <TrendingDown size={12} /> Price Crash (-22%)
+                    <span className="text-high text-[10px] font-bold mt-3 inline-flex items-center gap-0.5">
+                      <TrendingDown size={12} /> Price Crash Alert (-22% drop)
                     </span>
-                  </div>
-                  <ChevronRight size={20} className="text-slate-400" />
-                </button>
+                  </button>
 
-                <div 
-                  onClick={() => setActiveTab('risk-detail')}
-                  className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-colors flex items-center justify-between ${
-                    distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High'
-                      ? 'bg-high-light border-high-dark/20 hover:bg-high-light/80'
-                      : distressData?.risk_level === 'Elevated'
-                      ? 'bg-watch-light border-watch-dark/20 hover:bg-watch-light/80'
-                      : 'bg-stable-light border-stable-dark/20 hover:bg-stable-light/80'
-                  }`}
-                >
-                  <div>
-                    <div className={`mb-1 flex items-center gap-2 ${
-                      distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High' ? 'text-high' :
-                      distressData?.risk_level === 'Elevated' ? 'text-watch' : 'text-stable'
-                    }`}>
-                      <AlertTriangle size={24} />
-                      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600 my-0">{t.homeDistressCard}</h3>
+                  {/* Card 3: Distress Risk */}
+                  <div 
+                    onClick={() => setActiveTab('risk-detail')}
+                    className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-colors flex flex-col justify-between ${
+                      distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High'
+                        ? 'bg-high-light border-high-dark/20 hover:bg-high-light/80'
+                        : distressData?.risk_level === 'Elevated'
+                        ? 'bg-watch-light border-watch-dark/20 hover:bg-watch-light/80'
+                        : 'bg-stable-light border-stable-dark/20 hover:bg-stable-light/80'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className={`flex items-center gap-2 ${
+                          distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High' ? 'text-high' :
+                          distressData?.risk_level === 'Elevated' ? 'text-watch' : 'text-stable'
+                        }`}>
+                          <AlertTriangle size={24} />
+                          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600 my-0">{t.homeDistressCard}</h3>
+                        </div>
+                        <ChevronRight size={18} className="text-slate-400" />
+                      </div>
+                      <p className="text-slate-500 text-[11px] font-medium my-0">
+                        5-Pillar Multi-Risk Intelligence
+                      </p>
+                      <p className="text-slate-900 text-2xl font-extrabold mt-2 my-0">
+                        {distressData?.score ?? '38'} <span className="text-sm font-normal text-slate-500">/ 100</span>
+                      </p>
                     </div>
-                    <p className="text-slate-900 text-xl font-extrabold mt-1 my-0">
-                      {distressData?.score ?? '38'} <span className="text-sm font-normal text-slate-500">/ 100</span>
-                    </p>
-                    <span className={`text-white text-[9px] font-bold px-2 py-0.5 rounded-full mt-1.5 inline-block uppercase ${
+                    <span className={`text-white text-[9px] font-bold px-2 py-0.5 rounded-full mt-3 inline-block uppercase w-fit ${
                       distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High' ? 'bg-high' :
                       distressData?.risk_level === 'Elevated' ? 'bg-watch' :
                       distressData?.risk_level === 'Watch' ? 'bg-elevated' : 'bg-stable'
                     }`}>{distressData?.risk_level ?? 'Watch'}</span>
                   </div>
-                  <ChevronRight size={20} className="text-slate-400" />
+                </div>
+
+                {/* What should I do today section */}
+                <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
+                  <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-3 mb-4">{t.homeWhatToDo}</h3>
+                  <div className="space-y-4">
+                    {advisories.length > 0 ? (
+                      (translatedAdvisories.length > 0 ? translatedAdvisories : advisories).map((adv) => (
+                        <div key={adv.id} className="flex gap-4 items-start p-3 bg-earth-50 rounded-xl">
+                          <span className={`p-2 rounded-lg mt-0.5 text-white flex items-center justify-center ${
+                            adv.priority === 'high' ? 'bg-high' : adv.priority === 'medium' ? 'bg-elevated' : 'bg-stable'
+                          }`}><AlertTriangle size={18} /></span>
+                          <div>
+                            <h4 className="font-semibold text-sm text-slate-900">{adv.recommendation}</h4>
+                            <p className="text-slate-500 text-xs mt-0.5">{adv.reason}</p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-slate-400 text-sm py-2">No alerts or advisories for today. Your crops are in optimal condition!</p>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-
-            {/* What should I do today section */}
-            <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
-              <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-3 mb-4">{t.homeWhatToDo}</h3>
-              <div className="space-y-4">
-                {advisories.length > 0 ? (
-                  (translatedAdvisories.length > 0 ? translatedAdvisories : advisories).map((adv) => (
-                    <div key={adv.id} className="flex gap-4 items-start p-3 bg-earth-50 rounded-xl">
-                      <span className={`p-2 rounded-lg mt-0.5 text-white flex items-center justify-center ${
-                        adv.priority === 'high' ? 'bg-high' : adv.priority === 'medium' ? 'bg-elevated' : 'bg-stable'
-                      }`}><AlertTriangle size={18} /></span>
-                      <div>
-                        <h4 className="font-semibold text-sm text-slate-900">{adv.recommendation}</h4>
-                        <p className="text-slate-500 text-xs mt-0.5">{adv.reason}</p>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-slate-400 text-sm py-2">No alerts or advisories for today. Your crops are in optimal condition!</p>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      case 'crop': {
-        const cropStageColors: Record<string, string> = {
-          'Germination': 'bg-blue-500',
-          'Vegetative Growth': 'bg-green-500',
-          'Flowering': 'bg-yellow-500',
-          'Fruit Development': 'bg-orange-500',
-          'Maturity': 'bg-red-500',
-          'Harvest': 'bg-stable',
-        };
-        const getCropStageColor = (stage: string) => {
-          for (const [k, v] of Object.entries(cropStageColors)) {
-            if ((stage || '').includes(k.split(' ')[0])) return v;
-          }
-          return 'bg-slate-400';
-        };
-
-        const cropEmojis: Record<string, string> = {
-          tomato: '🍅', wheat: '🌾', rice: '🌾', onion: '🧅', potato: '🥔',
-          maize: '🌽', sugarcane: '🎋', cotton: '🌿', soybean: '🫘',
-          groundnut: '🥜', chilli: '🌶️', grapes: '🍇', banana: '🍌', mango: '🥭',
-        };
-
-        // Group crops by Crop Type
-        const cropsByType: Record<string, any[]> = {};
-        allCrops.forEach((c: any) => {
-          const key = (c.crop_type || 'unknown').toLowerCase();
-          if (!cropsByType[key]) cropsByType[key] = [];
-          cropsByType[key].push(c);
-        });
-
-        // Group crops by Farm ID
-        const cropsByFarm: Record<string, { farm: any; crops: any[] }> = {};
-        farms.forEach((f: any) => {
-          cropsByFarm[f.id] = { farm: f, crops: [] };
-        });
-        allCrops.forEach((c: any) => {
-          if (cropsByFarm[c.farm_id]) {
-            cropsByFarm[c.farm_id].crops.push(c);
-          } else {
-            cropsByFarm[c.farm_id] = {
-              farm: { id: c.farm_id, name: c.farm_name || `Farm ${c.farm_id}`, district: c.farm_district, area: c.farm_area },
-              crops: [c]
+            );
+          case 'crop': {
+            const cropStageColors: Record<string, string> = {
+              'Germination': 'bg-blue-500',
+              'Vegetative Growth': 'bg-green-500',
+              'Flowering': 'bg-yellow-500',
+              'Fruit Development': 'bg-orange-500',
+              'Maturity': 'bg-red-500',
+              'Harvest': 'bg-stable',
             };
-          }
-        });
+            const getCropStageColor = (stage: string) => {
+              for (const [k, v] of Object.entries(cropStageColors)) {
+                if ((stage || '').includes(k.split(' ')[0])) return v;
+              }
+              return 'bg-slate-400';
+            };
 
-        const toggleGroupExpand = (key: string) => {
-          setExpandedCropGroups(prev => ({ ...prev, [key]: !prev[key] }));
-        };
+            const cropEmojis: Record<string, string> = {
+              tomato: '🍅', wheat: '🌾', rice: '🌾', onion: '🧅', potato: '🥔',
+              maize: '🌽', sugarcane: '🎋', cotton: '🌿', soybean: '🫘',
+              groundnut: '🥜', chilli: '🌶️', grapes: '🍇', banana: '🍌', mango: '🥭',
+            };
 
-        return (
-          <div className="space-y-6">
-            {/* Header & Grouping Selector */}
-            <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-bold my-0">{t.cropTitle}</h2>
-                <p className="text-slate-500 text-xs mt-1 my-0">
-                  {allCrops.length > 0
-                    ? formatFarmSummary(allCrops.length, farms.length, language, nativeDigits)
-                    : t.cropTitle}
-                </p>
-              </div>
+            // Group crops by Crop Type
+            const cropsByType: Record<string, any[]> = {};
+            allCrops.forEach((c: any) => {
+              const key = (c.crop_type || 'unknown').toLowerCase();
+              if (!cropsByType[key]) cropsByType[key] = [];
+              cropsByType[key].push(c);
+            });
 
-              <div className="flex items-center gap-3 flex-wrap">
-                {/* Grouping Toggle Pills */}
-                <div className="bg-earth-100 p-1 rounded-xl flex items-center border border-earth-200">
-                  <button
-                    onClick={() => setCropViewGroup('crop')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                      cropViewGroup === 'crop'
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <Layers size={14} className={cropViewGroup === 'crop' ? 'text-stable' : ''} />
-                    Group by Crop
-                  </button>
-                  <button
-                    onClick={() => setCropViewGroup('farm')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                      cropViewGroup === 'farm'
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <Building2 size={14} className={cropViewGroup === 'farm' ? 'text-stable' : ''} />
-                    Group by Farm
-                  </button>
+            // Group crops by Farm ID
+            const cropsByFarm: Record<string, { farm: any; crops: any[] }> = {};
+            farms.forEach((f: any) => {
+              cropsByFarm[f.id] = { farm: f, crops: [] };
+            });
+            allCrops.forEach((c: any) => {
+              if (cropsByFarm[c.farm_id]) {
+                cropsByFarm[c.farm_id].crops.push(c);
+              } else {
+                cropsByFarm[c.farm_id] = {
+                  farm: { id: c.farm_id, name: c.farm_name || `Farm ${c.farm_id}`, district: c.farm_district, area: c.farm_area },
+                  crops: [c]
+                };
+              }
+            });
+
+            const toggleGroupExpand = (key: string) => {
+              setExpandedCropGroups(prev => ({ ...prev, [key]: !prev[key] }));
+            };
+
+            // Render helper for Visual Crop Image Card (matching previous farmer-friendly format)
+            const renderCropImageCard = (crop: any) => {
+              const farmAdvisories = advisories.filter((adv: any) => adv.farm_id === crop.farm_id);
+
+              return (
+                <div
+                  key={crop.id}
+                  onClick={() => {
+                    setSelectedCrop(crop);
+                    const farm = farms.find((f: any) => f.id === crop.farm_id);
+                    if (farm) setSelectedFarm(farm);
+                  }}
+                  className={`relative rounded-2xl overflow-hidden border cursor-pointer transition-all hover:shadow-lg hover:-translate-y-0.5 bg-white ${
+                    selectedCrop?.id === crop.id ? 'ring-2 ring-stable border-stable' : 'border-earth-200'
+                  }`}
+                >
+                  {/* Crop Background Image & Badges */}
+                  <div className="relative h-40 w-full">
+                    <img
+                      src={getCropImage(crop.crop_type, crop.image_url)}
+                      alt={crop.crop_type}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                    {/* Stage badge */}
+                    <div className="absolute top-3 right-3">
+                      <span className={`text-[9px] text-white font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm ${getCropStageColor(crop.stage || '')}`}>
+                        {translateStage(language, crop.stage) || 'Veg. Growth'}
+                      </span>
+                    </div>
+                    {/* Crop info overlay */}
+                    <div className="absolute bottom-3 left-3 text-white">
+                      <div className="text-lg leading-none">
+                        {cropEmojis[crop.crop_type?.toLowerCase()] || '🌱'}
+                      </div>
+                      <h3 className="font-bold text-base capitalize mt-0.5 my-0">{capitalize(translateCrop(language, crop.crop_type))}</h3>
+                      <p className="text-[11px] text-slate-200 my-0 font-medium">{crop.variety || 'Local variety'}</p>
+                    </div>
+                  </div>
+
+                  {/* Card Footer Details */}
+                  <div className="p-4 space-y-2 text-left">
+                    <div className="flex items-center justify-between text-xs text-slate-600 font-medium">
+                      <span>🌱 {t.cropSowingDate} {formatDaysAgo(getSowingDaysAgo(crop.sowing_date), language, nativeDigits)}</span>
+                      <span className="text-[10px] bg-earth-100 text-earth-dark font-bold px-2 py-0.5 rounded-full">
+                        {crop.farm_name || `Farm ${crop.farm_id}`}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                      <span>📍 {crop.farm_district || 'Nashik'} · {crop.farm_area || 1.0} acres</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCrop(crop.id);
+                        }}
+                        title="Delete crop plot"
+                        className="text-slate-400 hover:text-high p-1 rounded transition-colors"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+
+                    {/* Advisory preview if applicable */}
+                    {farmAdvisories.length > 0 && (
+                      <div className="pt-2 border-t border-slate-100">
+                        <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wide flex items-center gap-1 my-0">
+                          <AlertTriangle size={11} className="text-amber-600" /> Advisory Alert
+                        </p>
+                        <p className="text-xs text-slate-700 mt-0.5 line-clamp-2 my-0 leading-snug">
+                          {farmAdvisories[0].recommendation}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            };
+
+            return (
+              <div className="space-y-6 text-left">
+                {/* Header & Grouping Selector */}
+                <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-bold my-0">{t.cropTitle}</h2>
+                    <p className="text-slate-500 text-xs mt-1 my-0">
+                      {allCrops.length > 0
+                        ? formatFarmSummary(allCrops.length, farms.length, language, nativeDigits)
+                        : t.cropTitle}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {/* Grouping Toggle Pills */}
+                    <div className="bg-earth-100 p-1 rounded-xl flex items-center border border-earth-200">
+                      <button
+                        onClick={() => setCropViewGroup('crop')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                          cropViewGroup === 'crop'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <Layers size={14} className={cropViewGroup === 'crop' ? 'text-stable' : ''} />
+                        Group by Crop
+                      </button>
+                      <button
+                        onClick={() => setCropViewGroup('farm')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                          cropViewGroup === 'farm'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <Building2 size={14} className={cropViewGroup === 'farm' ? 'text-stable' : ''} />
+                        Group by Farm
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        if (!selectedFarm) { toast.warning("No farm selected", "Please add a farm first."); return; }
+                        setShowAddCropModal(true);
+                      }}
+                      className="px-3 py-2 bg-stable text-white hover:bg-stable-dark rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+                    >
+                      + {t.cropAddNew}
+                    </button>
+                  </div>
                 </div>
 
-                <button
-                  onClick={() => {
-                    if (!selectedFarm) { toast.warning("No farm selected", "Please add a farm first."); return; }
-                    setShowAddCropModal(true);
-                  }}
-                  className="px-3 py-2 bg-stable text-white hover:bg-stable-dark rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1"
-                >
-                  + {t.cropAddNew}
-                </button>
-              </div>
-            </div>
+                {/* Content view depending on group toggle */}
+                {allCrops.length === 0 ? (
+                  <div className="bg-white p-12 rounded-2xl border border-earth-200 text-center">
+                    <p className="text-4xl mb-3">🌱</p>
+                    <p className="text-slate-500 text-sm font-medium">{t.cropTitle}</p>
+                    <p className="text-slate-400 text-xs mt-1 mb-4">{t.cropAddNewFarm}</p>
+                    <button
+                      onClick={() => setShowAddCropModal(true)}
+                      className="px-5 py-2.5 bg-stable text-white hover:bg-stable-dark rounded-xl text-sm font-bold transition-all"
+                    >
+                      Register First Crop
+                    </button>
+                  </div>
+                ) : cropViewGroup === 'crop' ? (
+                  /* GROUP BY CROP VIEW WITH VISUAL IMAGE CARDS */
+                  <div className="space-y-6">
+                    {Object.entries(cropsByType).map(([cropTypeKey, cropItems]) => {
+                      const isExpanded = expandedCropGroups[`crop_${cropTypeKey}`] !== false; // Default expanded
+                      const totalAcres = cropItems.reduce((acc, c) => acc + (c.farm_area || 0), 0);
+                      const emoji = cropEmojis[cropTypeKey] || '🌱';
 
-            {/* Content view depending on group toggle */}
-            {allCrops.length === 0 ? (
-              <div className="bg-white p-12 rounded-2xl border border-earth-200 text-center">
-                <p className="text-4xl mb-3">🌱</p>
-                <p className="text-slate-500 text-sm font-medium">{t.cropTitle}</p>
-                <p className="text-slate-400 text-xs mt-1 mb-4">{t.cropAddNewFarm}</p>
-                <button
-                  onClick={() => setShowAddCropModal(true)}
-                  className="px-5 py-2.5 bg-stable text-white hover:bg-stable-dark rounded-xl text-sm font-bold transition-all"
-                >
-                  Register First Crop
-                </button>
-              </div>
-            ) : cropViewGroup === 'crop' ? (
-              /* GROUP BY CROP VIEW */
-              <div className="space-y-4">
-                {Object.entries(cropsByType).map(([cropTypeKey, cropItems]) => {
-                  const isExpanded = expandedCropGroups[`crop_${cropTypeKey}`] !== false; // Default expanded
-                  const totalAcres = cropItems.reduce((acc, c) => acc + (c.farm_area || 0), 0);
-                  const emoji = cropEmojis[cropTypeKey] || '🌱';
-
-                  return (
-                    <div key={cropTypeKey} className="bg-white rounded-2xl border border-earth-200 shadow-sm overflow-hidden transition-all">
-                      {/* Group Header */}
-                      <div
-                        onClick={() => toggleGroupExpand(`crop_${cropTypeKey}`)}
-                        className="p-5 bg-gradient-to-r from-earth-50 to-white flex items-center justify-between cursor-pointer hover:bg-earth-100/50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-3xl bg-white p-2.5 rounded-2xl shadow-xs border border-earth-200">{emoji}</span>
-                          <div>
-                            <h3 className="font-bold text-slate-900 text-base capitalize my-0 flex items-center gap-2">
-                              {capitalize(translateCrop(language, cropTypeKey))}
-                              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-stable-light text-stable-dark border border-stable/20">
-                                {cropItems.length} plot{cropItems.length > 1 ? 's' : ''}
-                              </span>
-                            </h3>
-                            <p className="text-xs text-slate-500 mt-0.5 my-0">
-                              Total area: <span className="font-semibold text-slate-700">{totalAcres.toFixed(1)} acres</span> across plots
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 text-slate-400">
-                          <span className="text-xs font-semibold text-slate-500 hidden sm:inline">
-                            {isExpanded ? 'Collapse' : 'View Plots'}
-                          </span>
-                          {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                        </div>
-                      </div>
-
-                      {/* Expandable Plots List */}
-                      {isExpanded && (
-                        <div className="p-5 border-t border-earth-200 bg-white grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {cropItems.map((crop: any) => {
-                            const farmAdvisories = advisories.filter((adv: any) => adv.farm_id === crop.farm_id);
-                            return (
-                              <div
-                                key={crop.id}
-                                className={`p-4 rounded-xl border transition-all ${
-                                  selectedCrop?.id === crop.id
-                                    ? 'border-stable ring-2 ring-stable/20 bg-stable-light/20'
-                                    : 'border-earth-200 hover:border-earth-300'
-                                }`}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div>
-                                    <span className={`text-[9px] text-white font-bold px-2 py-0.5 rounded-full uppercase ${getCropStageColor(crop.stage || '')}`}>
-                                      {translateStage(language, crop.stage) || 'Veg. Growth'}
-                                    </span>
-                                    <h4 className="font-bold text-sm text-slate-900 capitalize mt-1.5 my-0">
-                                      {crop.variety || 'Local Variety'}
-                                    </h4>
-                                    <p className="text-xs text-slate-500 mt-0.5 my-0 flex items-center gap-1">
-                                      <span>📍 {crop.farm_name || `Farm ${crop.farm_id}`}</span>
-                                      {crop.farm_district && <span>({crop.farm_district})</span>}
-                                    </p>
-                                  </div>
-
-                                  <div className="flex items-center gap-1">
-                                    <button
-                                      onClick={() => {
-                                        setSelectedCrop(crop);
-                                        const farm = farms.find((f: any) => f.id === crop.farm_id);
-                                        if (farm) setSelectedFarm(farm);
-                                      }}
-                                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                                        selectedCrop?.id === crop.id ? 'bg-stable text-white' : 'bg-earth-100 text-slate-700 hover:bg-earth-200'
-                                      }`}
-                                    >
-                                      {selectedCrop?.id === crop.id ? 'Selected' : 'Select'}
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteCrop(crop.id)}
-                                      title="Delete crop plot"
-                                      className="p-1.5 text-slate-400 hover:text-high hover:bg-high-light rounded-lg transition-colors"
-                                    >
-                                      <Trash2 size={15} />
-                                    </button>
-                                  </div>
-                                </div>
-
-                                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                                  <span>🌱 Sown {formatDaysAgo(getSowingDaysAgo(crop.sowing_date), language, nativeDigits)}</span>
-                                  <span className="font-semibold text-slate-700">{crop.farm_area || 1.0} acres</span>
-                                </div>
-
-                                {/* Crop Advisory Alert */}
-                                {farmAdvisories.length > 0 && (
-                                  <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200/60 rounded-lg text-xs text-amber-900">
-                                    <p className="font-bold flex items-center gap-1 text-[11px] uppercase tracking-wide text-amber-800 my-0">
-                                      <AlertTriangle size={12} className="text-amber-600" /> Action Required
-                                    </p>
-                                    <p className="mt-0.5 my-0 text-slate-700 font-medium leading-snug">
-                                      {farmAdvisories[0].recommendation}
-                                    </p>
-                                  </div>
-                                )}
+                      return (
+                        <div key={cropTypeKey} className="bg-white rounded-2xl border border-earth-200 shadow-sm overflow-hidden">
+                          {/* Group Header */}
+                          <div
+                            onClick={() => toggleGroupExpand(`crop_${cropTypeKey}`)}
+                            className="p-4 bg-gradient-to-r from-earth-50 to-white flex items-center justify-between cursor-pointer hover:bg-earth-100/60 transition-colors border-b border-earth-100"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="text-2xl bg-white p-2 rounded-xl border border-earth-200 shadow-xs">{emoji}</span>
+                              <div>
+                                <h3 className="font-bold text-slate-900 text-base capitalize my-0 flex items-center gap-2">
+                                  {capitalize(translateCrop(language, cropTypeKey))}
+                                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-stable-light text-stable-dark border border-stable/20">
+                                    {cropItems.length} plot{cropItems.length > 1 ? 's' : ''}
+                                  </span>
+                                </h3>
+                                <p className="text-xs text-slate-500 mt-0.5 my-0">
+                                  Total area: <span className="font-semibold text-slate-700">{totalAcres.toFixed(1)} acres</span> across plots
+                                </p>
                               </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              /* GROUP BY FARM VIEW */
-              <div className="space-y-4">
-                {Object.values(cropsByFarm).map(({ farm, crops }) => {
-                  const isExpanded = expandedCropGroups[`farm_${farm.id}`] !== false; // Default expanded
-                  const farmTotalAcres = farm.area || farm.farm_area || 0;
-
-                  return (
-                    <div key={farm.id} className="bg-white rounded-2xl border border-earth-200 shadow-sm overflow-hidden transition-all">
-                      {/* Farm Header */}
-                      <div
-                        onClick={() => toggleGroupExpand(`farm_${farm.id}`)}
-                        className="p-5 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex items-center justify-between cursor-pointer hover:bg-slate-800 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="bg-white/10 p-2.5 rounded-2xl text-amber-400">
-                            <Building2 size={24} />
-                          </span>
-                          <div>
-                            <h3 className="font-bold text-white text-base my-0 flex items-center gap-2">
-                              {farm.name || `Farm ${farm.id}`}
-                              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-700 text-slate-200 border border-slate-600">
-                                {crops.length} crop{crops.length > 1 ? 's' : ''}
+                            </div>
+                            <div className="flex items-center gap-2 text-slate-400">
+                              <span className="text-xs font-semibold text-slate-500 hidden sm:inline">
+                                {isExpanded ? 'Collapse' : 'View Crops'}
                               </span>
-                            </h3>
-                            <p className="text-xs text-slate-300 mt-0.5 my-0 flex items-center gap-2">
-                              <span>📍 {farm.district || farm.location_id?.replace('_', ', ') || 'Nashik'}</span>
-                              <span>·</span>
-                              <span>{farmTotalAcres} acres</span>
-                              {farm.soil_type && <><span>·</span><span className="capitalize">{farm.soil_type} soil</span></>}
-                              {farm.irrigation && <><span>·</span><span className="capitalize">{farm.irrigation}</span></>}
-                            </p>
+                              {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                            </div>
                           </div>
-                        </div>
 
-                        <div className="flex items-center gap-2 text-slate-300">
-                          <span className="text-xs font-semibold hidden sm:inline">
-                            {isExpanded ? 'Collapse Farm' : 'View Crops'}
-                          </span>
-                          {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                        </div>
-                      </div>
-
-                      {/* Expandable Crops under this Farm */}
-                      {isExpanded && (
-                        <div className="p-5 border-t border-earth-200 bg-earth-50/50">
-                          {crops.length === 0 ? (
-                            <p className="text-xs text-slate-500 italic py-2 my-0">No crops registered under this farm yet.</p>
-                          ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {crops.map((crop: any) => {
-                                const emoji = cropEmojis[crop.crop_type?.toLowerCase()] || '🌱';
-                                const farmAdvisories = advisories.filter((adv: any) => adv.farm_id === crop.farm_id);
-
-                                return (
-                                  <div
-                                    key={crop.id}
-                                    className={`bg-white p-4 rounded-xl border transition-all ${
-                                      selectedCrop?.id === crop.id
-                                        ? 'border-stable ring-2 ring-stable/20'
-                                        : 'border-earth-200 hover:border-earth-300'
-                                    }`}
-                                  >
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="flex items-center gap-2.5">
-                                        <span className="text-2xl">{emoji}</span>
-                                        <div>
-                                          <h4 className="font-bold text-sm text-slate-900 capitalize my-0">
-                                            {capitalize(translateCrop(language, crop.crop_type))}
-                                          </h4>
-                                          <p className="text-xs text-slate-500 my-0">{crop.variety || 'Local variety'}</p>
-                                        </div>
-                                      </div>
-
-                                      <div className="flex items-center gap-1">
-                                        <span className={`text-[9px] text-white font-bold px-2 py-0.5 rounded-full uppercase ${getCropStageColor(crop.stage || '')}`}>
-                                          {translateStage(language, crop.stage) || 'Veg. Growth'}
-                                        </span>
-                                        <button
-                                          onClick={() => handleDeleteCrop(crop.id)}
-                                          title="Delete crop plot"
-                                          className="p-1.5 text-slate-400 hover:text-high hover:bg-high-light rounded-lg transition-colors ml-1"
-                                        >
-                                          <Trash2 size={15} />
-                                        </button>
-                                      </div>
-                                    </div>
-
-                                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                                      <span>🌱 Sown {formatDaysAgo(getSowingDaysAgo(crop.sowing_date), language, nativeDigits)}</span>
-                                      <span className="font-semibold text-slate-700">Stage: {crop.stage || 'Vegetative'}</span>
-                                    </div>
-
-                                    {farmAdvisories.length > 0 && (
-                                      <div className="mt-2.5 p-2 bg-amber-50 border border-amber-200/60 rounded-lg text-xs text-amber-900">
-                                        <p className="font-bold text-[10px] uppercase text-amber-800 my-0 flex items-center gap-1">
-                                          <AlertTriangle size={11} /> {farmAdvisories[0].category || 'Advisory'}
-                                        </p>
-                                        <p className="my-0 mt-0.5 text-slate-700 font-medium leading-snug">
-                                          {farmAdvisories[0].recommendation}
-                                        </p>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
+                          {/* Expandable Image Cards Grid */}
+                          {isExpanded && (
+                            <div className="p-5 bg-earth-50/40">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {cropItems.map(renderCropImageCard)}
+                              </div>
                             </div>
                           )}
                         </div>
-                      )}
+                      );
+                    })}
+                  </div>
+                ) : (
+                  /* GROUP BY FARM VIEW WITH VISUAL IMAGE CARDS */
+                  <div className="space-y-6">
+                    {Object.values(cropsByFarm).map(({ farm, crops }) => {
+                      const isExpanded = expandedCropGroups[`farm_${farm.id}`] !== false; // Default expanded
+                      const farmTotalAcres = farm.area || farm.farm_area || 0;
+
+                      return (
+                        <div key={farm.id} className="bg-white rounded-2xl border border-earth-200 shadow-sm overflow-hidden">
+                          {/* Farm Header */}
+                          <div
+                            onClick={() => toggleGroupExpand(`farm_${farm.id}`)}
+                            className="p-4 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex items-center justify-between cursor-pointer hover:bg-slate-800 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="bg-white/10 p-2 rounded-xl text-amber-400">
+                                <Building2 size={20} />
+                              </span>
+                              <div>
+                                <h3 className="font-bold text-white text-base my-0 flex items-center gap-2">
+                                  {farm.name || `Farm ${farm.id}`}
+                                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-200 border border-slate-600">
+                                    {crops.length} crop{crops.length > 1 ? 's' : ''}
+                                  </span>
+                                </h3>
+                                <p className="text-xs text-slate-300 mt-0.5 my-0 flex items-center gap-2">
+                                  <span>📍 {farm.district || farm.location_id?.replace('_', ', ') || 'Nashik'}</span>
+                                  <span>·</span>
+                                  <span>{farmTotalAcres} acres</span>
+                                  {farm.soil_type && <><span>·</span><span className="capitalize">{farm.soil_type} soil</span></>}
+                                  {farm.irrigation && <><span>·</span><span className="capitalize">{farm.irrigation}</span></>}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 text-slate-300">
+                              <span className="text-xs font-semibold hidden sm:inline">
+                                {isExpanded ? 'Collapse Farm' : 'View Crops'}
+                              </span>
+                              {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                            </div>
+                          </div>
+
+                          {/* Expandable Image Cards Grid */}
+                          {isExpanded && (
+                            <div className="p-5 bg-earth-50/40">
+                              {crops.length === 0 ? (
+                                <p className="text-xs text-slate-500 italic py-2 my-0">No crops registered under this farm yet.</p>
+                              ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                  {crops.map(renderCropImageCard)}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Advisory Feed — all farms */}
+                {advisories.length > 0 && (
+                  <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-3">
+                    <h3 className="font-bold text-slate-900 my-0">Advisory Feed (All Farms)</h3>
+                    <div className="border-l-2 border-stable pl-4 py-2 space-y-4">
+                      {(translatedAdvisories.length > 0 ? translatedAdvisories : advisories).map((adv: any) => (
+                        <div key={adv.id} className="relative">
+                          <span className="absolute -left-[23px] top-1.5 bg-stable h-3 w-3 rounded-full border-2 border-white" />
+                          <div className="bg-white p-3 rounded-xl border border-earth-200 shadow-xs">
+                            <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">
+                              {adv.category} · Farm {adv.farm_id}
+                            </p>
+                            <p className="text-slate-800 text-xs font-semibold mt-1">{adv.recommendation}</p>
+                            <p className="text-slate-500 text-xs mt-0.5">{adv.reason}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  );
-                })}
+                  </div>
+                )}
               </div>
-            )}
-
-            {/* Advisory Feed — all farms */}
-            {advisories.length > 0 && (
-              <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-3">
-                <h3 className="font-bold text-slate-900 my-0">Advisory Feed (All Farms)</h3>
-                <div className="border-l-2 border-stable pl-4 py-2 space-y-4">
-                  {(translatedAdvisories.length > 0 ? translatedAdvisories : advisories).map((adv: any) => (
-                    <div key={adv.id} className="relative">
-                      <span className="absolute -left-[23px] top-1.5 bg-stable h-3 w-3 rounded-full border-2 border-white" />
-                      <div className="bg-white p-3 rounded-xl border border-earth-200 shadow-xs">
-                        <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">
-                          {adv.category} · Farm {adv.farm_id}
-                        </p>
-                        <p className="text-slate-800 text-xs font-semibold mt-1">{adv.recommendation}</p>
-                        <p className="text-slate-500 text-xs mt-0.5">{adv.reason}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      }
-
-      case 'market':
-        return (
-          <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-              <div>
-                <h2 className="text-xl font-bold my-0">Mandi Pricing &amp; Net Realization</h2>
-                <p className="text-slate-500 text-xs mt-1 mb-0">
-                  Net returns after transport &amp; handling costs
-                </p>
-              </div>
-              {allCrops.length > 1 && (
-                <select
-                  value={selectedCrop?.id || ''}
-                  onChange={(e) => {
-                    const crop = allCrops.find((c: any) => c.id === Number(e.target.value));
-                    if (crop) {
-                      setSelectedCrop(crop);
-                      const farm = farms.find((f: any) => f.id === crop.farm_id);
-                      if (farm) setSelectedFarm(farm);
-                    }
-                  }}
-                  className="text-xs border border-earth-200 rounded-lg px-3 py-2 bg-white text-slate-700 font-medium"
-                >
-                  {allCrops.map((c: any) => (
-                    <option key={c.id} value={c.id}>
-                      {c.crop_type} — {c.farm_name || `Farm ${c.farm_id}`}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-            {selectedCrop && (
-              <div className="text-xs bg-stable-light text-stable-dark font-semibold rounded-lg px-4 py-2 flex items-center gap-2">
-                <span className="capitalize">🌾 {selectedCrop.crop_type}</span>
-                <span className="text-slate-400">·</span>
-                <span>{selectedCrop.farm_name || `Farm ${selectedCrop.farm_id}`}</span>
-                {selectedCrop.stage && <><span className="text-slate-400">·</span><span>{selectedCrop.stage}</span></>}
-              </div>
-            )}
-
-            {/* Mandi comparison table */}
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketMandiName}</th>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketDistance}</th>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketStickerPrice}</th>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketTransport}</th>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketFees}</th>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketNetReturn}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {mandiPrices.length > 0 ? (
-                    mandiPrices.map((m, idx) => (
-                      <tr 
-                        key={m.mandi_id || idx} 
-                        className={idx === 0 ? "bg-stable-light font-semibold text-stable" : "bg-white text-slate-700"}
-                      >
-                        <td className="px-4 py-3 font-bold">
-                          {m.mandi_name} {idx === 0 && <span className="text-[10px] bg-stable text-white px-1.5 py-0.5 rounded-md ml-1.5 uppercase tracking-wide">{t.marketBestValue}</span>}
-                        </td>
-                        <td className="px-4 py-3 font-mono">{formatInteger(m.distance_km, language, nativeDigits)} km</td>
-                        <td className="px-4 py-3 font-mono">{formatCurrency(m.sticker_price, language, nativeDigits)}</td>
-                        <td className="px-4 py-3 font-mono">{formatCurrency(m.transport_cost, language, nativeDigits)}</td>
-                        <td className="px-4 py-3 font-mono">{formatCurrency(m.other_fees, language, nativeDigits)}</td>
-                        <td className="px-4 py-3 font-extrabold font-mono">{formatCurrency(m.net_return, language, nativeDigits)}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-slate-400 text-xs">
-                        No mandi comparison data available. Register crop above to evaluate APMCs.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {mandiPrices.length > 0 && (
-              <div className="bg-stable-light p-3.5 rounded-xl border border-stable-dark/10 text-xs text-stable-dark text-left">
-                💡 **System Tip:** Sell your crop at **{mandiPrices[0].mandi_name}**. Even though sticker prices vary across APMCs, selling here minimizes transportation overhead and commissions, netting you a peak return of **{formatCurrency(mandiPrices[0].net_return, language, nativeDigits)} per quintal**.
-              </div>
-            )}
-
-            {/* Price Crash Banner */}
-            {priceCrashStatus && priceCrashStatus.price_crash && (
-              <div className="flex gap-4 items-start p-4 bg-high-light rounded-xl border border-high-dark/10">
-                <span className="bg-high text-white p-2.5 rounded-xl shrink-0"><TrendingDown size={20} /></span>
+            );
+          }
                 <div className="flex-1">
                   <div className="flex justify-between items-center">
                     <h4 className="font-bold text-high-dark text-sm">Price Crash Alert</h4>
