@@ -266,13 +266,15 @@ async def refresh_weather(location_id: str, current_farmer: models.Farmer = Depe
         obs.rainfall = weather_data["observation"]["rainfall"]
         obs.temperature = weather_data["observation"]["temperature"]
         obs.humidity = weather_data["observation"]["humidity"]
+        obs.wind_speed = weather_data["observation"].get("wind_speed", 12.0)
     else:
         obs = models.WeatherObservation(
             location_id=location_id,
             date=today_date,
             rainfall=weather_data["observation"]["rainfall"],
             temperature=weather_data["observation"]["temperature"],
-            humidity=weather_data["observation"]["humidity"]
+            humidity=weather_data["observation"]["humidity"],
+            wind_speed=weather_data["observation"].get("wind_speed", 12.0)
         )
         db.add(obs)
         

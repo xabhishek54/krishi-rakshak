@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey, Text, Index
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -66,6 +66,7 @@ class WeatherObservation(Base):
     rainfall = Column(Float, default=0.0) # In mm
     temperature = Column(Float, nullable=True) # In C
     humidity = Column(Float, nullable=True) # In %
+    wind_speed = Column(Float, default=12.0) # In km/h
 
 class WeatherForecast(Base):
     __tablename__ = "weather_forecasts"
@@ -91,6 +92,9 @@ class Mandi(Base):
 
 class MarketPrice(Base):
     __tablename__ = "market_prices"
+    __table_args__ = (
+        Index("ix_market_prices_crop_date", "crop", "date"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     mandi_id = Column(Integer, ForeignKey("mandis.id", ondelete="CASCADE"), nullable=False)

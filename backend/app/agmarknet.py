@@ -73,8 +73,14 @@ def fetch_agmarknet_prices(
         logger.info(f"Agmarknet: fetched {len(result)} records for {commodity}")
         return result
 
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Agmarknet API HTTP error for {commodity}: {e.response.status_code} - {e.response.text}")
+        return []
+    except httpx.ConnectError as e:
+        logger.error(f"Agmarknet API connection failed for {commodity}: {e}")
+        return []
     except Exception as e:
-        logger.warning(f"Agmarknet API failed for {commodity}: {e}")
+        logger.error(f"Agmarknet API unexpected error for {commodity}: {e}")
         return []
 
 
@@ -134,12 +140,18 @@ async def background_fetch_and_store(db_session_factory) -> int:
     db = db_session_factory()
 
     try:
+        # Delay startup fetch to allow API server to warm up
+        await asyncio.sleep(60) 
+        
         for crop_type in TOP_CROPS:
             commodity = agmarknet_commodity_name(crop_type)
             # Run blocking HTTP call in threadpool
             records = await asyncio.to_thread(
                 fetch_agmarknet_prices, commodity, days=3
             )
+            # Throttle to prevent connection pool exhaustion
+            await asyncio.sleep(5) 
+            
             if not records:
                 logger.info(f"[Phase19] No Agmarknet data for {commodity} — skip")
                 continue

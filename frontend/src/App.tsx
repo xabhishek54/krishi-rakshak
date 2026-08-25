@@ -31,18 +31,33 @@ import {
   Mic, 
   User, 
   AlertTriangle,
+  AlertCircle,
+  CheckCircle2,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   TrendingDown,
   TrendingUp,
   Lock,
   LogOut,
   CloudRain,
+  Cloud,
+  Sun,
+  Wind,
   Thermometer,
   Droplets,
   Trash2,
   Calculator,
   PiggyBank,
-  BarChart3
+  BarChart3,
+  Layers,
+  Building2,
+  Grid,
+  RefreshCw,
+  Calendar,
+  MapPin,
+  Activity,
+  Info
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -87,7 +102,9 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     const [selectedMandiId, setSelectedMandiId] = useState<number | null>(null);
     const [cashFlow, setCashFlow] = useState<any>(null);
     const [distressData, setDistressData] = useState<any>(null);
-    const [schemes, setSchemes] = useState<any[]>([]);
+  // My Crop View Grouping state ('crop' | 'farm')
+  const [cropViewGroup, setCropViewGroup] = useState<'crop' | 'farm'>('crop');
+  const [expandedCropGroups, setExpandedCropGroups] = useState<Record<string, boolean>>({});
 
   // Yield Calculator state (top-level to follow React hooks rules)
   const [yieldCrop, setYieldCrop] = useState<string>('tomato');
@@ -883,7 +900,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
             {/* Header Greeting */}
             <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
-                <h2 className="text-2xl font-bold font-sans my-0">Namaskar, {farmer?.name}!</h2>
+                <h2 className="text-2xl font-bold font-sans my-0">{t.homeGreeting}, {farmer?.name}!</h2>
                 <p className="text-slate-500 font-sans text-sm mt-1 mb-0">Farm Location: {farmer?.location_id || 'Not Set'}</p>
               </div>
               <div className="flex flex-wrap gap-2 items-center">
@@ -1002,72 +1019,246 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               </div>
             </div>
 
-            {/* 2x2 Responsive Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {/* Weather Card */}
-              <div className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm text-left">
-                <div className="text-stable mb-2"><CloudRain size={32} /></div>
-                <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Weather Today</h3>
-                {weather?.observation ? (
-                  <div className="mt-2 space-y-1">
-                    <p className="text-slate-900 text-lg font-bold flex items-center gap-1 my-0">
-                      <Thermometer size={16} className="text-elevated" /> {weather.observation.temperature.toFixed(1)}°C
-                    </p>
-                    <div className="flex justify-between text-slate-500 text-[10px] mt-1.5">
-                      <span className="flex items-center gap-0.5"><CloudRain size={12} className="text-slate-400" /> {weather.observation.rainfall.toFixed(1)} mm</span>
-                      <span className="flex items-center gap-0.5"><Droplets size={12} className="text-slate-400" /> {weather.observation.humidity.toFixed(0)}%</span>
+            {/* Farm Weather Advisor Banner & Decision Cards */}
+            <div className="space-y-4">
+              {/* Main Weather Advisor Banner */}
+              <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-earth-900 text-white p-6 rounded-3xl shadow-lg border border-slate-700/50">
+                {/* Header info */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/60 pb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="bg-stable/20 text-stable-light p-1.5 rounded-lg border border-stable/30">
+                        <CloudRain size={20} />
+                      </span>
+                      <h3 className="text-lg font-bold text-white my-0">Farm Weather Advisor</h3>
                     </div>
+                    <p className="text-slate-400 text-xs mt-1 my-0 flex items-center gap-1">
+                      <MapPin size={13} className="text-amber-400" />
+                      <span className="font-semibold text-slate-200">{selectedFarm?.name || 'Main Farm'}</span>
+                      <span>·</span>
+                      <span>{selectedFarm?.district || (farmer?.location_id ? farmer.location_id.replace('_', ', ') : 'Nashik, Maharashtra')}</span>
+                    </p>
                   </div>
-                ) : (
-                  <p className="text-slate-400 text-xs mt-2 my-0">Loading weather...</p>
-                )}
+                  <button
+                    onClick={refreshWeatherFromApi}
+                    disabled={loadingWeather}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all w-fit"
+                  >
+                    <RefreshCw size={13} className={loadingWeather ? 'animate-spin text-amber-400' : ''} />
+                    {loadingWeather ? 'Syncing Weather...' : 'Refresh Weather'}
+                  </button>
+                </div>
+
+                {/* Weather Data Snapshot Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-4">
+                  <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
+                    <span className="text-slate-400 text-[10px] uppercase font-semibold tracking-wider flex items-center gap-1">
+                      <Thermometer size={12} className="text-amber-400" /> Temperature
+                    </span>
+                    <p className="text-xl font-extrabold text-white mt-1 my-0">
+                      {weather?.observation?.temperature != null ? `${weather.observation.temperature.toFixed(1)}°C` : '27.0°C'}
+                    </p>
+                  </div>
+                  <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
+                    <span className="text-slate-400 text-[10px] uppercase font-semibold tracking-wider flex items-center gap-1">
+                      <CloudRain size={12} className="text-sky-400" /> Rainfall
+                    </span>
+                    <p className="text-xl font-extrabold text-white mt-1 my-0">
+                      {weather?.observation?.rainfall != null ? (weather.observation.rainfall > 0 ? `${weather.observation.rainfall.toFixed(1)} mm` : 'No Rain') : '5.0 mm'}
+                    </p>
+                  </div>
+                  <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
+                    <span className="text-slate-400 text-[10px] uppercase font-semibold tracking-wider flex items-center gap-1">
+                      <Droplets size={12} className="text-blue-400" /> Humidity
+                    </span>
+                    <p className="text-xl font-extrabold text-white mt-1 my-0">
+                      {weather?.observation?.humidity != null ? `${weather.observation.humidity.toFixed(0)}%` : '82%'}
+                    </p>
+                  </div>
+                  <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
+                    <span className="text-slate-400 text-[10px] uppercase font-semibold tracking-wider flex items-center gap-1">
+                      <Wind size={12} className="text-teal-400" /> Wind Speed
+                    </span>
+                    <p className="text-xl font-extrabold text-white mt-1 my-0">
+                      {weather?.observation?.wind_speed != null ? `${weather.observation.wind_speed.toFixed(0)} km/h` : '14 km/h'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Weather Action Decision Banner */}
+                {(() => {
+                  const rain = weather?.observation?.rainfall ?? 5.0;
+                  const wind = weather?.observation?.wind_speed ?? 14.0;
+                  const hum = weather?.observation?.humidity ?? 82.0;
+                  const temp = weather?.observation?.temperature ?? 27.0;
+
+                  let statusLevel: 'red' | 'orange' | 'green' = 'green';
+                  let statusTitle = 'Optimal Farming Conditions';
+                  let statusAction = 'Weather is favorable today — suitable time for routine farm activities, weeding, and crop inspection.';
+
+                  if (rain > 10 || (weather?.forecasts && weather.forecasts[0]?.rainfall_forecast > 15)) {
+                    statusLevel = 'red';
+                    statusTitle = 'Rain Expected — Avoid Chemical Spraying';
+                    statusAction = 'Heavy rain expected today/tomorrow. Avoid applying fertilizer or pesticides now to prevent chemical runoff and wastage.';
+                  } else if (temp > 36) {
+                    statusLevel = 'red';
+                    statusTitle = 'Extreme Heat Alert — Ensure Early Irrigation';
+                    statusAction = 'Temperatures exceeding 36°C cause thermal stress. Irrigate crop plots before 8 AM or after 6 PM to prevent soil moisture evaporation.';
+                  } else if (wind > 15) {
+                    statusLevel = 'orange';
+                    statusTitle = 'High Wind Speed — Avoid Pesticide Spraying';
+                    statusAction = `Wind speed is ${wind.toFixed(0)} km/h. Postpone foliar and pesticide sprays to prevent spray drift and uneven coverage.`;
+                  } else if (hum > 78) {
+                    statusLevel = 'orange';
+                    statusTitle = 'High Humidity — Monitor Fungal Disease Risk';
+                    statusAction = `Relative humidity is elevated (${hum.toFixed(0)}%). Inspect lower leaves for early blight, mildew, or purple blotch spots.`;
+                  }
+
+                  const statusConfig = {
+                    red: { bg: 'bg-red-950/90 border-red-800/60 text-red-200', iconBg: 'bg-red-600', badge: 'Action Required', badgeBg: 'bg-red-500 text-white' },
+                    orange: { bg: 'bg-amber-950/90 border-amber-800/60 text-amber-200', iconBg: 'bg-amber-600', badge: 'Attention Needed', badgeBg: 'bg-amber-500 text-slate-950' },
+                    green: { bg: 'bg-emerald-950/90 border-emerald-800/60 text-emerald-200', iconBg: 'bg-emerald-600', badge: 'Good Conditions', badgeBg: 'bg-emerald-500 text-white' },
+                  }[statusLevel];
+
+                  return (
+                    <div className={`p-4 rounded-2xl border ${statusConfig.bg} flex flex-col sm:flex-row items-start gap-3 mt-2`}>
+                      <span className={`${statusConfig.iconBg} text-white p-2 rounded-xl shrink-0 mt-0.5`}>
+                        {statusLevel === 'red' ? <AlertCircle size={20} /> : statusLevel === 'orange' ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
+                      </span>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-bold text-sm text-white my-0">{statusTitle}</h4>
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${statusConfig.badgeBg}`}>
+                            {statusConfig.badge}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-300 mt-1 my-0 leading-relaxed">
+                          {statusAction}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Upcoming Simple Forecast Section */}
+                <div className="mt-4 pt-4 border-t border-slate-700/60">
+                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                    <Calendar size={14} className="text-sky-400" /> Upcoming 2-Day Forecast Advisor
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {weather?.forecasts && weather.forecasts.length >= 2 ? (
+                      weather.forecasts.slice(0, 2).map((fc: any, idx: number) => {
+                        const dayLabel = idx === 0 ? 'Tomorrow' : 'Day After Tomorrow';
+                        const isRainy = (fc.rainfall_forecast > 5 || fc.rain_probability > 50);
+                        const isHot = fc.temperature > 35;
+
+                        let advice = 'Good for farm activities';
+                        let icon = '☀️';
+                        if (isRainy) {
+                          advice = 'Delay fertilizer application';
+                          icon = '🌧️';
+                        } else if (isHot) {
+                          advice = 'Irrigate early morning';
+                          icon = '🌡️';
+                        }
+
+                        return (
+                          <div key={idx} className="bg-slate-800/90 p-3 rounded-xl border border-slate-700/50 flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl">{icon}</span>
+                              <div>
+                                <p className="font-bold text-white my-0">{dayLabel}</p>
+                                <p className="text-[11px] text-slate-400 my-0">{fc.temperature?.toFixed(1) || 28}°C · {fc.rain_probability || 0}% rain prob.</p>
+                              </div>
+                            </div>
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${isRainy ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
+                              {advice}
+                            </span>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <>
+                        <div className="bg-slate-800/90 p-3 rounded-xl border border-slate-700/50 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">🌧️</span>
+                            <div>
+                              <p className="font-bold text-white my-0">Tomorrow</p>
+                              <p className="text-[11px] text-slate-400 my-0">26°C · 65% rain prob.</p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            Delay fertilizer application
+                          </span>
+                        </div>
+                        <div className="bg-slate-800/90 p-3 rounded-xl border border-slate-700/50 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">☀️</span>
+                            <div>
+                              <p className="font-bold text-white my-0">Day After</p>
+                              <p className="text-[11px] text-slate-400 my-0">29°C · 20% rain prob.</p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            Suitable for farm work
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <button 
-                onClick={() => setActiveTab('crop')}
-                className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm hover:border-stable transition-colors text-left"
-              >
-                <div className="text-stable mb-2"><Sprout size={32} /></div>
-                <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider">My Crop</h3>
-                <p className="text-slate-900 text-lg font-bold mt-1 my-0 capitalize">{selectedCrop ? selectedCrop.crop_type : 'Tomato'}</p>
-                <span className="text-slate-400 text-xs mt-1 block">Stage: {selectedCrop ? selectedCrop.stage : 'Veg. Growth'}</span>
-              </button>
+              {/* Secondary Grid: Market Economics & Distress Score */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <button 
+                  onClick={() => setActiveTab('market')}
+                  className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm hover:border-stable transition-colors text-left flex items-center justify-between"
+                >
+                  <div>
+                    <div className="text-elevated mb-1 flex items-center gap-2">
+                      <ShoppingCart size={24} />
+                      <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider my-0">{t.marketTitle}</h3>
+                    </div>
+                    <p className="text-slate-900 text-xl font-extrabold mt-1 my-0">
+                      ₹{mandiPrices.length > 0 ? mandiPrices[0].modal_price : '2,290'} <span className="text-xs font-normal text-slate-500">/q</span>
+                    </p>
+                    <span className="text-high text-[10px] font-bold mt-1 inline-flex items-center gap-0.5">
+                      <TrendingDown size={12} /> Price Crash (-22%)
+                    </span>
+                  </div>
+                  <ChevronRight size={20} className="text-slate-400" />
+                </button>
 
-              <button 
-                onClick={() => setActiveTab('market')}
-                className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm hover:border-stable transition-colors text-left"
-              >
-                <div className="text-elevated mb-2"><ShoppingCart size={32} /></div>
-                <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Market Price</h3>
-                <p className="text-slate-900 text-lg font-bold mt-1 my-0">₹2,290 <span className="text-xs font-normal text-slate-500">/q</span></p>
-                <span className="text-high text-[10px] font-bold mt-1 block flex items-center gap-0.5">
-                  <TrendingDown size={12} /> Price Crash (-22%)
-                </span>
-              </button>
-
-              <div 
-                onClick={() => setActiveTab('risk-detail')}
-                className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-colors ${
-                  distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High'
-                    ? 'bg-high-light border-high-dark/20 hover:bg-high-light/80'
-                    : distressData?.risk_level === 'Elevated'
-                    ? 'bg-watch-light border-watch-dark/20 hover:bg-watch-light/80'
-                    : 'bg-stable-light border-stable-dark/20 hover:bg-stable-light/80'
-                }`}
-              >
-                <div className={`mb-2 ${
-                  distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High' ? 'text-high' :
-                  distressData?.risk_level === 'Elevated' ? 'text-watch' : 'text-stable'
-                }`}><AlertTriangle size={32} /></div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">Distress Risk</h3>
-                <p className="text-slate-900 text-lg font-bold mt-1 my-0">
-                  {distressData?.score ?? '—'} <span className="text-sm font-normal text-slate-500">/ 100</span>
-                </p>
-                <span className={`text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-1.5 inline-block uppercase ${
-                  distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High' ? 'bg-high' :
-                  distressData?.risk_level === 'Elevated' ? 'bg-watch' :
-                  distressData?.risk_level === 'Watch' ? 'bg-elevated' : 'bg-stable'
-                }`}>{distressData?.risk_level ?? 'Loading…'}</span>
+                <div 
+                  onClick={() => setActiveTab('risk-detail')}
+                  className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-colors flex items-center justify-between ${
+                    distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High'
+                      ? 'bg-high-light border-high-dark/20 hover:bg-high-light/80'
+                      : distressData?.risk_level === 'Elevated'
+                      ? 'bg-watch-light border-watch-dark/20 hover:bg-watch-light/80'
+                      : 'bg-stable-light border-stable-dark/20 hover:bg-stable-light/80'
+                  }`}
+                >
+                  <div>
+                    <div className={`mb-1 flex items-center gap-2 ${
+                      distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High' ? 'text-high' :
+                      distressData?.risk_level === 'Elevated' ? 'text-watch' : 'text-stable'
+                    }`}>
+                      <AlertTriangle size={24} />
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600 my-0">{t.homeDistressCard}</h3>
+                    </div>
+                    <p className="text-slate-900 text-xl font-extrabold mt-1 my-0">
+                      {distressData?.score ?? '38'} <span className="text-sm font-normal text-slate-500">/ 100</span>
+                    </p>
+                    <span className={`text-white text-[9px] font-bold px-2 py-0.5 rounded-full mt-1.5 inline-block uppercase ${
+                      distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High' ? 'bg-high' :
+                      distressData?.risk_level === 'Elevated' ? 'bg-watch' :
+                      distressData?.risk_level === 'Watch' ? 'bg-elevated' : 'bg-stable'
+                    }`}>{distressData?.risk_level ?? 'Watch'}</span>
+                  </div>
+                  <ChevronRight size={20} className="text-slate-400" />
+                </div>
               </div>
             </div>
 
@@ -1116,105 +1307,325 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           groundnut: '🥜', chilli: '🌶️', grapes: '🍇', banana: '🍌', mango: '🥭',
         };
 
+        // Group crops by Crop Type
+        const cropsByType: Record<string, any[]> = {};
+        allCrops.forEach((c: any) => {
+          const key = (c.crop_type || 'unknown').toLowerCase();
+          if (!cropsByType[key]) cropsByType[key] = [];
+          cropsByType[key].push(c);
+        });
+
+        // Group crops by Farm ID
+        const cropsByFarm: Record<string, { farm: any; crops: any[] }> = {};
+        farms.forEach((f: any) => {
+          cropsByFarm[f.id] = { farm: f, crops: [] };
+        });
+        allCrops.forEach((c: any) => {
+          if (cropsByFarm[c.farm_id]) {
+            cropsByFarm[c.farm_id].crops.push(c);
+          } else {
+            cropsByFarm[c.farm_id] = {
+              farm: { id: c.farm_id, name: c.farm_name || `Farm ${c.farm_id}`, district: c.farm_district, area: c.farm_area },
+              crops: [c]
+            };
+          }
+        });
+
+        const toggleGroupExpand = (key: string) => {
+          setExpandedCropGroups(prev => ({ ...prev, [key]: !prev[key] }));
+        };
+
         return (
           <div className="space-y-6">
-            {/* Header */}
-            <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-xl font-bold my-0">My Crops</h2>
-                  <p className="text-slate-500 text-xs mt-1">
-                    {allCrops.length > 0
-                      ? formatFarmSummary(allCrops.length, farms.length, language, nativeDigits)
-                      : t.cropTitle /* No crops registered - use translated heading */}
-                  </p>
+            {/* Header & Grouping Selector */}
+            <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold my-0">{t.cropTitle}</h2>
+                <p className="text-slate-500 text-xs mt-1 my-0">
+                  {allCrops.length > 0
+                    ? formatFarmSummary(allCrops.length, farms.length, language, nativeDigits)
+                    : t.cropTitle}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Grouping Toggle Pills */}
+                <div className="bg-earth-100 p-1 rounded-xl flex items-center border border-earth-200">
+                  <button
+                    onClick={() => setCropViewGroup('crop')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      cropViewGroup === 'crop'
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Layers size={14} className={cropViewGroup === 'crop' ? 'text-stable' : ''} />
+                    Group by Crop
+                  </button>
+                  <button
+                    onClick={() => setCropViewGroup('farm')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      cropViewGroup === 'farm'
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Building2 size={14} className={cropViewGroup === 'farm' ? 'text-stable' : ''} />
+                    Group by Farm
+                  </button>
                 </div>
+
                 <button
                   onClick={() => {
                     if (!selectedFarm) { toast.warning("No farm selected", "Please add a farm first."); return; }
                     setShowAddCropModal(true);
                   }}
-                  className="px-3 py-2 bg-stable text-white hover:bg-stable-dark rounded-xl text-xs font-bold transition-all shadow-sm"
+                  className="px-3 py-2 bg-stable text-white hover:bg-stable-dark rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1"
                 >
-                  + Add Crop
+                  + {t.cropAddNew}
                 </button>
               </div>
             </div>
 
-            {/* All Crops Grid */}
-            {allCrops.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {allCrops.map((crop: any) => (
-                  <div
-                    key={crop.id}
-                    onClick={() => {
-                      setSelectedCrop(crop);
-                      const farm = farms.find((f: any) => f.id === crop.farm_id);
-                      if (farm) setSelectedFarm(farm);
-                    }}
-                    className={`relative rounded-2xl overflow-hidden border cursor-pointer transition-all hover:shadow-lg hover:-translate-y-0.5 ${
-                      selectedCrop?.id === crop.id ? 'ring-2 ring-stable border-stable' : 'border-earth-200'
-                    }`}
-                  >
-                    {/* Crop Image */}
-                    <div className="relative h-40 w-full">
-                      <img
-                        src={getCropImage(crop.crop_type, crop.image_url)}
-                        alt={crop.crop_type}
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                      {/* Stage badge */}
-                      <div className="absolute top-3 right-3">
-                        <span className={`text-[9px] text-white font-bold px-2 py-1 rounded-full uppercase ${getCropStageColor(crop.stage || '')}`}>
-                          {translateStage(language, crop.stage) || 'Unknown Stage'}
-                        </span>
-                      </div>
-                      {/* Crop name */}
-                      <div className="absolute bottom-3 left-3 text-white">
-                        <div className="text-lg leading-none">
-                          {cropEmojis[crop.crop_type?.toLowerCase()] || '🌱'}
-                        </div>
-                        <h3 className="font-bold text-sm capitalize mt-0.5 my-0">{capitalize(translateCrop(language, crop.crop_type))}</h3>
-                        <p className="text-[10px] text-slate-200 my-0">{crop.variety || 'Local variety'}</p>
-                      </div>
-                    </div>
-
-                    {/* Crop details */}
-                    <div className="bg-white p-4 space-y-2">
-                      <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span>🌱 {t.cropSowingDate} {formatDaysAgo(getSowingDaysAgo(crop.sowing_date), language, nativeDigits)}</span>
-                        <span className="text-[10px] bg-earth-100 text-earth-dark font-bold px-2 py-0.5 rounded-full">
-                          {crop.farm_name || `Farm ${crop.farm_id}`}
-                        </span>
-                      </div>
-                      {crop.farm_district && (
-                        <p className="text-[10px] text-slate-400">📍 {crop.farm_district} · {crop.farm_area} acres</p>
-                      )}
-                      {/* Advisories for this crop */}
-                      {advisories.filter((adv: any) => adv.farm_id === crop.farm_id).length > 0 && (
-                        <div className="pt-2 border-t border-slate-100">
-                          <p className="text-[10px] font-bold text-elevated-dark uppercase tracking-wide">⚠ Advisory</p>
-                          <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">
-                            {advisories.filter((adv: any) => adv.farm_id === crop.farm_id)[0]?.recommendation}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
+            {/* Content view depending on group toggle */}
+            {allCrops.length === 0 ? (
               <div className="bg-white p-12 rounded-2xl border border-earth-200 text-center">
                 <p className="text-4xl mb-3">🌱</p>
-                <p className="text-slate-500 text-sm font-medium">No crops registered yet</p>
-                <p className="text-slate-400 text-xs mt-1 mb-4">Add your first farm and crop to get started</p>
+                <p className="text-slate-500 text-sm font-medium">{t.cropTitle}</p>
+                <p className="text-slate-400 text-xs mt-1 mb-4">{t.cropAddNewFarm}</p>
                 <button
                   onClick={() => setShowAddCropModal(true)}
                   className="px-5 py-2.5 bg-stable text-white hover:bg-stable-dark rounded-xl text-sm font-bold transition-all"
                 >
                   Register First Crop
                 </button>
+              </div>
+            ) : cropViewGroup === 'crop' ? (
+              /* GROUP BY CROP VIEW */
+              <div className="space-y-4">
+                {Object.entries(cropsByType).map(([cropTypeKey, cropItems]) => {
+                  const isExpanded = expandedCropGroups[`crop_${cropTypeKey}`] !== false; // Default expanded
+                  const totalAcres = cropItems.reduce((acc, c) => acc + (c.farm_area || 0), 0);
+                  const emoji = cropEmojis[cropTypeKey] || '🌱';
+
+                  return (
+                    <div key={cropTypeKey} className="bg-white rounded-2xl border border-earth-200 shadow-sm overflow-hidden transition-all">
+                      {/* Group Header */}
+                      <div
+                        onClick={() => toggleGroupExpand(`crop_${cropTypeKey}`)}
+                        className="p-5 bg-gradient-to-r from-earth-50 to-white flex items-center justify-between cursor-pointer hover:bg-earth-100/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-3xl bg-white p-2.5 rounded-2xl shadow-xs border border-earth-200">{emoji}</span>
+                          <div>
+                            <h3 className="font-bold text-slate-900 text-base capitalize my-0 flex items-center gap-2">
+                              {capitalize(translateCrop(language, cropTypeKey))}
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-stable-light text-stable-dark border border-stable/20">
+                                {cropItems.length} plot{cropItems.length > 1 ? 's' : ''}
+                              </span>
+                            </h3>
+                            <p className="text-xs text-slate-500 mt-0.5 my-0">
+                              Total area: <span className="font-semibold text-slate-700">{totalAcres.toFixed(1)} acres</span> across plots
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-slate-400">
+                          <span className="text-xs font-semibold text-slate-500 hidden sm:inline">
+                            {isExpanded ? 'Collapse' : 'View Plots'}
+                          </span>
+                          {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                        </div>
+                      </div>
+
+                      {/* Expandable Plots List */}
+                      {isExpanded && (
+                        <div className="p-5 border-t border-earth-200 bg-white grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {cropItems.map((crop: any) => {
+                            const farmAdvisories = advisories.filter((adv: any) => adv.farm_id === crop.farm_id);
+                            return (
+                              <div
+                                key={crop.id}
+                                className={`p-4 rounded-xl border transition-all ${
+                                  selectedCrop?.id === crop.id
+                                    ? 'border-stable ring-2 ring-stable/20 bg-stable-light/20'
+                                    : 'border-earth-200 hover:border-earth-300'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <span className={`text-[9px] text-white font-bold px-2 py-0.5 rounded-full uppercase ${getCropStageColor(crop.stage || '')}`}>
+                                      {translateStage(language, crop.stage) || 'Veg. Growth'}
+                                    </span>
+                                    <h4 className="font-bold text-sm text-slate-900 capitalize mt-1.5 my-0">
+                                      {crop.variety || 'Local Variety'}
+                                    </h4>
+                                    <p className="text-xs text-slate-500 mt-0.5 my-0 flex items-center gap-1">
+                                      <span>📍 {crop.farm_name || `Farm ${crop.farm_id}`}</span>
+                                      {crop.farm_district && <span>({crop.farm_district})</span>}
+                                    </p>
+                                  </div>
+
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedCrop(crop);
+                                        const farm = farms.find((f: any) => f.id === crop.farm_id);
+                                        if (farm) setSelectedFarm(farm);
+                                      }}
+                                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                                        selectedCrop?.id === crop.id ? 'bg-stable text-white' : 'bg-earth-100 text-slate-700 hover:bg-earth-200'
+                                      }`}
+                                    >
+                                      {selectedCrop?.id === crop.id ? 'Selected' : 'Select'}
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteCrop(crop.id)}
+                                      title="Delete crop plot"
+                                      className="p-1.5 text-slate-400 hover:text-high hover:bg-high-light rounded-lg transition-colors"
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                                  <span>🌱 Sown {formatDaysAgo(getSowingDaysAgo(crop.sowing_date), language, nativeDigits)}</span>
+                                  <span className="font-semibold text-slate-700">{crop.farm_area || 1.0} acres</span>
+                                </div>
+
+                                {/* Crop Advisory Alert */}
+                                {farmAdvisories.length > 0 && (
+                                  <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200/60 rounded-lg text-xs text-amber-900">
+                                    <p className="font-bold flex items-center gap-1 text-[11px] uppercase tracking-wide text-amber-800 my-0">
+                                      <AlertTriangle size={12} className="text-amber-600" /> Action Required
+                                    </p>
+                                    <p className="mt-0.5 my-0 text-slate-700 font-medium leading-snug">
+                                      {farmAdvisories[0].recommendation}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              /* GROUP BY FARM VIEW */
+              <div className="space-y-4">
+                {Object.values(cropsByFarm).map(({ farm, crops }) => {
+                  const isExpanded = expandedCropGroups[`farm_${farm.id}`] !== false; // Default expanded
+                  const farmTotalAcres = farm.area || farm.farm_area || 0;
+
+                  return (
+                    <div key={farm.id} className="bg-white rounded-2xl border border-earth-200 shadow-sm overflow-hidden transition-all">
+                      {/* Farm Header */}
+                      <div
+                        onClick={() => toggleGroupExpand(`farm_${farm.id}`)}
+                        className="p-5 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex items-center justify-between cursor-pointer hover:bg-slate-800 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="bg-white/10 p-2.5 rounded-2xl text-amber-400">
+                            <Building2 size={24} />
+                          </span>
+                          <div>
+                            <h3 className="font-bold text-white text-base my-0 flex items-center gap-2">
+                              {farm.name || `Farm ${farm.id}`}
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-700 text-slate-200 border border-slate-600">
+                                {crops.length} crop{crops.length > 1 ? 's' : ''}
+                              </span>
+                            </h3>
+                            <p className="text-xs text-slate-300 mt-0.5 my-0 flex items-center gap-2">
+                              <span>📍 {farm.district || farm.location_id?.replace('_', ', ') || 'Nashik'}</span>
+                              <span>·</span>
+                              <span>{farmTotalAcres} acres</span>
+                              {farm.soil_type && <><span>·</span><span className="capitalize">{farm.soil_type} soil</span></>}
+                              {farm.irrigation && <><span>·</span><span className="capitalize">{farm.irrigation}</span></>}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-slate-300">
+                          <span className="text-xs font-semibold hidden sm:inline">
+                            {isExpanded ? 'Collapse Farm' : 'View Crops'}
+                          </span>
+                          {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                        </div>
+                      </div>
+
+                      {/* Expandable Crops under this Farm */}
+                      {isExpanded && (
+                        <div className="p-5 border-t border-earth-200 bg-earth-50/50">
+                          {crops.length === 0 ? (
+                            <p className="text-xs text-slate-500 italic py-2 my-0">No crops registered under this farm yet.</p>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {crops.map((crop: any) => {
+                                const emoji = cropEmojis[crop.crop_type?.toLowerCase()] || '🌱';
+                                const farmAdvisories = advisories.filter((adv: any) => adv.farm_id === crop.farm_id);
+
+                                return (
+                                  <div
+                                    key={crop.id}
+                                    className={`bg-white p-4 rounded-xl border transition-all ${
+                                      selectedCrop?.id === crop.id
+                                        ? 'border-stable ring-2 ring-stable/20'
+                                        : 'border-earth-200 hover:border-earth-300'
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex items-center gap-2.5">
+                                        <span className="text-2xl">{emoji}</span>
+                                        <div>
+                                          <h4 className="font-bold text-sm text-slate-900 capitalize my-0">
+                                            {capitalize(translateCrop(language, crop.crop_type))}
+                                          </h4>
+                                          <p className="text-xs text-slate-500 my-0">{crop.variety || 'Local variety'}</p>
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center gap-1">
+                                        <span className={`text-[9px] text-white font-bold px-2 py-0.5 rounded-full uppercase ${getCropStageColor(crop.stage || '')}`}>
+                                          {translateStage(language, crop.stage) || 'Veg. Growth'}
+                                        </span>
+                                        <button
+                                          onClick={() => handleDeleteCrop(crop.id)}
+                                          title="Delete crop plot"
+                                          className="p-1.5 text-slate-400 hover:text-high hover:bg-high-light rounded-lg transition-colors ml-1"
+                                        >
+                                          <Trash2 size={15} />
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                                      <span>🌱 Sown {formatDaysAgo(getSowingDaysAgo(crop.sowing_date), language, nativeDigits)}</span>
+                                      <span className="font-semibold text-slate-700">Stage: {crop.stage || 'Vegetative'}</span>
+                                    </div>
+
+                                    {farmAdvisories.length > 0 && (
+                                      <div className="mt-2.5 p-2 bg-amber-50 border border-amber-200/60 rounded-lg text-xs text-amber-900">
+                                        <p className="font-bold text-[10px] uppercase text-amber-800 my-0 flex items-center gap-1">
+                                          <AlertTriangle size={11} /> {farmAdvisories[0].category || 'Advisory'}
+                                        </p>
+                                        <p className="my-0 mt-0.5 text-slate-700 font-medium leading-snug">
+                                          {farmAdvisories[0].recommendation}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -1238,9 +1649,9 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                 </div>
               </div>
             )}
-
-            {/* ── Yield Calculator CTA ── */}
-            <div className="bg-gradient-to-r from-stable-light to-earth-50 border border-stable/20 rounded-2xl p-5 flex items-center justify-between">
+          </div>
+        );
+      }
               <div>
                 <h3 className="font-bold text-slate-800 my-0 flex items-center gap-2"><Calculator size={18} className="text-stable" /> Yield Calculator</h3>
                 <p className="text-xs text-slate-500 mt-0.5">Estimate harvest, revenue &amp; profit with ML model</p>
@@ -1301,12 +1712,12 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Mandi Name</th>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Distance</th>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Sticker Price</th>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Transport Cost</th>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Mandi Fees (2%)</th>
-                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Net Return</th>
+                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketMandiName}</th>
+                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketDistance}</th>
+                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketStickerPrice}</th>
+                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketTransport}</th>
+                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketFees}</th>
+                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketNetReturn}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1317,7 +1728,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                         className={idx === 0 ? "bg-stable-light font-semibold text-stable" : "bg-white text-slate-700"}
                       >
                         <td className="px-4 py-3 font-bold">
-                          {m.mandi_name} {idx === 0 && <span className="text-[10px] bg-stable text-white px-1.5 py-0.5 rounded-md ml-1.5 uppercase tracking-wide">Best Value</span>}
+                          {m.mandi_name} {idx === 0 && <span className="text-[10px] bg-stable text-white px-1.5 py-0.5 rounded-md ml-1.5 uppercase tracking-wide">{t.marketBestValue}</span>}
                         </td>
                         <td className="px-4 py-3 font-mono">{formatInteger(m.distance_km, language, nativeDigits)} km</td>
                         <td className="px-4 py-3 font-mono">{formatCurrency(m.sticker_price, language, nativeDigits)}</td>
@@ -2219,7 +2630,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                   {[
                     { label: 'Yield per Acre', value: `${yieldResult.qPerAcre} q`, icon: '🌾', color: 'text-stable' },
                     { label: 'Total Harvest', value: `${yieldResult.totalQ} q`, icon: '📦', color: 'text-slate-800' },
-                    { label: 'Market Price', value: `₹${Number(yieldResult.pricePerQ).toLocaleString('en-IN')}/q`, icon: '📊', color: 'text-elevated' },
+                    { label: t.marketTitle, value: `₹${Number(yieldResult.pricePerQ).toLocaleString('en-IN')}/q`, icon: '📊', color: 'text-elevated' },
                     { label: 'Est. Revenue', value: `₹${Number(yieldResult.revenue).toLocaleString('en-IN')}`, icon: '💰', color: 'text-watch' },
                   ].map(item => (
                     <div key={item.label} className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm text-center">
@@ -2652,19 +3063,19 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
             onClick={() => setActiveTab('home')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'home' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
           >
-            <HomeIcon size={18} /> Home Summary
+            <HomeIcon size={18} /> {t.navHome}
           </button>
           <button 
             onClick={() => setActiveTab('crop')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'crop' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
           >
-            <Sprout size={18} /> My Crop
+            <Sprout size={18} /> {t.navCrop}
           </button>
           <button 
             onClick={() => setActiveTab('market')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'market' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
           >
-            <ShoppingCart size={18} /> Market & Mandis
+            <ShoppingCart size={18} /> {t.navMarket}
           </button>
           <button 
             onClick={() => setActiveTab('yield')}
@@ -2682,7 +3093,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
             onClick={() => setActiveTab('support')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'support' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
           >
-            <HelpCircle size={18} /> Schemes
+            <HelpCircle size={18} /> {t.navSupport}
           </button>
           <button 
             onClick={() => setActiveTab('community')}
@@ -2697,7 +3108,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
             onClick={() => setActiveTab('profile')}
             className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'profile' ? 'bg-slate-100 text-slate-800' : 'text-slate-500 hover:bg-slate-50'}`}
           >
-            <User size={16} /> Account Profile
+            <User size={16} /> {t.navProfile}
           </button>
         </div>
       </aside>

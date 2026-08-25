@@ -22,7 +22,7 @@ class OpenMeteoProvider(WeatherProvider):
         params = {
             "latitude": lat,
             "longitude": lon,
-            "current": "temperature_2m,relative_humidity_2m,rain",
+            "current": "temperature_2m,relative_humidity_2m,rain,wind_speed_10m",
             "daily": "temperature_2m_max,temperature_2m_min,rain_sum,precipitation_probability_max",
             "timezone": "auto"
         }
@@ -39,7 +39,8 @@ class OpenMeteoProvider(WeatherProvider):
             observation = {
                 "rainfall": float(current.get("rain", 0.0)),
                 "temperature": float(current.get("temperature_2m", 0.0)),
-                "humidity": float(current.get("relative_humidity_2m", 0.0))
+                "humidity": float(current.get("relative_humidity_2m", 0.0)),
+                "wind_speed": float(current.get("wind_speed_10m", 12.0))
             }
             
             # Map daily forecasts (up to 7 days)

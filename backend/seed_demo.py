@@ -201,13 +201,13 @@ def seed_farmer_data(db: Session):
 
     # 5. Seed some basic mock weather for these locations so dashboard loads immediately
     # Nashik
-    db.merge(models.WeatherObservation(location_id="Nashik_Maharashtra", date=today, rainfall=5.0, temperature=27.0, humidity=82.0))
+    db.merge(models.WeatherObservation(location_id="Nashik_Maharashtra", date=today, rainfall=5.0, temperature=27.0, humidity=82.0, wind_speed=14.0))
     # Jalgaon
-    db.merge(models.WeatherObservation(location_id="Jalgaon_Maharashtra", date=today, rainfall=12.0, temperature=31.0, humidity=75.0))
+    db.merge(models.WeatherObservation(location_id="Jalgaon_Maharashtra", date=today, rainfall=12.0, temperature=31.0, humidity=75.0, wind_speed=18.0))
     # Nagpur
-    db.merge(models.WeatherObservation(location_id="Nagpur_Maharashtra", date=today, rainfall=2.0, temperature=30.0, humidity=70.0))
+    db.merge(models.WeatherObservation(location_id="Nagpur_Maharashtra", date=today, rainfall=2.0, temperature=30.0, humidity=70.0, wind_speed=10.0))
     # Pune
-    db.merge(models.WeatherObservation(location_id="Pune_Maharashtra", date=today, rainfall=0.0, temperature=28.0, humidity=68.0))
+    db.merge(models.WeatherObservation(location_id="Pune_Maharashtra", date=today, rainfall=0.0, temperature=28.0, humidity=68.0, wind_speed=8.0))
     db.commit()
 
     # 6. Trigger advisory generation
