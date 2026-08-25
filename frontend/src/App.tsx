@@ -1658,9 +1658,6 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                   );
                 })()}
               </div>
-            )}
-          </div>
-        );
           </div>
         );
       case 'alerts':
