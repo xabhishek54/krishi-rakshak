@@ -8,7 +8,7 @@ import time
 
 from app.database import engine, Base, get_db, SessionLocal
 from app import models, schemas, auth
-from app.weather import OpenMeteoProvider, resolve_coords
+from app.weather import OpenMeteoProvider, resolve_coords, resolve_coords_async
 from app.advisory import evaluate_advisories
 from app.mandi import seed_mandi_data, get_mandi_comparison, detect_price_crash, get_price_history
 from app.yield_model import predict_yield_deviation
@@ -281,14 +281,29 @@ def list_crops(farm_id: int, current_farmer: models.Farmer = Depends(auth.get_cu
 # Weather router
 @app.post("/api/v1/weather/{location_id}/refresh")
 async def refresh_weather(location_id: str, current_farmer: models.Farmer = Depends(auth.get_current_farmer), db: Session = Depends(get_db)):
-    # Find farm coordinate to query provider
-    farm = db.query(models.Farm).filter(models.Farm.farmer_id == current_farmer.id).first()
-    if not farm or farm.latitude is None or farm.longitude is None:
-        raise HTTPException(status_code=400, detail="Farmer has no farm with GPS coordinates configured")
-    
-    weather_data = await weather_provider.fetch_weather(farm.latitude, farm.longitude)
+    # Find farm coordinate matching location_id or farmer's active farm
+    f_lat, f_lon = None, None
+    if "," in location_id:
+        try:
+            parts = location_id.split(",")
+            f_lat, f_lon = float(parts[0]), float(parts[1])
+        except ValueError:
+            pass
+            
+    if f_lat is None:
+        farm = db.query(models.Farm).filter(
+            models.Farm.farmer_id == current_farmer.id,
+            (models.Farm.district.ilike(f"%{location_id}%") | models.Farm.name.ilike(f"%{location_id}%"))
+        ).first()
+        if not farm:
+            farm = db.query(models.Farm).filter(models.Farm.farmer_id == current_farmer.id).first()
+        if farm and farm.latitude is not None:
+            f_lat, f_lon = farm.latitude, farm.longitude
+
+    lat, lon = await resolve_coords_async(location_id, f_lat, f_lon)
+    weather_data = await weather_provider.fetch_weather(lat, lon)
     if not weather_data:
-        raise HTTPException(status_code=502, detail="Failed to retrieve weather from Open-Meteo")
+        raise HTTPException(status_code=502, detail=f"Failed to retrieve weather from Open-Meteo for {location_id}")
     
     # Save/Update current observation
     today_date = date.today()
@@ -358,11 +373,13 @@ async def get_weather(location_id: str, db: Session = Depends(get_db)):
     
     # If no observation for today, fetch live from Open-Meteo automatically
     if not obs:
-        # Check if any farm has coordinates or resolve from location_id
-        farm = db.query(models.Farm).filter(models.Farm.latitude.isnot(None)).first()
+        # Check matching farm or resolve from location_id using live Geocoding API
+        farm = db.query(models.Farm).filter(
+            (models.Farm.district.ilike(f"%{location_id}%") | models.Farm.name.ilike(f"%{location_id}%"))
+        ).first()
         f_lat = farm.latitude if farm else None
         f_lon = farm.longitude if farm else None
-        lat, lon = resolve_coords(location_id, f_lat, f_lon)
+        lat, lon = await resolve_coords_async(location_id, f_lat, f_lon)
         
         live_data = await weather_provider.fetch_weather(lat, lon)
         if live_data and live_data.get("observation"):

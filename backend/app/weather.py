@@ -21,6 +21,8 @@ DISTRICT_COORDS: Dict[str, tuple] = {
     "bhubaneswar": (20.2961, 85.8245),
 }
 
+_GEO_CACHE: Dict[str, tuple] = {}
+
 def resolve_coords(location_id: str, farm_lat: Optional[float] = None, farm_lon: Optional[float] = None) -> tuple:
     if farm_lat is not None and farm_lon is not None:
         return farm_lat, farm_lon
@@ -32,11 +34,49 @@ def resolve_coords(location_id: str, farm_lat: Optional[float] = None, farm_lon:
         except ValueError:
             pass
             
-    loc_lower = location_id.lower()
+    loc_lower = location_id.lower().replace("_", " ").strip()
     for name, coords in DISTRICT_COORDS.items():
         if name in loc_lower:
             return coords
             
+    return (20.0059, 73.7898)
+
+async def resolve_coords_async(location_id: str, farm_lat: Optional[float] = None, farm_lon: Optional[float] = None) -> tuple:
+    if farm_lat is not None and farm_lon is not None:
+        return farm_lat, farm_lon
+    
+    if "," in location_id:
+        try:
+            parts = location_id.split(",")
+            return float(parts[0]), float(parts[1])
+        except ValueError:
+            pass
+            
+    loc_clean = location_id.replace("_", " ").strip()
+    loc_lower = loc_clean.lower()
+    
+    for name, coords in DISTRICT_COORDS.items():
+        if name in loc_lower:
+            return coords
+
+    if loc_lower in _GEO_CACHE:
+        return _GEO_CACHE[loc_lower]
+
+    # Live Open-Meteo Geocoding API lookup for real location / city / district names (e.g. "Rourkela", "Sundargarh", etc.)
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get("https://geocoding-api.open-meteo.com/v1/search", params={"name": loc_clean, "count": 1})
+            if resp.status_code == 200:
+                results = resp.json().get("results", [])
+                if results:
+                    lat = float(results[0]["latitude"])
+                    lon = float(results[0]["longitude"])
+                    _GEO_CACHE[loc_lower] = (lat, lon)
+                    print(f"[geocoding] Resolved '{location_id}' -> ({lat}, {lon}) ({results[0].get('name')}, {results[0].get('admin1')})")
+                    return lat, lon
+    except Exception as e:
+        print(f"[geocoding] Error resolving coordinates for '{location_id}': {e}")
+
     return (20.0059, 73.7898)
 
 class WeatherProvider:

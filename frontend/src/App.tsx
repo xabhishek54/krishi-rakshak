@@ -301,12 +301,29 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     }
   }, [token]);
 
-  // Fetch Weather
-  const fetchWeather = async () => {
-    if (!farmer?.location_id) return;
+  const getActiveLocationId = (farmObj?: any) => {
+    const targetFarm = farmObj || selectedFarm;
+    if (targetFarm) {
+      if (targetFarm.latitude && targetFarm.longitude) {
+        return `${targetFarm.latitude},${targetFarm.longitude}`;
+      }
+      if (targetFarm.district) {
+        return targetFarm.district;
+      }
+      if (targetFarm.name) {
+        return targetFarm.name;
+      }
+    }
+    return farmer?.location_id || 'Nashik_Maharashtra';
+  };
+
+  // Fetch Weather for active farm / location
+  const fetchWeather = async (targetLocId?: string) => {
+    const locId = targetLocId || getActiveLocationId();
+    if (!locId) return;
     setLoadingWeather(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/weather/${farmer.location_id}`);
+      const res = await fetch(`http://localhost:8000/api/v1/weather/${encodeURIComponent(locId)}`);
       if (res.ok) {
         const data = await res.json();
         if (data.observation) {
@@ -319,7 +336,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     } catch {
       // Offline/Error Fallback Mock Data
       setWeather({
-        location_id: farmer.location_id,
+        location_id: locId,
         observation: {
           rainfall: 8.0,
           temperature: 26.0,
@@ -336,17 +353,18 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     setLoadingWeather(false);
   };
 
-  // Trigger weather refresh from API
-  const refreshWeatherFromApi = async () => {
-    if (!farmer?.location_id) return;
+  // Trigger weather refresh from API for active farm / location
+  const refreshWeatherFromApi = async (targetLocId?: string) => {
+    const locId = targetLocId || getActiveLocationId();
+    if (!locId) return;
     setLoadingWeather(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/weather/${farmer.location_id}/refresh`, {
+      const res = await fetch(`http://localhost:8000/api/v1/weather/${encodeURIComponent(locId)}/refresh`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        await fetchWeather();
+        await fetchWeather(locId);
         await fetchAdvisoriesAndAlerts();
       }
     } catch (e) {
@@ -384,15 +402,13 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     }
   };
 
-  // Fetch Weather + Advisories whenever the farmer's location changes.
-  // Deliberately NOT depending on selectedFarm/selectedCrop — those changes
-  // should NOT trigger a full weather+advisory refresh (prevents 3-5x refires).
+  // Fetch Weather + Advisories whenever active farm or location changes
   useEffect(() => {
-    if (token && hasFarm && farmer?.location_id) {
+    if (token && (hasFarm || farmer?.location_id)) {
       fetchWeather();
       fetchAdvisoriesAndAlerts();
     }
-  }, [token, hasFarm, farmer?.location_id]);
+  }, [token, hasFarm, selectedFarm?.id, selectedFarm?.district, farmer?.location_id]);
   const fetchMandiPrices = async () => {
     if (!token || !selectedCrop) return;
     try {
