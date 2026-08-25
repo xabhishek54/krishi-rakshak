@@ -1501,6 +1501,97 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               </div>
             );
           }
+      case 'market':
+        return (
+          <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+              <div>
+                <h2 className="text-xl font-bold my-0">Mandi Pricing &amp; Net Realization</h2>
+                <p className="text-slate-500 text-xs mt-1 mb-0">
+                  Net returns after transport &amp; handling costs
+                </p>
+              </div>
+              {allCrops.length > 1 && (
+                <select
+                  value={selectedCrop?.id || ''}
+                  onChange={(e) => {
+                    const crop = allCrops.find((c: any) => c.id === Number(e.target.value));
+                    if (crop) {
+                      setSelectedCrop(crop);
+                      const farm = farms.find((f: any) => f.id === crop.farm_id);
+                      if (farm) setSelectedFarm(farm);
+                    }
+                  }}
+                  className="text-xs border border-earth-200 rounded-lg px-3 py-2 bg-white text-slate-700 font-medium"
+                >
+                  {allCrops.map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {c.crop_type} — {c.farm_name || `Farm ${c.farm_id}`}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            {selectedCrop && (
+              <div className="text-xs bg-stable-light text-stable-dark font-semibold rounded-lg px-4 py-2 flex items-center gap-2">
+                <span className="capitalize">🌾 {selectedCrop.crop_type}</span>
+                <span className="text-slate-400">·</span>
+                <span>{selectedCrop.farm_name || `Farm ${selectedCrop.farm_id}`}</span>
+                {selectedCrop.stage && <><span className="text-slate-400">·</span><span>{selectedCrop.stage}</span></>}
+              </div>
+            )}
+
+            {/* Mandi comparison table */}
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketMandiName}</th>
+                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketDistance}</th>
+                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketStickerPrice}</th>
+                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketTransport}</th>
+                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketFees}</th>
+                    <th className="px-4 py-3 font-semibold text-slate-500 text-xs uppercase">{t.marketNetReturn}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {mandiPrices.length > 0 ? (
+                    mandiPrices.map((m, idx) => (
+                      <tr 
+                        key={m.mandi_id || idx} 
+                        className={idx === 0 ? "bg-stable-light font-semibold text-stable" : "bg-white text-slate-700"}
+                      >
+                        <td className="px-4 py-3 font-bold">
+                          {m.mandi_name} {idx === 0 && <span className="text-[10px] bg-stable text-white px-1.5 py-0.5 rounded-md ml-1.5 uppercase tracking-wide">{t.marketBestValue}</span>}
+                        </td>
+                        <td className="px-4 py-3 font-mono">{formatInteger(m.distance_km, language, nativeDigits)} km</td>
+                        <td className="px-4 py-3 font-mono">{formatCurrency(m.sticker_price, language, nativeDigits)}</td>
+                        <td className="px-4 py-3 font-mono">{formatCurrency(m.transport_cost, language, nativeDigits)}</td>
+                        <td className="px-4 py-3 font-mono">{formatCurrency(m.other_fees, language, nativeDigits)}</td>
+                        <td className="px-4 py-3 font-extrabold font-mono">{formatCurrency(m.net_return, language, nativeDigits)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-slate-400 text-xs">
+                        No mandi comparison data available. Register crop above to evaluate APMCs.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {mandiPrices.length > 0 && (
+              <div className="bg-stable-light p-3.5 rounded-xl border border-stable-dark/10 text-xs text-stable-dark text-left">
+                💡 **System Tip:** Sell your crop at **{mandiPrices[0].mandi_name}**. Even though sticker prices vary across APMCs, selling here minimizes transportation overhead and commissions, netting you a peak return of **{formatCurrency(mandiPrices[0].net_return, language, nativeDigits)} per quintal**.
+              </div>
+            )}
+
+            {/* Price Crash Banner */}
+            {priceCrashStatus && priceCrashStatus.price_crash && (
+              <div className="flex gap-4 items-start p-4 bg-high-light rounded-xl border border-high-dark/10">
+                <span className="bg-high text-white p-2.5 rounded-xl shrink-0"><TrendingDown size={20} /></span>
                 <div className="flex-1">
                   <div className="flex justify-between items-center">
                     <h4 className="font-bold text-high-dark text-sm">Price Crash Alert</h4>
@@ -1568,6 +1659,8 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                 })()}
               </div>
             )}
+          </div>
+        );
           </div>
         );
       case 'alerts':
