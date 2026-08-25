@@ -1654,6 +1654,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                           <Line type="monotone" dataKey="Max Price" stroke="#cbd5e1" strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
                         </LineChart>
                       </ResponsiveContainer>
+                    </div>
                   );
                 })()}
               </div>
