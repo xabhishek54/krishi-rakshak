@@ -1,5 +1,19 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect } from 'react';
 import { translations } from './translations';
+import {
+  formatCurrency,
+  formatInteger,
+  formatPerQuintal,
+  translateCrop,
+  translateStage,
+  translateSoil,
+  translateIrrigation,
+  translateObligation,
+  formatDaysAgo,
+  formatFarmSummary,
+  useNativeDigits,
+  capitalize,
+} from './i18n';
 import { ToastContainer, useToast } from './Toast';
 import { getStateList, getDistrictsForState, getDistrictCoords } from './india_locations';
 import { speakText, stopSpeech, buildVoiceText, askGemini } from './voice';
@@ -27,9 +41,7 @@ import {
   Droplets,
   Trash2,
   Calculator,
-  DollarSign,
   PiggyBank,
-  Wheat,
   BarChart3
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -84,7 +96,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   const [yieldSoil, setYieldSoil] = useState<string>('loam');
   const [yieldIrrigation, setYieldIrrigation] = useState<string>('drip');
   const [yieldResult, setYieldResult] = useState<any>(null);
-  const [yieldLoading, setYieldLoading] = useState<boolean>(false);
+  const [, setYieldLoading] = useState<boolean>(false);
   // Community Risk Map state (top-level to follow React hooks rules)
   const [communityData, setCommunityData] = useState<any[]>([]);
   const [communityLoading, setCommunityLoading] = useState<boolean>(true);
@@ -142,6 +154,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   );
   const [showNotificationPanel, setShowNotificationPanel] = useState<boolean>(false);
   const t = translations[language];
+  const nativeDigits = useNativeDigits(language);
 
   // Toast notifications
   const { toasts, removeToast, toast } = useToast();
@@ -1112,8 +1125,8 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                   <h2 className="text-xl font-bold my-0">My Crops</h2>
                   <p className="text-slate-500 text-xs mt-1">
                     {allCrops.length > 0
-                      ? `${allCrops.length} crop${allCrops.length > 1 ? 's' : ''} across ${farms.length} farm${farms.length > 1 ? 's' : ''}`
-                      : 'No crops registered yet'}
+                      ? formatFarmSummary(allCrops.length, farms.length, language, nativeDigits)
+                      : t.cropTitle /* No crops registered - use translated heading */}
                   </p>
                 </div>
                 <button
@@ -1154,7 +1167,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                       {/* Stage badge */}
                       <div className="absolute top-3 right-3">
                         <span className={`text-[9px] text-white font-bold px-2 py-1 rounded-full uppercase ${getCropStageColor(crop.stage || '')}`}>
-                          {crop.stage || 'Unknown Stage'}
+                          {translateStage(language, crop.stage) || 'Unknown Stage'}
                         </span>
                       </div>
                       {/* Crop name */}
@@ -1162,7 +1175,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                         <div className="text-lg leading-none">
                           {cropEmojis[crop.crop_type?.toLowerCase()] || '🌱'}
                         </div>
-                        <h3 className="font-bold text-sm capitalize mt-0.5 my-0">{crop.crop_type}</h3>
+                        <h3 className="font-bold text-sm capitalize mt-0.5 my-0">{capitalize(translateCrop(language, crop.crop_type))}</h3>
                         <p className="text-[10px] text-slate-200 my-0">{crop.variety || 'Local variety'}</p>
                       </div>
                     </div>
@@ -1170,7 +1183,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                     {/* Crop details */}
                     <div className="bg-white p-4 space-y-2">
                       <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span>🌱 Sown {getSowingDaysAgo(crop.sowing_date)} days ago</span>
+                        <span>🌱 {t.cropSowingDate} {formatDaysAgo(getSowingDaysAgo(crop.sowing_date), language, nativeDigits)}</span>
                         <span className="text-[10px] bg-earth-100 text-earth-dark font-bold px-2 py-0.5 rounded-full">
                           {crop.farm_name || `Farm ${crop.farm_id}`}
                         </span>
@@ -1306,11 +1319,11 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                         <td className="px-4 py-3 font-bold">
                           {m.mandi_name} {idx === 0 && <span className="text-[10px] bg-stable text-white px-1.5 py-0.5 rounded-md ml-1.5 uppercase tracking-wide">Best Value</span>}
                         </td>
-                        <td className="px-4 py-3 font-mono">{m.distance_km} km</td>
-                        <td className="px-4 py-3 font-mono">₹{m.sticker_price}</td>
-                        <td className="px-4 py-3 font-mono">₹{m.transport_cost}</td>
-                        <td className="px-4 py-3 font-mono">₹{m.other_fees}</td>
-                        <td className="px-4 py-3 font-extrabold font-mono">₹{m.net_return}</td>
+                        <td className="px-4 py-3 font-mono">{formatInteger(m.distance_km, language, nativeDigits)} km</td>
+                        <td className="px-4 py-3 font-mono">{formatCurrency(m.sticker_price, language, nativeDigits)}</td>
+                        <td className="px-4 py-3 font-mono">{formatCurrency(m.transport_cost, language, nativeDigits)}</td>
+                        <td className="px-4 py-3 font-mono">{formatCurrency(m.other_fees, language, nativeDigits)}</td>
+                        <td className="px-4 py-3 font-extrabold font-mono">{formatCurrency(m.net_return, language, nativeDigits)}</td>
                       </tr>
                     ))
                   ) : (
@@ -1326,7 +1339,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
 
             {mandiPrices.length > 0 && (
               <div className="bg-stable-light p-3.5 rounded-xl border border-stable-dark/10 text-xs text-stable-dark text-left">
-                💡 **System Tip:** Sell your crop at **{mandiPrices[0].mandi_name}**. Even though sticker prices vary across APMCs, selling here minimizes transportation overhead and commissions, netting you a peak return of **₹{mandiPrices[0].net_return} per quintal**.
+                💡 **System Tip:** Sell your crop at **{mandiPrices[0].mandi_name}**. Even though sticker prices vary across APMCs, selling here minimizes transportation overhead and commissions, netting you a peak return of **{formatCurrency(mandiPrices[0].net_return, language, nativeDigits)} per quintal**.
               </div>
             )}
 
@@ -1343,8 +1356,8 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                     {priceCrashStatus.reason || `Recent 7-day average price has dropped ${priceCrashStatus.price_change_pct.toFixed(1)}% compared to the 30-day baseline. Consider holding stock or exploring alternative mandis.`}
                   </p>
                   <div className="mt-3 flex gap-3 text-xs text-slate-500">
-                    <div><span className="font-bold text-slate-700">7-day avg:</span> ₹{priceCrashStatus.recent_7day_avg.toFixed(0)}/qtl</div>
-                    <div><span className="font-bold text-slate-700">30-day baseline:</span> ₹{priceCrashStatus.baseline_30day_avg.toFixed(0)}/qtl</div>
+                    <div><span className="font-bold text-slate-700">7-day avg:</span> {formatPerQuintal(priceCrashStatus.recent_7day_avg, language, nativeDigits)}</div>
+                    <div><span className="font-bold text-slate-700">30-day baseline:</span> {formatPerQuintal(priceCrashStatus.baseline_30day_avg, language, nativeDigits)}</div>
                     <div className={priceCrashStatus.price_change_pct < 0 ? 'font-bold text-high-dark' : 'font-bold text-stable'}>
                       Change: {priceCrashStatus.price_change_pct.toFixed(1)}%
                     </div>
@@ -2155,7 +2168,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                   <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Crop</label>
                   <select value={yieldCrop} onChange={e => setYieldCrop(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-earth-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40">
-                    {Object.keys(CROP_DEFAULTS).map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+                    {Object.keys(CROP_DEFAULTS).map(c => <option key={c} value={c}>{translateCrop(language, c)}</option>)}
                   </select>
                 </div>
                 <div>
@@ -2167,21 +2180,20 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                   <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Soil Type</label>
                   <select value={yieldSoil} onChange={e => setYieldSoil(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-earth-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40">
-                    <option value="loam">Loam (Best)</option>
-                    <option value="black">Black Cotton</option>
-                    <option value="clay">Clay</option>
-                    <option value="sandy">Sandy</option>
-                    <option value="red">Red</option>
+                    <option value="loam">{translateSoil(language, 'loam')} (Best)</option>
+                    <option value="black">{translateSoil(language, 'black')}</option>
+                    <option value="clay">{translateSoil(language, 'clay')}</option>
+                    <option value="sandy">{translateSoil(language, 'sandy')}</option>
+                    <option value="red">{translateSoil(language, 'red')}</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Irrigation</label>
                   <select value={yieldIrrigation} onChange={e => setYieldIrrigation(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-earth-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40">
-                    <option value="drip">Drip (+15%)</option>
-                    <option value="sprinkler">Sprinkler (+10%)</option>
-                    <option value="flood">Flood (Baseline)</option>
-                    <option value="none">Rain-fed (-25%)</option>
+                    {['drip', 'sprinkler', 'flood', 'none'].map(ir => (
+                      <option key={ir} value={ir}>{translateIrrigation(language, ir)}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -3261,20 +3273,20 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                 <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Crop Type</label>
                 <select value={newCropType} onChange={(e) => setNewCropType(e.target.value)}
                   className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl">
-                  <option value="tomato">🍅 Tomato</option>
-                  <option value="wheat">🌾 Wheat</option>
-                  <option value="onion">🧅 Onion</option>
-                  <option value="rice">🌾 Rice / Paddy</option>
-                  <option value="sugarcane">🎋 Sugarcane</option>
-                  <option value="cotton">🌿 Cotton</option>
-                  <option value="maize">🌽 Maize</option>
-                  <option value="soybean">🫘 Soybean</option>
-                  <option value="groundnut">🥜 Groundnut</option>
-                  <option value="potato">🥔 Potato</option>
-                  <option value="chilli">🌶 Chilli</option>
-                  <option value="grapes">🍇 Grapes</option>
-                  <option value="banana">🍌 Banana</option>
-                  <option value="mango">🥭 Mango</option>
+                  <option value="tomato">🍅 {translateCrop(language, 'tomato')}</option>
+                  <option value="wheat">🌾 {translateCrop(language, 'wheat')}</option>
+                  <option value="onion">🧅 {translateCrop(language, 'onion')}</option>
+                  <option value="rice">🌾 {translateCrop(language, 'rice')}</option>
+                  <option value="sugarcane">🎋 {translateCrop(language, 'sugarcane')}</option>
+                  <option value="cotton">🌿 {translateCrop(language, 'cotton')}</option>
+                  <option value="maize">🌽 {translateCrop(language, 'maize')}</option>
+                  <option value="soybean">🫘 {translateCrop(language, 'soybean')}</option>
+                  <option value="groundnut">🥜 {translateCrop(language, 'groundnut')}</option>
+                  <option value="potato">🥔 {translateCrop(language, 'potato')}</option>
+                  <option value="chilli">🌶 {translateCrop(language, 'chilli')}</option>
+                  <option value="grapes">🍇 {translateCrop(language, 'grapes')}</option>
+                  <option value="banana">🍌 {translateCrop(language, 'banana')}</option>
+                  <option value="mango">🥭 {translateCrop(language, 'mango')}</option>
                 </select>
               </div>
 
@@ -3379,10 +3391,10 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                   onChange={(e) => setNewObligationType(e.target.value)}
                   className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
                 >
-                  <option value="loan">Bank Crop Loan (KCC)</option>
-                  <option value="lease">Land Lease Rent</option>
-                  <option value="inputs">Fertilizer/Seed Credit</option>
-                  <option value="other">Other Debt</option>
+                  <option value="loan">{translateObligation(language, 'loan')}</option>
+                  <option value="lease">{translateObligation(language, 'lease')}</option>
+                  <option value="inputs">{translateObligation(language, 'inputs')}</option>
+                  <option value="other">{translateObligation(language, 'other')}</option>
                 </select>
               </div>
 
