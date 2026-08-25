@@ -1652,20 +1652,6 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           </div>
         );
       }
-              <div>
-                <h3 className="font-bold text-slate-800 my-0 flex items-center gap-2"><Calculator size={18} className="text-stable" /> Yield Calculator</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Estimate harvest, revenue &amp; profit with ML model</p>
-              </div>
-              <button
-                onClick={() => setActiveTab('yield')}
-                className="px-4 py-2 bg-stable text-white rounded-xl text-xs font-bold hover:bg-stable-dark transition-colors flex items-center gap-1.5"
-              >
-                Open <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        );
-      }
 
       case 'market':
         return (
