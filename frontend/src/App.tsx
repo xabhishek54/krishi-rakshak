@@ -120,6 +120,8 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   // PWA offline indicator
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  // Force-sync button loading state
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   // Obligation Overlay Modal States
   const [showAddObligationModal, setShowAddObligationModal] = useState<boolean>(false);
@@ -381,39 +383,15 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     }
   };
 
-  // Load crops when selected farm changes
-  useEffect(() => {
-    if (token && selectedFarm) {
-      fetch(`http://localhost:8000/api/v1/farms/${selectedFarm.id}/crops`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      .then(res => {
-        if (res.ok) return res.json();
-        throw new Error("No crops");
-      })
-      .then(data => {
-        setCrops(data);
-        if (data.length > 0) {
-          setSelectedCrop(data[0]);
-        } else {
-          setSelectedCrop(null);
-        }
-      })
-      .catch(() => {
-        // Fallback mock
-        const mockCrop = { id: 1, crop_type: 'tomato', variety: 'Nashik Premium', stage: 'Fruit Development', sowing_date: '2026-07-04', image_url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop' };
-        setCrops([mockCrop]);
-        setSelectedCrop(mockCrop);
-      });
-    }
-  }, [token, selectedFarm]);
-
+  // Fetch Weather + Advisories whenever the farmer's location changes.
+  // Deliberately NOT depending on selectedFarm/selectedCrop — those changes
+  // should NOT trigger a full weather+advisory refresh (prevents 3-5x refires).
   useEffect(() => {
     if (token && hasFarm && farmer?.location_id) {
       fetchWeather();
       fetchAdvisoriesAndAlerts();
     }
-  }, [token, hasFarm, farmer?.location_id, selectedFarm, selectedCrop]);
+  }, [token, hasFarm, farmer?.location_id]);
   const fetchMandiPrices = async () => {
     if (!token || !selectedCrop) return;
     try {
@@ -564,6 +542,32 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
       fetchDistressAndSchemes();
     }
   }, [token, selectedCrop]);
+
+  // Force-sync: invalidate server-side cache then re-fetch everything fresh
+  const forceSyncAll = async () => {
+    if (!token || isSyncing) return;
+    setIsSyncing(true);
+    try {
+      // Tell the backend to drop its in-memory TTL cache for this farmer
+      await fetch(`${API_BASE}/api/v1/cache/invalidate`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+    } catch { /* non-critical */ }
+    // Re-fetch all data in parallel
+    await Promise.all([
+      fetchWeather(),
+      fetchAdvisoriesAndAlerts(),
+      fetchMandiPrices(),
+      fetchProjections(),
+      fetchDistressAndSchemes(),
+      fetchFarmsAndCrops(),
+    ]);
+    setLastSyncTime(new Date().toLocaleTimeString());
+    setIsSyncing(false);
+    toast.success('Synced!', 'All data refreshed from server.');
+  };
+
   // Handle Logout
   const handleLogout = () => {
     setToken(null);
@@ -2972,6 +2976,18 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                 <option key={key} value={key}>{name}</option>
               ))}
             </select>
+
+            {/* Sync Button — force-refresh all cached data */}
+            {token && (
+              <button
+                onClick={forceSyncAll}
+                disabled={isSyncing}
+                title={lastSyncTime ? `Last synced ${lastSyncTime} · Click to refresh` : 'Sync all data'}
+                className={`p-2.5 rounded-xl bg-earth-50 text-slate-500 hover:bg-earth-100 hover:text-stable transition-all flex items-center justify-center ${isSyncing ? 'opacity-60 cursor-not-allowed' : ''}`}
+              >
+                <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
+              </button>
+            )}
 
             {/* Notification Bell Dropdown */}
             <div className="relative">

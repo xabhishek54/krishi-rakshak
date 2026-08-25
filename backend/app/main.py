@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import date, datetime, timedelta
+import time
 
 from app.database import engine, Base, get_db, SessionLocal
 from app import models, schemas, auth
@@ -16,6 +17,29 @@ from app.schemes import seed_scheme_data
 from app.migrations import run_migrations
 from app.agmarknet import background_fetch_and_store  # Phase 19
 import asyncio
+
+# ---------------------------------------------------------------------------
+# In-memory TTL cache — avoids hitting DB/model on every React re-render.
+# Keys are strings like "weather:Niphad_Nashik", values are (payload, expiry).
+# ---------------------------------------------------------------------------
+_cache: dict = {}
+
+def _cache_get(key: str):
+    """Return cached value if it hasn't expired, else None."""
+    entry = _cache.get(key)
+    if entry and time.monotonic() < entry[1]:
+        return entry[0]
+    return None
+
+def _cache_set(key: str, value, ttl_seconds: int):
+    """Store value with an expiry timestamp."""
+    _cache[key] = (value, time.monotonic() + ttl_seconds)
+
+def _cache_invalidate_prefix(prefix: str):
+    """Remove all cache entries whose key starts with prefix."""
+    to_del = [k for k in list(_cache.keys()) if k.startswith(prefix)]
+    for k in to_del:
+        del _cache[k]
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -53,11 +77,22 @@ def startup_event():
     except Exception as e:
         print("Auto-seeding demo farmer failed:", e)
 
+    # Warm up the yield ML model so the first user request is instant
+    try:
+        predict_yield_deviation("tomato", "loam", "drip", 0.0, 0.0)
+        print("[startup] Yield model warm-up complete.")
+    except Exception as e:
+        print(f"[startup] Yield model warm-up failed (non-critical): {e}")
+
     # Phase 19: Launch Agmarknet background price fetch (non-blocking)
     async def _agmarknet_bg():
         try:
             n = await background_fetch_and_store(SessionLocal)
             print(f"[Phase19] Agmarknet background fetch complete: {n} new price records")
+            # Invalidate market cache after fresh prices arrive
+            _cache_invalidate_prefix("mandi:")
+            _cache_invalidate_prefix("price-history:")
+            _cache_invalidate_prefix("price-crash:")
         except Exception as e:
             print(f"[Phase19] Agmarknet fetch failed (non-critical): {e}")
 
@@ -304,6 +339,11 @@ async def refresh_weather(location_id: str, current_farmer: models.Farmer = Depe
 
 @app.get("/api/v1/weather/{location_id}")
 async def get_weather(location_id: str, db: Session = Depends(get_db)):
+    cache_key = f"weather:{location_id}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     # Retrieve cached values from DB
     today_date = date.today()
     obs = db.query(models.WeatherObservation).filter(
@@ -316,12 +356,14 @@ async def get_weather(location_id: str, db: Session = Depends(get_db)):
         models.WeatherForecast.date >= today_date
     ).order_by(models.WeatherForecast.date.asc()).all()
     
-    return {
+    result = {
         "location_id": location_id,
         "observation": obs,
         "forecasts": forecasts,
         "generated_at": datetime.utcnow()
     }
+    _cache_set(cache_key, result, ttl_seconds=300)  # 5-minute TTL
+    return result
 
 @app.get("/api/v1/advisories", response_model=List[schemas.AdvisoryResponse])
 def get_advisories(current_farmer: models.Farmer = Depends(auth.get_current_farmer), db: Session = Depends(get_db)):
@@ -340,6 +382,10 @@ def compare_mandis(
     current_farmer: models.Farmer = Depends(auth.get_current_farmer),
     db: Session = Depends(get_db)
 ):
+    cache_key = f"mandi:{current_farmer.id}:{crop}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     """Compare mandis using the farm closest to any mandi (not just the first farm)."""
     import math
 
@@ -377,7 +423,9 @@ def compare_mandis(
         lat = best_farm.latitude or 20.08
         lon = best_farm.longitude or 74.11
 
-    return get_mandi_comparison(db, crop, lat, lon)
+    result = get_mandi_comparison(db, crop, lat, lon)
+    _cache_set(cache_key, result, ttl_seconds=600)  # 10-minute TTL
+    return result
 
 
 @app.get("/api/v1/market/price-crash", response_model=schemas.PriceCrashResponse)
@@ -387,9 +435,12 @@ def get_price_crash(
     current_farmer: models.Farmer = Depends(auth.get_current_farmer),
     db: Session = Depends(get_db)
 ):
-    # Verify that the mandi belongs to the farmer's district (optional, but we can check via farm location)
-    # For simplicity, we just compute for the given mandi and crop.
+    cache_key = f"price-crash:{crop}:{mandi_id}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     result = detect_price_crash(db, crop, mandi_id)
+    _cache_set(cache_key, result, ttl_seconds=300)  # 5-minute TTL
     return result
 
 @app.get("/api/v1/market/price-history", response_model=List[schemas.PriceHistoryResponse])
@@ -400,7 +451,12 @@ def get_price_history_endpoint(
     current_farmer: models.Farmer = Depends(auth.get_current_farmer),
     db: Session = Depends(get_db)
 ):
+    cache_key = f"price-history:{crop}:{mandi_id}:{window}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     history = get_price_history(db, crop, mandi_id, window)
+    _cache_set(cache_key, history, ttl_seconds=600)  # 10-minute TTL
     return history
 
 @app.post("/api/v1/farmers/me/obligations", response_model=schemas.FinancialObligationResponse, status_code=status.HTTP_201_CREATED)
@@ -432,6 +488,10 @@ def get_cash_flow_projection(
     current_farmer: models.Farmer = Depends(auth.get_current_farmer),
     db: Session = Depends(get_db)
 ):
+    cache_key = f"projections:{current_farmer.id}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     farms = db.query(models.Farm).filter(models.Farm.farmer_id == current_farmer.id).all()
     
     total_yield = 0.0
@@ -524,7 +584,7 @@ def get_cash_flow_projection(
     has_shortfall = surplus < 0
     avg_price = total_revenue / total_yield if total_yield > 0 else 0.0
     
-    return {
+    result = {
         "projected_yield_quintals": round(total_yield, 1),
         "expected_price_per_quintal": round(avg_price, 2),
         "projected_revenue": round(total_revenue, 2),
@@ -535,13 +595,20 @@ def get_cash_flow_projection(
         "has_shortfall": has_shortfall,
         "obligations": obligations
     }
+    _cache_set(cache_key, result, ttl_seconds=60)  # 60-second TTL
+    return result
 
 @app.get("/api/v1/farmers/me/distress", response_model=schemas.DistressScoreResponse)
 def get_distress_score(
     current_farmer: models.Farmer = Depends(auth.get_current_farmer),
     db: Session = Depends(get_db)
 ):
+    cache_key = f"distress:{current_farmer.id}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     distress = calculate_distress_risk(db, current_farmer)
+    _cache_set(cache_key, distress, ttl_seconds=60)  # 60-second TTL
     return distress
 
 @app.post("/api/v1/farmers/me/recommendations/generate", response_model=List[schemas.RecommendationResponse])
@@ -591,12 +658,31 @@ def update_recommendation_status(
     ).first()
     return recommendation
 
+@app.post("/api/v1/cache/invalidate")
+def invalidate_cache(
+    current_farmer: models.Farmer = Depends(auth.get_current_farmer),
+):
+    """Force-clear all in-memory cache entries for this farmer.
+    Called by the sync button in the frontend."""
+    _cache_invalidate_prefix(f"weather:")
+    _cache_invalidate_prefix(f"mandi:{current_farmer.id}:")
+    _cache_invalidate_prefix(f"price-history:")
+    _cache_invalidate_prefix(f"price-crash:")
+    _cache_invalidate_prefix(f"projections:{current_farmer.id}")
+    _cache_invalidate_prefix(f"distress:{current_farmer.id}")
+    _cache_invalidate_prefix(f"schemes:{current_farmer.id}")
+    return {"status": "ok", "message": "Cache cleared. Next requests will fetch fresh data."}
+
 @app.get("/api/v1/farmers/me/schemes", response_model=List[schemas.SchemeResponse])
 def get_matching_schemes(
     current_farmer: models.Farmer = Depends(auth.get_current_farmer),
     db: Session = Depends(get_db)
 ):
     """Return ALL schemes ranked by relevance to this farmer's context."""
+    cache_key = f"schemes:{current_farmer.id}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     import json
 
     # Gather farmer context
@@ -690,6 +776,7 @@ def get_matching_schemes(
         )
         result.append(resp)
 
+    _cache_set(cache_key, result, ttl_seconds=300)  # 5-minute TTL
     return result
 
 
