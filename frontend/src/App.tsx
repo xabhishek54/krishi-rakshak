@@ -102,6 +102,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     const [selectedMandiId, setSelectedMandiId] = useState<number | null>(null);
     const [cashFlow, setCashFlow] = useState<any>(null);
     const [distressData, setDistressData] = useState<any>(null);
+    const [schemes, setSchemes] = useState<any[]>([]);
   // My Crop View Grouping state ('crop' | 'farm')
   const [cropViewGroup, setCropViewGroup] = useState<'crop' | 'farm'>('crop');
   const [expandedCropGroups, setExpandedCropGroups] = useState<Record<string, boolean>>({});
