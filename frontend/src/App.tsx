@@ -302,7 +302,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   }, [token]);
 
   const getActiveLocationId = (farmObj?: any) => {
-    const targetFarm = farmObj || selectedFarm;
+    const targetFarm = (farmObj && typeof farmObj === 'object' && farmObj.id) ? farmObj : selectedFarm;
     if (targetFarm) {
       if (targetFarm.latitude && targetFarm.longitude) {
         return `${targetFarm.latitude},${targetFarm.longitude}`;
@@ -318,12 +318,14 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   };
 
   // Fetch Weather for active farm / location
-  const fetchWeather = async (targetLocId?: string) => {
-    const locId = targetLocId || getActiveLocationId();
-    if (!locId) return;
+  const fetchWeather = async (targetLocId?: any) => {
+    const validLocId = (typeof targetLocId === 'string' && targetLocId && !targetLocId.includes('[object')) 
+      ? targetLocId 
+      : getActiveLocationId();
+    if (!validLocId) return;
     setLoadingWeather(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/weather/${encodeURIComponent(locId)}`);
+      const res = await fetch(`http://localhost:8000/api/v1/weather/${encodeURIComponent(validLocId)}`);
       if (res.ok) {
         const data = await res.json();
         if (data.observation) {
@@ -336,7 +338,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     } catch {
       // Offline/Error Fallback Mock Data
       setWeather({
-        location_id: locId,
+        location_id: validLocId,
         observation: {
           rainfall: 8.0,
           temperature: 26.0,
@@ -354,17 +356,19 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   };
 
   // Trigger weather refresh from API for active farm / location
-  const refreshWeatherFromApi = async (targetLocId?: string) => {
-    const locId = targetLocId || getActiveLocationId();
-    if (!locId) return;
+  const refreshWeatherFromApi = async (targetLocId?: any) => {
+    const validLocId = (typeof targetLocId === 'string' && targetLocId && !targetLocId.includes('[object')) 
+      ? targetLocId 
+      : getActiveLocationId();
+    if (!validLocId) return;
     setLoadingWeather(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/weather/${encodeURIComponent(locId)}/refresh`, {
+      const res = await fetch(`http://localhost:8000/api/v1/weather/${encodeURIComponent(validLocId)}/refresh`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        await fetchWeather(locId);
+        await fetchWeather(validLocId);
         await fetchAdvisoriesAndAlerts();
       }
     } catch (e) {
@@ -943,7 +947,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                 </button>
                 {/* Weather refresh */}
                 <button
-                  onClick={refreshWeatherFromApi}
+                  onClick={() => refreshWeatherFromApi()}
                   disabled={loadingWeather}
                   className="bg-slate-100 text-slate-600 hover:bg-stable hover:text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-50"
                 >
@@ -1051,7 +1055,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                       <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider my-0">Weather Advisor</h3>
                     </div>
                     <button
-                      onClick={refreshWeatherFromApi}
+                      onClick={() => refreshWeatherFromApi()}
                       disabled={loadingWeather}
                       className="text-slate-400 hover:text-slate-600 p-1 rounded transition-colors"
                       title="Sync weather"

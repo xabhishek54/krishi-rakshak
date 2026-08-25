@@ -354,6 +354,8 @@ async def refresh_weather(location_id: str, current_farmer: models.Farmer = Depe
 
 @app.get("/api/v1/weather/{location_id}")
 async def get_weather(location_id: str, db: Session = Depends(get_db)):
+    if "object" in location_id.lower() or not location_id.strip():
+        raise HTTPException(status_code=400, detail="Invalid location_id")
     cache_key = f"weather:{location_id}"
     cached = _cache_get(cache_key)
     if cached is not None:
