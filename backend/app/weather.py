@@ -2,6 +2,43 @@ import httpx
 from typing import Dict, List, Optional
 from datetime import datetime, date
 
+DISTRICT_COORDS: Dict[str, tuple] = {
+    "nashik": (20.0059, 73.7898),
+    "niphad": (20.08, 74.11),
+    "pimpalgaon": (20.1234, 74.0987),
+    "jalgaon": (21.0077, 75.5626),
+    "nagpur": (21.1458, 79.0882),
+    "pune": (18.5204, 73.8567),
+    "mumbai": (19.0760, 72.8777),
+    "delhi": (28.6139, 77.2090),
+    "bengaluru": (12.9716, 77.5946),
+    "hyderabad": (17.3850, 78.4867),
+    "kolkata": (22.5726, 88.3639),
+    "ahmedabad": (23.0225, 72.5714),
+    "jaipur": (26.9124, 75.7873),
+    "lucknow": (26.8467, 80.9462),
+    "patna": (25.5941, 85.1376),
+    "bhubaneswar": (20.2961, 85.8245),
+}
+
+def resolve_coords(location_id: str, farm_lat: Optional[float] = None, farm_lon: Optional[float] = None) -> tuple:
+    if farm_lat is not None and farm_lon is not None:
+        return farm_lat, farm_lon
+    
+    if "," in location_id:
+        try:
+            parts = location_id.split(",")
+            return float(parts[0]), float(parts[1])
+        except ValueError:
+            pass
+            
+    loc_lower = location_id.lower()
+    for name, coords in DISTRICT_COORDS.items():
+        if name in loc_lower:
+            return coords
+            
+    return (20.0059, 73.7898)
+
 class WeatherProvider:
     async def fetch_weather(self, lat: float, lon: float) -> Optional[Dict]:
         """

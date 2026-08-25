@@ -8,7 +8,7 @@ import time
 
 from app.database import engine, Base, get_db, SessionLocal
 from app import models, schemas, auth
-from app.weather import OpenMeteoProvider
+from app.weather import OpenMeteoProvider, resolve_coords
 from app.advisory import evaluate_advisories
 from app.mandi import seed_mandi_data, get_mandi_comparison, detect_price_crash, get_price_history
 from app.yield_model import predict_yield_deviation
@@ -344,7 +344,7 @@ async def get_weather(location_id: str, db: Session = Depends(get_db)):
     if cached is not None:
         return cached
 
-    # Retrieve cached values from DB
+    # Retrieve values from DB
     today_date = date.today()
     obs = db.query(models.WeatherObservation).filter(
         models.WeatherObservation.location_id == location_id,
@@ -356,6 +356,56 @@ async def get_weather(location_id: str, db: Session = Depends(get_db)):
         models.WeatherForecast.date >= today_date
     ).order_by(models.WeatherForecast.date.asc()).all()
     
+    # If no observation for today, fetch live from Open-Meteo automatically
+    if not obs:
+        # Check if any farm has coordinates or resolve from location_id
+        farm = db.query(models.Farm).filter(models.Farm.latitude.isnot(None)).first()
+        f_lat = farm.latitude if farm else None
+        f_lon = farm.longitude if farm else None
+        lat, lon = resolve_coords(location_id, f_lat, f_lon)
+        
+        live_data = await weather_provider.fetch_weather(lat, lon)
+        if live_data and live_data.get("observation"):
+            # Update/insert observation
+            if not obs:
+                obs = models.WeatherObservation(
+                    location_id=location_id,
+                    date=today_date,
+                    rainfall=live_data["observation"]["rainfall"],
+                    temperature=live_data["observation"]["temperature"],
+                    humidity=live_data["observation"]["humidity"],
+                    wind_speed=live_data["observation"].get("wind_speed", 12.0)
+                )
+                db.add(obs)
+            else:
+                obs.rainfall = live_data["observation"]["rainfall"]
+                obs.temperature = live_data["observation"]["temperature"]
+                obs.humidity = live_data["observation"]["humidity"]
+                obs.wind_speed = live_data["observation"].get("wind_speed", 12.0)
+                
+            # Update/insert forecasts
+            for fc in live_data.get("forecast", []):
+                f_row = db.query(models.WeatherForecast).filter(
+                    models.WeatherForecast.location_id == location_id,
+                    models.WeatherForecast.date == fc["date"]
+                ).first()
+                if not f_row:
+                    f_row = models.WeatherForecast(
+                        location_id=location_id,
+                        date=fc["date"],
+                        rainfall_forecast=fc["rainfall_forecast"],
+                        temperature=fc["temperature"],
+                        rain_probability=fc["rain_probability"]
+                    )
+                    db.add(f_row)
+            db.commit()
+            
+            # Re-query forecasts after insertion
+            forecasts = db.query(models.WeatherForecast).filter(
+                models.WeatherForecast.location_id == location_id,
+                models.WeatherForecast.date >= today_date
+            ).order_by(models.WeatherForecast.date.asc()).all()
+
     result = {
         "location_id": location_id,
         "observation": obs,
