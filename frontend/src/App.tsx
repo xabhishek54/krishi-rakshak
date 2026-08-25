@@ -1019,245 +1019,138 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               </div>
             </div>
 
-            {/* Farm Weather Advisor Banner & Decision Cards */}
-            <div className="space-y-4">
-              {/* Main Weather Advisor Banner */}
-              <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-earth-900 text-white p-6 rounded-3xl shadow-lg border border-slate-700/50">
-                {/* Header info */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/60 pb-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="bg-stable/20 text-stable-light p-1.5 rounded-lg border border-stable/30">
-                        <CloudRain size={20} />
-                      </span>
-                      <h3 className="text-lg font-bold text-white my-0">Farm Weather Advisor</h3>
+            {/* 3-Column Single Row Dashboard Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Card 1: Farm Weather Advisor */}
+              <div className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm text-left hover:border-stable transition-colors flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sky-500 flex items-center gap-2">
+                      <CloudRain size={24} />
+                      <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider my-0">Weather Advisor</h3>
                     </div>
-                    <p className="text-slate-400 text-xs mt-1 my-0 flex items-center gap-1">
-                      <MapPin size={13} className="text-amber-400" />
-                      <span className="font-semibold text-slate-200">{selectedFarm?.name || 'Main Farm'}</span>
-                      <span>·</span>
-                      <span>{selectedFarm?.district || (farmer?.location_id ? farmer.location_id.replace('_', ', ') : 'Nashik, Maharashtra')}</span>
-                    </p>
+                    <button
+                      onClick={refreshWeatherFromApi}
+                      disabled={loadingWeather}
+                      className="text-slate-400 hover:text-slate-600 p-1 rounded transition-colors"
+                      title="Sync weather"
+                    >
+                      <RefreshCw size={14} className={loadingWeather ? 'animate-spin text-sky-500' : ''} />
+                    </button>
                   </div>
-                  <button
-                    onClick={refreshWeatherFromApi}
-                    disabled={loadingWeather}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all w-fit"
-                  >
-                    <RefreshCw size={13} className={loadingWeather ? 'animate-spin text-amber-400' : ''} />
-                    {loadingWeather ? 'Syncing Weather...' : 'Refresh Weather'}
-                  </button>
-                </div>
 
-                {/* Weather Data Snapshot Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-4">
-                  <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
-                    <span className="text-slate-400 text-[10px] uppercase font-semibold tracking-wider flex items-center gap-1">
-                      <Thermometer size={12} className="text-amber-400" /> Temperature
-                    </span>
-                    <p className="text-xl font-extrabold text-white mt-1 my-0">
-                      {weather?.observation?.temperature != null ? `${weather.observation.temperature.toFixed(1)}°C` : '27.0°C'}
-                    </p>
-                  </div>
-                  <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
-                    <span className="text-slate-400 text-[10px] uppercase font-semibold tracking-wider flex items-center gap-1">
-                      <CloudRain size={12} className="text-sky-400" /> Rainfall
-                    </span>
-                    <p className="text-xl font-extrabold text-white mt-1 my-0">
-                      {weather?.observation?.rainfall != null ? (weather.observation.rainfall > 0 ? `${weather.observation.rainfall.toFixed(1)} mm` : 'No Rain') : '5.0 mm'}
-                    </p>
-                  </div>
-                  <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
-                    <span className="text-slate-400 text-[10px] uppercase font-semibold tracking-wider flex items-center gap-1">
-                      <Droplets size={12} className="text-blue-400" /> Humidity
-                    </span>
-                    <p className="text-xl font-extrabold text-white mt-1 my-0">
-                      {weather?.observation?.humidity != null ? `${weather.observation.humidity.toFixed(0)}%` : '82%'}
-                    </p>
-                  </div>
-                  <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
-                    <span className="text-slate-400 text-[10px] uppercase font-semibold tracking-wider flex items-center gap-1">
-                      <Wind size={12} className="text-teal-400" /> Wind Speed
-                    </span>
-                    <p className="text-xl font-extrabold text-white mt-1 my-0">
-                      {weather?.observation?.wind_speed != null ? `${weather.observation.wind_speed.toFixed(0)} km/h` : '14 km/h'}
-                    </p>
+                  <p className="text-slate-500 text-[11px] font-medium my-0 flex items-center gap-1">
+                    <MapPin size={12} className="text-amber-500" />
+                    <span className="font-semibold text-slate-700">{selectedFarm?.name || 'Main Farm'}</span>
+                    <span>·</span>
+                    <span>{selectedFarm?.district || (farmer?.location_id ? farmer.location_id.replace('_', ', ') : 'Nashik')}</span>
+                  </p>
+
+                  <p className="text-slate-900 text-2xl font-extrabold mt-2 my-0">
+                    {weather?.observation?.temperature != null ? `${weather.observation.temperature.toFixed(1)}°C` : '27.0°C'}
+                  </p>
+
+                  <div className="flex items-center justify-between text-slate-500 text-[11px] font-semibold mt-2 pt-2 border-t border-slate-100">
+                    <span className="flex items-center gap-1"><CloudRain size={12} className="text-sky-500" /> {weather?.observation?.rainfall != null ? (weather.observation.rainfall > 0 ? `${weather.observation.rainfall.toFixed(1)}mm` : '0mm') : '5mm'}</span>
+                    <span className="flex items-center gap-1"><Droplets size={12} className="text-blue-500" /> {weather?.observation?.humidity != null ? `${weather.observation.humidity.toFixed(0)}%` : '82%'}</span>
+                    <span className="flex items-center gap-1"><Wind size={12} className="text-teal-500" /> {weather?.observation?.wind_speed != null ? `${weather.observation.wind_speed.toFixed(0)}km/h` : '14km/h'}</span>
                   </div>
                 </div>
 
-                {/* Weather Action Decision Banner */}
+                {/* Weather Action Pill */}
                 {(() => {
                   const rain = weather?.observation?.rainfall ?? 5.0;
                   const wind = weather?.observation?.wind_speed ?? 14.0;
                   const hum = weather?.observation?.humidity ?? 82.0;
-                  const temp = weather?.observation?.temperature ?? 27.0;
-
-                  let statusLevel: 'red' | 'orange' | 'green' = 'green';
-                  let statusTitle = 'Optimal Farming Conditions';
-                  let statusAction = 'Weather is favorable today — suitable time for routine farm activities, weeding, and crop inspection.';
 
                   if (rain > 10 || (weather?.forecasts && weather.forecasts[0]?.rainfall_forecast > 15)) {
-                    statusLevel = 'red';
-                    statusTitle = 'Rain Expected — Avoid Chemical Spraying';
-                    statusAction = 'Heavy rain expected today/tomorrow. Avoid applying fertilizer or pesticides now to prevent chemical runoff and wastage.';
-                  } else if (temp > 36) {
-                    statusLevel = 'red';
-                    statusTitle = 'Extreme Heat Alert — Ensure Early Irrigation';
-                    statusAction = 'Temperatures exceeding 36°C cause thermal stress. Irrigate crop plots before 8 AM or after 6 PM to prevent soil moisture evaporation.';
-                  } else if (wind > 15) {
-                    statusLevel = 'orange';
-                    statusTitle = 'High Wind Speed — Avoid Pesticide Spraying';
-                    statusAction = `Wind speed is ${wind.toFixed(0)} km/h. Postpone foliar and pesticide sprays to prevent spray drift and uneven coverage.`;
-                  } else if (hum > 78) {
-                    statusLevel = 'orange';
-                    statusTitle = 'High Humidity — Monitor Fungal Disease Risk';
-                    statusAction = `Relative humidity is elevated (${hum.toFixed(0)}%). Inspect lower leaves for early blight, mildew, or purple blotch spots.`;
-                  }
-
-                  const statusConfig = {
-                    red: { bg: 'bg-red-950/90 border-red-800/60 text-red-200', iconBg: 'bg-red-600', badge: 'Action Required', badgeBg: 'bg-red-500 text-white' },
-                    orange: { bg: 'bg-amber-950/90 border-amber-800/60 text-amber-200', iconBg: 'bg-amber-600', badge: 'Attention Needed', badgeBg: 'bg-amber-500 text-slate-950' },
-                    green: { bg: 'bg-emerald-950/90 border-emerald-800/60 text-emerald-200', iconBg: 'bg-emerald-600', badge: 'Good Conditions', badgeBg: 'bg-emerald-500 text-white' },
-                  }[statusLevel];
-
-                  return (
-                    <div className={`p-4 rounded-2xl border ${statusConfig.bg} flex flex-col sm:flex-row items-start gap-3 mt-2`}>
-                      <span className={`${statusConfig.iconBg} text-white p-2 rounded-xl shrink-0 mt-0.5`}>
-                        {statusLevel === 'red' ? <AlertCircle size={20} /> : statusLevel === 'orange' ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
+                    return (
+                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-red-100 text-red-800 border border-red-200 mt-3 block">
+                        🔴 Heavy Rain — Skip Chemical Spraying
                       </span>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="font-bold text-sm text-white my-0">{statusTitle}</h4>
-                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${statusConfig.badgeBg}`}>
-                            {statusConfig.badge}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-300 mt-1 my-0 leading-relaxed">
-                          {statusAction}
-                        </p>
-                      </div>
-                    </div>
+                    );
+                  } else if (wind > 15) {
+                    return (
+                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 border border-amber-200 mt-3 block">
+                        🟠 High Wind — Postpone Foliar Spraying
+                      </span>
+                    );
+                  } else if (hum > 78) {
+                    return (
+                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 border border-amber-200 mt-3 block">
+                        🟠 High Humidity — Inspect Fungal Disease Risk
+                      </span>
+                    );
+                  }
+                  return (
+                    <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 mt-3 block">
+                      🟢 Optimal Weather — Good for Fieldwork
+                    </span>
                   );
                 })()}
+              </div>
 
-                {/* Upcoming Simple Forecast Section */}
-                <div className="mt-4 pt-4 border-t border-slate-700/60">
-                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-                    <Calendar size={14} className="text-sky-400" /> Upcoming 2-Day Forecast Advisor
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {weather?.forecasts && weather.forecasts.length >= 2 ? (
-                      weather.forecasts.slice(0, 2).map((fc: any, idx: number) => {
-                        const dayLabel = idx === 0 ? 'Tomorrow' : 'Day After Tomorrow';
-                        const isRainy = (fc.rainfall_forecast > 5 || fc.rain_probability > 50);
-                        const isHot = fc.temperature > 35;
-
-                        let advice = 'Good for farm activities';
-                        let icon = '☀️';
-                        if (isRainy) {
-                          advice = 'Delay fertilizer application';
-                          icon = '🌧️';
-                        } else if (isHot) {
-                          advice = 'Irrigate early morning';
-                          icon = '🌡️';
-                        }
-
-                        return (
-                          <div key={idx} className="bg-slate-800/90 p-3 rounded-xl border border-slate-700/50 flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xl">{icon}</span>
-                              <div>
-                                <p className="font-bold text-white my-0">{dayLabel}</p>
-                                <p className="text-[11px] text-slate-400 my-0">{fc.temperature?.toFixed(1) || 28}°C · {fc.rain_probability || 0}% rain prob.</p>
-                              </div>
-                            </div>
-                            <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${isRainy ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
-                              {advice}
-                            </span>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <>
-                        <div className="bg-slate-800/90 p-3 rounded-xl border border-slate-700/50 flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xl">🌧️</span>
-                            <div>
-                              <p className="font-bold text-white my-0">Tomorrow</p>
-                              <p className="text-[11px] text-slate-400 my-0">26°C · 65% rain prob.</p>
-                            </div>
-                          </div>
-                          <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            Delay fertilizer application
-                          </span>
-                        </div>
-                        <div className="bg-slate-800/90 p-3 rounded-xl border border-slate-700/50 flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xl">☀️</span>
-                            <div>
-                              <p className="font-bold text-white my-0">Day After</p>
-                              <p className="text-[11px] text-slate-400 my-0">29°C · 20% rain prob.</p>
-                            </div>
-                          </div>
-                    onClick={() => setActiveTab('market')}
-                    className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm hover:border-stable transition-colors text-left flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="text-elevated mb-1 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <ShoppingCart size={24} />
-                          <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider my-0">{t.marketTitle}</h3>
-                        </div>
-                        <ChevronRight size={18} className="text-slate-400" />
-                      </div>
-                      <p className="text-slate-500 text-[11px] font-medium my-0">
-                        📍 {selectedCrop ? capitalize(selectedCrop.crop_type) : 'Tomato'} · Pimpalgaon Mandi
-                      </p>
-                      <p className="text-slate-900 text-2xl font-extrabold mt-2 my-0">
-                        ₹{mandiPrices.length > 0 ? mandiPrices[0].modal_price : '2,290'} <span className="text-xs font-normal text-slate-500">/q</span>
-                      </p>
+              {/* Card 2: Mandi Pricing */}
+              <button 
+                onClick={() => setActiveTab('market')}
+                className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm hover:border-stable transition-colors text-left flex flex-col justify-between"
+              >
+                <div>
+                  <div className="text-elevated mb-1 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ShoppingCart size={24} />
+                      <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider my-0">{t.marketTitle}</h3>
                     </div>
-                    <span className="text-high text-[10px] font-bold mt-3 inline-flex items-center gap-0.5">
-                      <TrendingDown size={12} /> Price Crash Alert (-22% drop)
-                    </span>
-                  </button>
-
-                  {/* Card 3: Distress Risk */}
-                  <div 
-                    onClick={() => setActiveTab('risk-detail')}
-                    className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-colors flex flex-col justify-between ${
-                      distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High'
-                        ? 'bg-high-light border-high-dark/20 hover:bg-high-light/80'
-                        : distressData?.risk_level === 'Elevated'
-                        ? 'bg-watch-light border-watch-dark/20 hover:bg-watch-light/80'
-                        : 'bg-stable-light border-stable-dark/20 hover:bg-stable-light/80'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className={`flex items-center gap-2 ${
-                          distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High' ? 'text-high' :
-                          distressData?.risk_level === 'Elevated' ? 'text-watch' : 'text-stable'
-                        }`}>
-                          <AlertTriangle size={24} />
-                          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600 my-0">{t.homeDistressCard}</h3>
-                        </div>
-                        <ChevronRight size={18} className="text-slate-400" />
-                      </div>
-                      <p className="text-slate-500 text-[11px] font-medium my-0">
-                        5-Pillar Multi-Risk Intelligence
-                      </p>
-                      <p className="text-slate-900 text-2xl font-extrabold mt-2 my-0">
-                        {distressData?.score ?? '38'} <span className="text-sm font-normal text-slate-500">/ 100</span>
-                      </p>
-                    </div>
-                    <span className={`text-white text-[9px] font-bold px-2 py-0.5 rounded-full mt-3 inline-block uppercase w-fit ${
-                      distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High' ? 'bg-high' :
-                      distressData?.risk_level === 'Elevated' ? 'bg-watch' :
-                      distressData?.risk_level === 'Watch' ? 'bg-elevated' : 'bg-stable'
-                    }`}>{distressData?.risk_level ?? 'Watch'}</span>
+                    <ChevronRight size={18} className="text-slate-400" />
                   </div>
+                  <p className="text-slate-500 text-[11px] font-medium my-0">
+                    📍 {selectedCrop ? capitalize(selectedCrop.crop_type) : 'Tomato'} · Pimpalgaon Mandi
+                  </p>
+                  <p className="text-slate-900 text-2xl font-extrabold mt-2 my-0">
+                    ₹{mandiPrices.length > 0 ? mandiPrices[0].modal_price : '2,290'} <span className="text-xs font-normal text-slate-500">/q</span>
+                  </p>
                 </div>
+                <span className="text-high text-[10px] font-bold mt-3 inline-flex items-center gap-0.5">
+                  <TrendingDown size={12} /> Price Crash Alert (-22% drop)
+                </span>
+              </button>
+
+              {/* Card 3: Distress Risk */}
+              <div 
+                onClick={() => setActiveTab('risk-detail')}
+                className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-colors flex flex-col justify-between ${
+                  distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High'
+                    ? 'bg-high-light border-high-dark/20 hover:bg-high-light/80'
+                    : distressData?.risk_level === 'Elevated'
+                    ? 'bg-watch-light border-watch-dark/20 hover:bg-watch-light/80'
+                    : 'bg-stable-light border-stable-dark/20 hover:bg-stable-light/80'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className={`flex items-center gap-2 ${
+                      distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High' ? 'text-high' :
+                      distressData?.risk_level === 'Elevated' ? 'text-watch' : 'text-stable'
+                    }`}>
+                      <AlertTriangle size={24} />
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600 my-0">{t.homeDistressCard}</h3>
+                    </div>
+                    <ChevronRight size={18} className="text-slate-400" />
+                  </div>
+                  <p className="text-slate-500 text-[11px] font-medium my-0">
+                    5-Pillar Multi-Risk Intelligence
+                  </p>
+                  <p className="text-slate-900 text-2xl font-extrabold mt-2 my-0">
+                    {distressData?.score ?? '38'} <span className="text-sm font-normal text-slate-500">/ 100</span>
+                  </p>
+                </div>
+                <span className={`text-white text-[9px] font-bold px-2 py-0.5 rounded-full mt-3 inline-block uppercase w-fit ${
+                  distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High' ? 'bg-high' :
+                  distressData?.risk_level === 'Elevated' ? 'bg-watch' :
+                  distressData?.risk_level === 'Watch' ? 'bg-elevated' : 'bg-stable'
+                }`}>{distressData?.risk_level ?? 'Watch'}</span>
+              </div>
+            </div>
 
                 {/* What should I do today section */}
                 <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
