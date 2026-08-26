@@ -31,8 +31,6 @@ import {
   Mic, 
   User, 
   AlertTriangle,
-  AlertCircle,
-  CheckCircle2,
   ChevronRight,
   ChevronDown,
   ChevronUp,
@@ -41,10 +39,7 @@ import {
   Lock,
   LogOut,
   CloudRain,
-  Cloud,
-  Sun,
   Wind,
-  Thermometer,
   Droplets,
   Trash2,
   Calculator,
@@ -52,12 +47,8 @@ import {
   BarChart3,
   Layers,
   Building2,
-  Grid,
   RefreshCw,
-  Calendar,
-  MapPin,
-  Activity,
-  Info
+  MapPin
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -152,6 +143,8 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   const [newFarmState, setNewFarmState] = useState<string>('Maharashtra');
   const [newFarmDistrict, setNewFarmDistrict] = useState<string>('Nashik');
   const [newFarmName, setNewFarmName] = useState<string>('');
+  const [searchAddress, setSearchAddress] = useState<string>('');
+  const [isSearchingAddress, setIsSearchingAddress] = useState<boolean>(false);
   
   const [newCropType, setNewCropType] = useState<string>('tomato');
   const [newCropVariety, setNewCropVariety] = useState<string>('PKM-1');
@@ -412,7 +405,21 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
       fetchWeather();
       fetchAdvisoriesAndAlerts();
     }
-  }, [token, hasFarm, selectedFarm?.id, selectedFarm?.district, farmer?.location_id]);
+  }, [token, hasFarm, selectedFarm?.id, selectedFarm?.district, selectedFarm?.latitude, selectedFarm?.longitude, farmer?.location_id]);
+
+  useEffect(() => {
+    if (token) {
+      fetchDistressAndSchemes();
+    }
+  }, [token, selectedCrop, selectedFarm?.id, activeTab]);
+
+  useEffect(() => {
+    if (token && selectedCrop) {
+      fetchMandiPrices();
+      fetchProjections();
+    }
+  }, [token, selectedCrop]);
+
   const fetchMandiPrices = async () => {
     if (!token || !selectedCrop) return;
     try {
@@ -957,93 +964,6 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               </div>
             </div>
 
-            {/* Farm & Crop Selector Strip */}
-            <div className="bg-white p-4 rounded-2xl border border-earth-200 shadow-sm flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between">
-              <div className="flex flex-wrap gap-4 items-center">
-                {/* Farm Selector */}
-                <div className="flex-1 sm:flex-none">
-                  <label className="block text-slate-400 text-[10px] font-bold uppercase mb-1">Active Farm</label>
-                  <select 
-                    value={selectedFarm?.id || ''}
-                    onChange={(e) => {
-                      const f = farms.find(farm => farm.id === parseInt(e.target.value));
-                      if (f) setSelectedFarm(f);
-                    }}
-                    className="text-xs font-bold px-3 py-1.5 rounded-lg border border-earth-200 bg-earth-50 focus:outline-none w-full"
-                  >
-                    {farms.map((f, i) => {
-                      const loc = f.district
-                        ? `${f.district}${f.state ? ', ' + f.state : ''}`
-                        : f.latitude ? `${f.latitude.toFixed(2)}°N ${f.longitude?.toFixed(2)}°E` : '';
-                      return (
-                        <option key={f.id} value={f.id}>
-                          Farm #{i+1} ({f.area} Ac · {(f.soil_type || 'loam').toUpperCase()}{loc ? ' · ' + loc : ''})
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-
-                {/* Crop Selector */}
-                <div className="flex-1 sm:flex-none">
-                  <label className="block text-slate-400 text-[10px] font-bold uppercase mb-1">Active Crop</label>
-                  {crops.length > 0 ? (
-                    <select 
-                      value={selectedCrop?.id || ''}
-                      onChange={(e) => {
-                        const cr = crops.find(crop => crop.id === parseInt(e.target.value));
-                        if (cr) setSelectedCrop(cr);
-                      }}
-                      className="text-xs font-bold px-3 py-1.5 rounded-lg border border-earth-200 bg-earth-50 focus:outline-none w-full"
-                    >
-                      {crops.map((cr) => (
-                        <option key={cr.id} value={cr.id}>{(cr.crop_type || '').toUpperCase()} ({cr.variety || 'Local'})</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="text-xs text-slate-400 font-bold block py-1.5">No Crops Added</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-2 justify-end flex-wrap">
-                <button 
-                  onClick={() => setShowAddFarmModal(true)}
-                  className="px-3 py-1.5 border border-stable/30 text-stable hover:bg-stable-light rounded-lg text-xs font-bold transition-all"
-                >
-                  + Add Farm
-                </button>
-                {selectedFarm && (
-                  <button 
-                    onClick={() => handleDeleteFarm(selectedFarm.id)}
-                    title="Delete selected farm"
-                    className="px-2.5 py-1.5 border border-high/30 text-high hover:bg-high-light rounded-lg text-xs font-bold transition-all flex items-center gap-1"
-                  >
-                    <Trash2 size={13} /> Farm
-                  </button>
-                )}
-                <button 
-                  onClick={() => {
-                    if (!selectedFarm) { toast.warning("No farm selected", "Please add a farm first."); return; }
-                    setShowAddCropModal(true);
-                  }}
-                  className="px-3 py-1.5 bg-stable text-white hover:bg-stable-dark rounded-lg text-xs font-bold transition-all"
-                >
-                  + Add Crop
-                </button>
-                {selectedCrop && (
-                  <button 
-                    onClick={() => handleDeleteCrop(selectedCrop.id)}
-                    title="Delete selected crop"
-                    className="px-2.5 py-1.5 border border-high/30 text-high hover:bg-high-light rounded-lg text-xs font-bold transition-all flex items-center gap-1"
-                  >
-                    <Trash2 size={13} /> Crop
-                  </button>
-                )}
-              </div>
-            </div>
-
             {/* 3-Column Single Row Dashboard Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Card 1: Farm Weather Advisor */}
@@ -1054,21 +974,53 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                       <CloudRain size={24} />
                       <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider my-0">Weather Advisor</h3>
                     </div>
-                    <button
-                      onClick={() => refreshWeatherFromApi()}
-                      disabled={loadingWeather}
-                      className="text-slate-400 hover:text-slate-600 p-1 rounded transition-colors"
-                      title="Sync weather"
-                    >
-                      <RefreshCw size={14} className={loadingWeather ? 'animate-spin text-sky-500' : ''} />
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      {farms.length > 1 && (
+                        <select 
+                          value={selectedFarm?.id || ''}
+                          onChange={(e) => {
+                            const f = farms.find(farm => farm.id === parseInt(e.target.value));
+                            if (f) {
+                              setSelectedFarm(f);
+                              const locId = f.latitude && f.longitude ? `${f.latitude},${f.longitude}` : (f.district || f.name);
+                              fetchWeather(locId);
+                            }
+                          }}
+                          className="text-[11px] font-bold px-2 py-0.5 rounded-lg border border-earth-200 bg-earth-50 text-slate-700 focus:outline-none max-w-[120px] truncate"
+                          title="Select farm for weather details"
+                        >
+                          {farms.map((f, i) => (
+                            <option key={f.id} value={f.id}>
+                              {f.name || f.district || `Farm #${i+1}`}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <button
+                        onClick={() => refreshWeatherFromApi()}
+                        disabled={loadingWeather}
+                        className="text-slate-400 hover:text-slate-600 p-1 rounded transition-colors"
+                        title="Sync weather"
+                      >
+                        <RefreshCw size={14} className={loadingWeather ? 'animate-spin text-sky-500' : ''} />
+                      </button>
+                    </div>
                   </div>
 
                   <p className="text-slate-500 text-[11px] font-medium my-0 flex items-center gap-1">
                     <MapPin size={12} className="text-amber-500" />
-                    <span className="font-semibold text-slate-700">{selectedFarm?.name || 'Main Farm'}</span>
+                    <span className="font-semibold text-slate-700">
+                      {selectedFarm?.name && selectedFarm.name !== selectedFarm?.district
+                        ? selectedFarm.name
+                        : (selectedFarm?.district || 'Main Farm')}
+                    </span>
                     <span>·</span>
-                    <span>{selectedFarm?.district || (farmer?.location_id ? farmer.location_id.replace('_', ', ') : 'Nashik')}</span>
+                    <span>
+                      {selectedFarm?.district 
+                        ? `${selectedFarm.district}${selectedFarm.state ? ', ' + selectedFarm.state : ''}`
+                        : (farmer?.location_id ? farmer.location_id.replace('_', ', ') : 'Nashik')
+                      }
+                    </span>
                   </p>
 
                   <p className="text-slate-900 text-2xl font-extrabold mt-2 my-0">
@@ -1179,20 +1131,56 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
 
                 {/* What should I do today section */}
                 <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
-                  <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-3 mb-4">{t.homeWhatToDo}</h3>
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                    <h3 className="text-lg font-bold text-slate-900 my-0">{t.homeWhatToDo}</h3>
+                    <span className="text-xs font-semibold text-slate-500 bg-earth-50 px-2.5 py-1 rounded-full border border-earth-200">
+                      All Registered Farms ({farms.length})
+                    </span>
+                  </div>
                   <div className="space-y-4">
                     {advisories.length > 0 ? (
-                      (translatedAdvisories.length > 0 ? translatedAdvisories : advisories).map((adv) => (
-                        <div key={adv.id} className="flex gap-4 items-start p-3 bg-earth-50 rounded-xl">
-                          <span className={`p-2 rounded-lg mt-0.5 text-white flex items-center justify-center ${
-                            adv.priority === 'high' ? 'bg-high' : adv.priority === 'medium' ? 'bg-elevated' : 'bg-stable'
-                          }`}><AlertTriangle size={18} /></span>
-                          <div>
-                            <h4 className="font-semibold text-sm text-slate-900">{adv.recommendation}</h4>
-                            <p className="text-slate-500 text-xs mt-0.5">{adv.reason}</p>
-                          </div>
-                        </div>
-                      ))
+                      (() => {
+                        const priorityOrderMap: Record<string, number> = { high: 1, medium: 2, low: 3 };
+                        const sortedList = [...(translatedAdvisories.length > 0 ? translatedAdvisories : advisories)].sort((a, b) => {
+                          const pA = priorityOrderMap[(a.priority || '').toLowerCase()] || 4;
+                          const pB = priorityOrderMap[(b.priority || '').toLowerCase()] || 4;
+                          return pA - pB;
+                        });
+
+                        return sortedList.map((adv) => {
+                          const farmObj = farms.find((f: any) => f.id === adv.farm_id);
+                          const cropObj = allCrops.find((c: any) => c.farm_id === adv.farm_id);
+                          const farmLabel = farmObj?.name || (farmObj?.district ? `${farmObj.district} Farm` : `Farm #${adv.farm_id}`);
+                          const cropLabel = cropObj ? `${capitalize(cropObj.crop_type)} (${cropObj.variety || 'Local'})` : null;
+
+                          return (
+                            <div key={adv.id} className="flex gap-4 items-start p-4 bg-earth-50/70 rounded-xl border border-earth-200 hover:border-stable/30 transition-all">
+                              <span className={`p-2.5 rounded-xl text-white shrink-0 mt-0.5 ${
+                                adv.priority === 'high' ? 'bg-high' : adv.priority === 'medium' ? 'bg-elevated' : 'bg-stable'
+                              }`}><AlertTriangle size={18} /></span>
+                              <div className="flex-1 text-left min-w-0">
+                                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                  <span className="text-[10px] bg-stable/10 text-stable font-bold px-2 py-0.5 rounded-full border border-stable/20 flex items-center gap-1">
+                                    📍 {farmLabel}
+                                  </span>
+                                  {cropLabel && (
+                                    <span className="text-[10px] bg-amber-50 text-amber-800 font-bold px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
+                                      🌱 {cropLabel}
+                                    </span>
+                                  )}
+                                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase text-white ml-auto ${
+                                    adv.priority === 'high' ? 'bg-high' : adv.priority === 'medium' ? 'bg-elevated' : 'bg-stable'
+                                  }`}>
+                                    {adv.priority} Priority
+                                  </span>
+                                </div>
+                                <h4 className="font-semibold text-sm text-slate-900 leading-snug my-0">{adv.recommendation}</h4>
+                                <p className="text-slate-500 text-xs mt-1 my-0 leading-relaxed">{adv.reason}</p>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()
                     ) : (
                       <p className="text-slate-400 text-sm py-2">No alerts or advisories for today. Your crops are in optimal condition!</p>
                     )}
@@ -1250,7 +1238,68 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               setExpandedCropGroups(prev => ({ ...prev, [key]: !prev[key] }));
             };
 
-            // Render helper for Visual Crop Image Card (matching previous farmer-friendly format)
+            // Render helper for Crop Plot Details (NO repeated crop image in Group by Crop expanded view)
+            const renderCropPlotDetailCard = (crop: any) => {
+              const farmAdvisories = advisories.filter((adv: any) => adv.farm_id === crop.farm_id);
+
+              return (
+                <div
+                  key={crop.id}
+                  onClick={() => {
+                    setSelectedCrop(crop);
+                    const farm = farms.find((f: any) => f.id === crop.farm_id);
+                    if (farm) setSelectedFarm(farm);
+                  }}
+                  className={`p-3.5 rounded-xl border cursor-pointer transition-all hover:shadow-md bg-white text-left ${
+                    selectedCrop?.id === crop.id ? 'ring-2 ring-stable border-stable' : 'border-earth-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div>
+                      <span className="text-[10px] bg-stable/10 text-stable-dark font-bold px-2 py-0.5 rounded-full border border-stable/20 inline-block mb-1">
+                        📍 {crop.farm_name || `Farm #${crop.farm_id}`}
+                      </span>
+                      <h4 className="font-bold text-slate-900 text-sm my-0">
+                        {crop.variety || 'Standard Variety'}
+                      </h4>
+                      <p className="text-[11px] text-slate-500 my-0 mt-0.5">
+                        📍 {crop.farm_district || 'District'} · {crop.farm_area || 1.0} acres
+                      </p>
+                    </div>
+                    <span className={`text-[9px] text-white font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 ${getCropStageColor(crop.stage || '')}`}>
+                      {translateStage(language, crop.stage) || 'Veg. Growth'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-slate-600 font-medium pt-2 border-t border-slate-100">
+                    <span>🌱 {t.cropSowingDate} {formatDaysAgo(getSowingDaysAgo(crop.sowing_date), language, nativeDigits)}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteCrop(crop.id);
+                      }}
+                      title="Delete crop plot"
+                      className="text-slate-400 hover:text-high p-1 rounded transition-colors"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+
+                  {farmAdvisories.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-slate-100">
+                      <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wide flex items-center gap-1 my-0">
+                        <AlertTriangle size={11} className="text-amber-600" /> Advisory Alert
+                      </p>
+                      <p className="text-xs text-slate-700 mt-0.5 line-clamp-2 my-0 leading-snug">
+                        {farmAdvisories[0].recommendation}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            };
+
+            // Render helper for Visual Crop Image Card (used in Group by Farm expanded view)
             const renderCropImageCard = (crop: any) => {
               const farmAdvisories = advisories.filter((adv: any) => adv.farm_id === crop.farm_id);
 
@@ -1273,20 +1322,20 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                       alt={crop.crop_type}
                       className="w-full h-full object-cover"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
                     {/* Stage badge */}
                     <div className="absolute top-3 right-3">
-                      <span className={`text-[9px] text-white font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm ${getCropStageColor(crop.stage || '')}`}>
+                      <span className={`text-[9px] text-white font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm backdrop-blur-xs ${getCropStageColor(crop.stage || '')}`}>
                         {translateStage(language, crop.stage) || 'Veg. Growth'}
                       </span>
                     </div>
-                    {/* Crop info overlay */}
-                    <div className="absolute bottom-3 left-3 text-white">
+                    {/* Crop info overlay naturally blended */}
+                    <div className="absolute bottom-3 left-3 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
                       <div className="text-lg leading-none">
                         {cropEmojis[crop.crop_type?.toLowerCase()] || '🌱'}
                       </div>
-                      <h3 className="font-bold text-base capitalize mt-0.5 my-0">{capitalize(translateCrop(language, crop.crop_type))}</h3>
-                      <p className="text-[11px] text-slate-200 my-0 font-medium">{crop.variety || 'Local variety'}</p>
+                      <h3 className="font-extrabold text-white text-base capitalize mt-0.5 my-0">{capitalize(translateCrop(language, crop.crop_type))}</h3>
+                      <p className="text-[11px] text-slate-200 my-0 font-medium opacity-95">{crop.variety || 'Local variety'}</p>
                     </div>
                   </div>
 
@@ -1368,15 +1417,27 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                       </button>
                     </div>
 
-                    <button
-                      onClick={() => {
-                        if (!selectedFarm) { toast.warning("No farm selected", "Please add a farm first."); return; }
-                        setShowAddCropModal(true);
-                      }}
-                      className="px-3 py-2 bg-stable text-white hover:bg-stable-dark rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1"
-                    >
-                      + {t.cropAddNew}
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => setShowAddFarmModal(true)}
+                        className="px-3 py-2 border border-stable/40 text-stable hover:bg-stable-light rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1"
+                      >
+                        + Add Farm
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!selectedFarm && farms.length === 0) {
+                            toast.warning("No farm available", "Please add a farm first.");
+                            setShowAddFarmModal(true);
+                            return;
+                          }
+                          setShowAddCropModal(true);
+                        }}
+                        className="px-3 py-2 bg-stable text-white hover:bg-stable-dark rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1"
+                      >
+                        + {t.cropAddNew}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1394,132 +1455,198 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                     </button>
                   </div>
                 ) : cropViewGroup === 'crop' ? (
-                  /* GROUP BY CROP VIEW WITH VISUAL IMAGE CARDS */
-                  <div className="space-y-6">
+                  /* GROUP BY CROP VIEW WITH VISUAL COVER CARDS IN A 3-COLUMN GRID */
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-start">
                     {Object.entries(cropsByType).map(([cropTypeKey, cropItems]) => {
-                      const isExpanded = expandedCropGroups[`crop_${cropTypeKey}`] !== false; // Default expanded
+                      const isExpanded = !!expandedCropGroups[`crop_${cropTypeKey}`]; // Default collapsed
                       const totalAcres = cropItems.reduce((acc, c) => acc + (c.farm_area || 0), 0);
                       const emoji = cropEmojis[cropTypeKey] || '🌱';
+                      const sampleImage = cropItems[0]?.image_url;
 
                       return (
-                        <div key={cropTypeKey} className="bg-white rounded-2xl border border-earth-200 shadow-sm overflow-hidden">
-                          {/* Group Header */}
-                          <div
+                        <div key={cropTypeKey} className="bg-white rounded-2xl border border-earth-200 shadow-sm overflow-hidden flex flex-col transition-all hover:shadow-md">
+                          {/* Visual Cover Header */}
+                          <div 
                             onClick={() => toggleGroupExpand(`crop_${cropTypeKey}`)}
-                            className="p-4 bg-gradient-to-r from-earth-50 to-white flex items-center justify-between cursor-pointer hover:bg-earth-100/60 transition-colors border-b border-earth-100"
+                            className="relative h-36 w-full cursor-pointer group overflow-hidden"
                           >
-                            <div className="flex items-center gap-3">
-                              <span className="text-2xl bg-white p-2 rounded-xl border border-earth-200 shadow-xs">{emoji}</span>
-                              <div>
-                                <h3 className="font-bold text-slate-900 text-base capitalize my-0 flex items-center gap-2">
-                                  {capitalize(translateCrop(language, cropTypeKey))}
-                                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-stable-light text-stable-dark border border-stable/20">
-                                    {cropItems.length} plot{cropItems.length > 1 ? 's' : ''}
-                                  </span>
-                                </h3>
-                                <p className="text-xs text-slate-500 mt-0.5 my-0">
-                                  Total area: <span className="font-semibold text-slate-700">{totalAcres.toFixed(1)} acres</span> across plots
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 text-slate-400">
-                              <span className="text-xs font-semibold text-slate-500 hidden sm:inline">
-                                {isExpanded ? 'Collapse' : 'View Crops'}
+                            <img
+                              src={getCropImage(cropTypeKey, sampleImage)}
+                              alt={cropTypeKey}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+                            
+                            <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/40 text-white backdrop-blur-xs border border-white/20 shadow-sm">
+                                {cropItems.length} plot{cropItems.length > 1 ? 's' : ''}
                               </span>
-                              {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                              <span className="bg-black/40 text-white p-1 rounded-full backdrop-blur-xs border border-white/20 shadow-sm transition-transform duration-300">
+                                {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                              </span>
+                            </div>
+
+                            <div className="absolute bottom-3 left-3 right-3 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xl leading-none">{emoji}</span>
+                                <h3 className="font-extrabold text-white text-base capitalize leading-tight my-0">
+                                  {capitalize(translateCrop(language, cropTypeKey))}
+                                </h3>
+                              </div>
+                              <p className="text-[10px] text-slate-200 my-0 mt-0.5 font-medium opacity-95">
+                                {totalAcres.toFixed(1)} total acres across farms
+                              </p>
                             </div>
                           </div>
 
-                          {/* Expandable Image Cards Grid */}
-                          {isExpanded && (
-                            <div className="p-5 bg-earth-50/40">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {cropItems.map(renderCropImageCard)}
+                          {/* Smooth Expanded Plot Details */}
+                          <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100 border-t border-earth-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                            <div className="overflow-hidden">
+                              <div className="p-4 bg-earth-50/50 space-y-3">
+                                {cropItems.map(renderCropPlotDetailCard)}
                               </div>
                             </div>
-                          )}
+                          </div>
                         </div>
                       );
                     })}
                   </div>
                 ) : (
-                  /* GROUP BY FARM VIEW WITH VISUAL IMAGE CARDS */
-                  <div className="space-y-6">
+                  /* GROUP BY FARM VIEW WITH COMPACT CARDS IN A 3-COLUMN GRID */
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-start">
                     {Object.values(cropsByFarm).map(({ farm, crops }) => {
-                      const isExpanded = expandedCropGroups[`farm_${farm.id}`] !== false; // Default expanded
+                      const isExpanded = !!expandedCropGroups[`farm_${farm.id}`]; // Default collapsed
                       const farmTotalAcres = farm.area || farm.farm_area || 0;
 
                       return (
-                        <div key={farm.id} className="bg-white rounded-2xl border border-earth-200 shadow-sm overflow-hidden">
-                          {/* Farm Header */}
+                        <div key={farm.id} className="bg-white rounded-2xl border border-earth-200 shadow-sm overflow-hidden flex flex-col transition-all hover:shadow-md">
+                          {/* Compact Text-Based Farm Header */}
                           <div
                             onClick={() => toggleGroupExpand(`farm_${farm.id}`)}
-                            className="p-4 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex items-center justify-between cursor-pointer hover:bg-slate-800 transition-colors"
+                            className="p-4 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white cursor-pointer hover:bg-slate-800 transition-colors"
                           >
-                            <div className="flex items-center gap-3">
-                              <span className="bg-white/10 p-2 rounded-xl text-amber-400">
-                                <Building2 size={20} />
-                              </span>
-                              <div>
-                                <h3 className="font-bold text-white text-base my-0 flex items-center gap-2">
-                                  {farm.name || `Farm ${farm.id}`}
-                                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-200 border border-slate-600">
-                                    {crops.length} crop{crops.length > 1 ? 's' : ''}
-                                  </span>
-                                </h3>
-                                <p className="text-xs text-slate-300 mt-0.5 my-0 flex items-center gap-2">
-                                  <span>📍 {farm.district || farm.location_id?.replace('_', ', ') || 'Nashik'}</span>
-                                  <span>·</span>
-                                  <span>{farmTotalAcres} acres</span>
-                                  {farm.soil_type && <><span>·</span><span className="capitalize">{farm.soil_type} soil</span></>}
-                                  {farm.irrigation && <><span>·</span><span className="capitalize">{farm.irrigation}</span></>}
-                                </p>
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <div className="flex items-center gap-2.5">
+                                <span className="bg-white/10 p-2 rounded-xl text-amber-400 shrink-0">
+                                  <Building2 size={18} />
+                                </span>
+                                <div>
+                                  <h3 className="font-bold text-white text-base leading-snug my-0 flex items-center gap-2">
+                                    {farm.name || `Farm ${farm.id}`}
+                                  </h3>
+                                  <p className="text-[11px] text-slate-300 my-0 font-medium flex items-center gap-1">
+                                    📍 {farm.district || farm.location_id?.replace('_', ', ') || 'Nashik'}
+                                  </p>
+                                </div>
                               </div>
+
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-700 text-slate-200 border border-slate-600 shrink-0">
+                                {crops.length} crop{crops.length > 1 ? 's' : ''}
+                              </span>
                             </div>
 
-                            <div className="flex items-center gap-2 text-slate-300">
-                              <span className="text-xs font-semibold hidden sm:inline">
-                                {isExpanded ? 'Collapse Farm' : 'View Crops'}
-                              </span>
-                              {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                            <div className="flex items-center justify-between pt-2 border-t border-slate-700/60 text-xs text-slate-300">
+                              <div className="flex items-center gap-1.5 text-[11px]">
+                                <span>{farmTotalAcres} acres</span>
+                                {farm.soil_type && <><span>·</span><span className="capitalize">{farm.soil_type}</span></>}
+                                {farm.irrigation && <><span>·</span><span className="capitalize">{farm.irrigation}</span></>}
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteFarm(farm.id);
+                                  }}
+                                  title="Delete farm"
+                                  className="text-red-300 hover:text-white p-1 rounded transition-colors"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                                <span className="text-slate-400">
+                                  {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                </span>
+                              </div>
                             </div>
                           </div>
 
-                          {/* Expandable Image Cards Grid */}
-                          {isExpanded && (
-                            <div className="p-5 bg-earth-50/40">
-                              {crops.length === 0 ? (
-                                <p className="text-xs text-slate-500 italic py-2 my-0">No crops registered under this farm yet.</p>
-                              ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                  {crops.map(renderCropImageCard)}
-                                </div>
-                              )}
+                          {/* Smooth Expanded Crops Grid */}
+                          <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100 border-t border-earth-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                            <div className="overflow-hidden">
+                              <div className="p-4 bg-earth-50/50">
+                                {crops.length === 0 ? (
+                                  <p className="text-xs text-slate-500 italic py-2 my-0">No crops registered under this farm yet.</p>
+                                ) : (
+                                  <div className="space-y-3">
+                                    {crops.map(renderCropImageCard)}
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          )}
+                          </div>
                         </div>
                       );
                     })}
                   </div>
                 )}
 
-                {/* Advisory Feed — all farms */}
+                {/* Advisory Feed — all farms, priority ordered with true farm names */}
                 {advisories.length > 0 && (
-                  <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-3">
-                    <h3 className="font-bold text-slate-900 my-0">Advisory Feed (All Farms)</h3>
+                  <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-4 text-left">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <h3 className="font-bold text-slate-900 text-lg my-0">Advisory Feed (Priority Ordered)</h3>
+                      <span className="text-xs font-semibold text-slate-500 bg-earth-50 px-2.5 py-1 rounded-full border border-earth-200">
+                        Sorted by Priority
+                      </span>
+                    </div>
                     <div className="border-l-2 border-stable pl-4 py-2 space-y-4">
-                      {(translatedAdvisories.length > 0 ? translatedAdvisories : advisories).map((adv: any) => (
-                        <div key={adv.id} className="relative">
-                          <span className="absolute -left-[23px] top-1.5 bg-stable h-3 w-3 rounded-full border-2 border-white" />
-                          <div className="bg-white p-3 rounded-xl border border-earth-200 shadow-xs">
-                            <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">
-                              {adv.category} · Farm {adv.farm_id}
-                            </p>
-                            <p className="text-slate-800 text-xs font-semibold mt-1">{adv.recommendation}</p>
-                            <p className="text-slate-500 text-xs mt-0.5">{adv.reason}</p>
-                          </div>
-                        </div>
-                      ))}
+                      {(() => {
+                        const priorityOrderMap: Record<string, number> = { high: 1, medium: 2, low: 3 };
+                        const sortedList = [...(translatedAdvisories.length > 0 ? translatedAdvisories : advisories)].sort((a, b) => {
+                          const pA = priorityOrderMap[(a.priority || '').toLowerCase()] || 4;
+                          const pB = priorityOrderMap[(b.priority || '').toLowerCase()] || 4;
+                          return pA - pB;
+                        });
+
+                        return sortedList.map((adv: any) => {
+                          const farmObj = farms.find((f: any) => f.id === adv.farm_id);
+                          const cropObj = allCrops.find((c: any) => c.farm_id === adv.farm_id);
+                          const farmName = farmObj?.name || (farmObj?.district ? `${farmObj.district} Farm` : `Farm #${adv.farm_id}`);
+                          const cropName = cropObj ? `${capitalize(cropObj.crop_type)} (${cropObj.variety || 'Local'})` : null;
+
+                          return (
+                            <div key={adv.id} className="relative">
+                              <span className={`absolute -left-[23px] top-2 h-3.5 w-3.5 rounded-full border-2 border-white ${
+                                adv.priority === 'high' ? 'bg-high' : adv.priority === 'medium' ? 'bg-elevated' : 'bg-stable'
+                              }`} />
+                              <div className="bg-earth-50/60 p-4 rounded-xl border border-earth-200 shadow-2xs space-y-1.5">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[10px] font-bold bg-stable/10 text-stable-dark px-2 py-0.5 rounded-full border border-stable/20">
+                                      📍 {farmName}
+                                    </span>
+                                    {cropName && (
+                                      <span className="text-[10px] font-bold bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200">
+                                        🌱 {cropName}
+                                      </span>
+                                    )}
+                                    <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+                                      · {adv.category}
+                                    </span>
+                                  </div>
+                                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase text-white ${
+                                    adv.priority === 'high' ? 'bg-high' : adv.priority === 'medium' ? 'bg-elevated' : 'bg-stable'
+                                  }`}>
+                                    {adv.priority} Priority
+                                  </span>
+                                </div>
+                                <p className="text-slate-900 text-sm font-semibold mt-1 my-0">{adv.recommendation}</p>
+                                <p className="text-slate-500 text-xs mt-0.5 my-0 leading-relaxed">{adv.reason}</p>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
                 )}
@@ -1739,24 +1866,46 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
 
               {/* Dynamic Alerts (Pest Warnings) */}
               {alerts.length > 0 ? (
-                (translatedAlerts.length > 0 ? translatedAlerts : alerts).map((al) => (
-                  <div key={al.id} className={`flex gap-4 items-start p-4 rounded-xl border ${
-                    al.severity === 'Critical' ? 'bg-high-light border-high-dark/10' : 'bg-elevated-light border-elevated-dark/10'
-                  }`}>
-                    <span className={`p-2.5 rounded-xl text-white ${
-                      al.severity === 'Critical' ? 'bg-high' : 'bg-elevated'
-                    }`}><AlertTriangle size={20} /></span>
-                    <div className="flex-1">
-                      <div className="flex justify-between items-center">
-                        <h4 className="font-bold text-slate-800 text-sm">Agricultural Alert</h4>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                          al.severity === 'Critical' ? 'bg-high text-white' : 'bg-elevated text-white'
-                        }`}>{al.severity}</span>
+                (translatedAlerts.length > 0 ? translatedAlerts : alerts).map((al) => {
+                  const matchingCrop = allCrops.find((c: any) => 
+                    al.reason.toLowerCase().includes(c.crop_type.toLowerCase()) || 
+                    (c.farm_name && al.reason.toLowerCase().includes(c.farm_name.toLowerCase()))
+                  );
+                  const matchingFarm = matchingCrop 
+                    ? farms.find((f: any) => f.id === matchingCrop.farm_id) 
+                    : (farms.length > 0 ? farms[0] : null);
+
+                  return (
+                    <div key={al.id} className={`flex gap-4 items-start p-4 rounded-xl border ${
+                      al.severity === 'Critical' ? 'bg-high-light border-high-dark/10' : 'bg-elevated-light border-elevated-dark/10'
+                    }`}>
+                      <span className={`p-2.5 rounded-xl text-white ${
+                        al.severity === 'Critical' ? 'bg-high' : 'bg-elevated'
+                      }`}><AlertTriangle size={20} /></span>
+                      <div className="flex-1 text-left">
+                        <div className="flex justify-between items-center flex-wrap gap-2 mb-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-bold text-slate-800 text-sm my-0">Agricultural Risk Alert</h4>
+                            {matchingFarm && (
+                              <span className="text-[10px] bg-white text-slate-700 font-bold px-2 py-0.5 rounded-full border border-slate-200">
+                                📍 {matchingFarm.name || matchingFarm.district || 'All Farms'}
+                              </span>
+                            )}
+                            {matchingCrop && (
+                              <span className="text-[10px] bg-amber-50 text-amber-800 font-bold px-2 py-0.5 rounded-full border border-amber-200">
+                                🌱 {capitalize(matchingCrop.crop_type)}
+                              </span>
+                            )}
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                            al.severity === 'Critical' ? 'bg-high text-white' : 'bg-elevated text-white'
+                          }`}>{al.severity}</span>
+                        </div>
+                        <p className="text-slate-600 text-xs mt-1 my-0 leading-relaxed">{al.reason}</p>
                       </div>
-                      <p className="text-slate-600 text-xs mt-1">{al.reason}</p>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               ) : null}
             </div>
           </div>
@@ -3403,9 +3552,73 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                   </div>
                 </div>
 
-                {/* Map Picker */}
+                {/* Map Picker with Live Address Search */}
                 <div>
                   <label className="block text-slate-500 text-xs font-bold uppercase mb-1">📍 Pinpoint Farm Location</label>
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      placeholder="Search city, town, or village (e.g., Rourkela, Niphad)..."
+                      value={searchAddress}
+                      onChange={(e) => setSearchAddress(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === 'Enter' && searchAddress.trim()) {
+                          e.preventDefault();
+                          setIsSearchingAddress(true);
+                          try {
+                            const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchAddress.trim())}&count=1`);
+                            if (res.ok) {
+                              const data = await res.json();
+                              if (data.results && data.results.length > 0) {
+                                const match = data.results[0];
+                                setNewFarmLat(parseFloat(match.latitude.toFixed(6)));
+                                setNewFarmLon(parseFloat(match.longitude.toFixed(6)));
+                                if (match.admin1) setNewFarmState(match.admin1);
+                                if (match.name) setNewFarmDistrict(match.name);
+                                toast.success("Location found!", `Centered map on ${match.name}, ${match.admin1 || ''}`);
+                              } else {
+                                toast.warning("Location not found", "Try searching another city or village name.");
+                              }
+                            }
+                          } catch {
+                            toast.error("Geocoding failed", "Could not reach address search service.");
+                          }
+                          setIsSearchingAddress(false);
+                        }
+                      }}
+                      className="flex-1 text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl focus:outline-none focus:border-stable"
+                    />
+                    <button
+                      type="button"
+                      disabled={isSearchingAddress}
+                      onClick={async () => {
+                        if (!searchAddress.trim()) return;
+                        setIsSearchingAddress(true);
+                        try {
+                          const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchAddress.trim())}&count=1`);
+                          if (res.ok) {
+                            const data = await res.json();
+                            if (data.results && data.results.length > 0) {
+                              const match = data.results[0];
+                              setNewFarmLat(parseFloat(match.latitude.toFixed(6)));
+                              setNewFarmLon(parseFloat(match.longitude.toFixed(6)));
+                              if (match.admin1) setNewFarmState(match.admin1);
+                              if (match.name) setNewFarmDistrict(match.name);
+                              toast.success("Location found!", `Centered map on ${match.name}, ${match.admin1 || ''}`);
+                            } else {
+                              toast.warning("Location not found", "Try searching another city or village name.");
+                            }
+                          }
+                        } catch {
+                          toast.error("Geocoding failed", "Could not reach address search service.");
+                        }
+                        setIsSearchingAddress(false);
+                      }}
+                      className="px-3 py-2 bg-stable hover:bg-stable-dark text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 shrink-0"
+                    >
+                      {isSearchingAddress ? 'Searching...' : '🔍 Search Location'}
+                    </button>
+                  </div>
                   <MapPickerComponent
                     initialLat={newFarmLat}
                     initialLon={newFarmLon}
@@ -3489,6 +3702,8 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                       const data = await res.json();
                       setFarms(prev => [...prev, data]);
                       setSelectedFarm(data);
+                      setNewFarmName('');
+                      setSearchAddress('');
                       setShowAddFarmModal(false);
                       setHasFarm(true);
                       localStorage.setItem('hasFarm', 'true');
