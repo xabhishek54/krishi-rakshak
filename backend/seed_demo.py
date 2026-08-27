@@ -19,6 +19,30 @@ DEMO_PHONE = "+919876543210"
 DEMO_PASSWORD = "demo1234"
 DEMO_NAME = "Ramesh Patil"
 
+DEMO_OFFICER_PHONE = "+919988776655"
+DEMO_OFFICER_PASSWORD = "officer123"
+DEMO_OFFICER_NAME = "Dr. Aniket Deshmukh"
+
+def seed_officer_data(db: Session):
+    officer = db.query(models.AgroOfficer).filter(models.AgroOfficer.phone == DEMO_OFFICER_PHONE).first()
+    if not officer:
+        hashed = auth.get_password_hash(DEMO_OFFICER_PASSWORD)
+        officer = models.AgroOfficer(
+            name=DEMO_OFFICER_NAME,
+            phone=DEMO_OFFICER_PHONE,
+            email="aniket.deshmukh@krishi.gov.in",
+            hashed_password=hashed,
+            designation="Senior Block Agricultural Officer",
+            state="Maharashtra",
+            district="Nashik",
+            municipality="Niphad Block",
+            ward="Ward #4"
+        )
+        db.add(officer)
+        db.commit()
+        db.refresh(officer)
+        print(f"[seeder] Created demo Agro Officer: {DEMO_OFFICER_NAME} (id={officer.id})")
+
 def seed_farmer_data(db: Session):
     """Direct database seeding logic using SQLAlchemy."""
     # 1. Clear old data for the farmer if they exist
@@ -215,9 +239,12 @@ def seed_farmer_data(db: Session):
     print(f"[seeder] Triggered real-time advisories generation.")
 
 if __name__ == "__main__":
+    from app.database import engine
+    models.Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
         seed_farmer_data(db)
-        print("Demo farmer seeding complete!")
+        seed_officer_data(db)
+        print("Demo farmer and Agro Officer seeding complete!")
     finally:
         db.close()

@@ -17,11 +17,13 @@ import {
 import { ToastContainer, useToast } from './Toast';
 import { getStateList, getDistrictsForState, getDistrictCoords } from './india_locations';
 import { speakText, stopSpeech, buildVoiceText, askGemini } from './voice';
+import T from './Translated';
+import { translateText, setGoogleTranslateLanguage } from './translate';
 
 // Lazy-loaded map picker — load once at module level to avoid remounting
 import MapPickerComponent from './MapPicker';
 import CommunityMap from './CommunityMap';
-const API_BASE = 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 import { 
   Home as HomeIcon, 
   Sprout, 
@@ -29,13 +31,13 @@ import {
   Bell, 
   HelpCircle, 
   Mic, 
+  MessageSquare,
   User, 
   AlertTriangle,
   ChevronRight,
   ChevronDown,
   ChevronUp,
   TrendingDown,
-  TrendingUp,
   Lock,
   LogOut,
   CloudRain,
@@ -48,7 +50,15 @@ import {
   Layers,
   Building2,
   RefreshCw,
-  MapPin
+  MapPin,
+  CheckCircle2,
+  Circle,
+  ExternalLink,
+  Volume2,
+  Radio,
+  Search,
+  Plus,
+  X
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -80,9 +90,10 @@ function App() {
   const [voiceAnswer, setVoiceAnswer] = useState<string>('');
   const [voiceListening, setVoiceListening] = useState<boolean>(false);
   const [voiceLoading, setVoiceLoading] = useState<boolean>(false);
-  // Translated dynamic content (advisories, alerts)
+  // Translated dynamic content (advisories, alerts, schemes)
   const [translatedAdvisories, setTranslatedAdvisories] = useState<any[]>([]);
   const [translatedAlerts, setTranslatedAlerts] = useState<any[]>([]);
+  const [translatedSchemes, setTranslatedSchemes] = useState<any[]>([]);
   const [weather, setWeather] = useState<any>(null);
   const [loadingWeather, setLoadingWeather] = useState<boolean>(false);
   const [advisories, setAdvisories] = useState<any[]>([]);
@@ -98,17 +109,92 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   const [cropViewGroup, setCropViewGroup] = useState<'crop' | 'farm'>('crop');
   const [expandedCropGroups, setExpandedCropGroups] = useState<Record<string, boolean>>({});
 
+  // Action completion & UI detail toggle states
+  const [completedAdvisoryIds, setCompletedAdvisoryIds] = useState<number[]>([]);
+  const [expandedAdvisoryIds, setExpandedAdvisoryIds] = useState<Record<string, boolean>>({});
+  const [showRawWeatherMetrics, setShowRawWeatherMetrics] = useState<boolean>(false);
+  const [showCompletedAdvisories, setShowCompletedAdvisories] = useState<boolean>(false);
+
+  // Role & Agro Officer state
+  const [userRole, setUserRole] = useState<'farmer' | 'officer'>(
+    (localStorage.getItem('krishi_auth_role') as 'farmer' | 'officer') || 'farmer'
+  );
+  const [authRoleToggle, setAuthRoleToggle] = useState<'farmer' | 'officer'>('farmer');
+  
+  // Agro Officer Registration State
+  const [officerRegName, setOfficerRegName] = useState<string>('');
+  const [officerRegPhone, setOfficerRegPhone] = useState<string>('');
+  const [officerRegEmail, setOfficerRegEmail] = useState<string>('');
+  const [officerRegPassword, setOfficerRegPassword] = useState<string>('');
+  const [officerRegDesignation, setOfficerRegDesignation] = useState<string>('Senior Block Agricultural Officer');
+  const [officerRegState, setOfficerRegState] = useState<string>('Maharashtra');
+  const [officerRegDistrict, setOfficerRegDistrict] = useState<string>('Nashik');
+  const [officerRegMunicipality, setOfficerRegMunicipality] = useState<string>('Niphad Block');
+  const [officerRegWard, setOfficerRegWard] = useState<string>('Ward #4');
+
+  // Agro Officer Dashboard State
+  const [officerProfile, setOfficerProfile] = useState<any>(null);
+  const [localityFarmers, setLocalityFarmers] = useState<any[]>([]);
+  const [localityMapPoints, setLocalityMapPoints] = useState<any[]>([]);
+  const [officerRiskFilter, setOfficerRiskFilter] = useState<string>('all');
+  const [officerStatusFilter, setOfficerStatusFilter] = useState<string>('all');
+  const [officerSearchQuery, setOfficerSearchQuery] = useState<string>('');
+  const [officerActiveView, setOfficerActiveView] = useState<'roster' | 'map'>('roster');
+  
+  // Selected farmer detail modal
+  const [selectedFarmerDetail, setSelectedFarmerDetail] = useState<any>(null);
+  const [isFarmerDetailOpen, setIsFarmerDetailOpen] = useState<boolean>(false);
+  const [interventionStatusInput, setInterventionStatusInput] = useState<string>('Pending');
+  const [interventionNotesInput, setInterventionNotesInput] = useState<string>('');
+  const [isSavingIntervention, setIsSavingIntervention] = useState<boolean>(false);
+
+  // Officer scheme recommendation state
+  const [officerSchemes, setOfficerSchemes] = useState<any[]>([]);
+  const [selectedSchemeId, setSelectedSchemeId] = useState<number | null>(null);
+  const [schemeRecommendNote, setSchemeRecommendNote] = useState<string>('');
+  const [isSavingScheme, setIsSavingScheme] = useState<boolean>(false);
+  const [farmerRecommendedSchemes, setFarmerRecommendedSchemes] = useState<any[]>([]);
+  const [officerDetailTab, setOfficerDetailTab] = useState<'overview' | 'action'>('overview');
+
+  // Alternative Credit Scoring (Feature 20) state
+  const [creditAssessment, setCreditAssessment] = useState<any>(null);
+  const [creditLoading, setCreditLoading] = useState<boolean>(false);
+  const [loanRequestedInput, setLoanRequestedInput] = useState<number>(50000);
+  const [infraColdStorage, setInfraColdStorage] = useState<boolean>(false);
+  const [infraPrecisionTech, setInfraPrecisionTech] = useState<boolean>(false);
+  const [infraSellsStubble, setInfraSellsStubble] = useState<boolean>(false);
+  const [infraDoesSorting, setInfraDoesSorting] = useState<boolean>(false);
+
+
+  const toggleCompleteAdvisory = (id: number) => {
+    setCompletedAdvisoryIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const toggleExpandAdvisory = (id: string | number) => {
+    const key = String(id);
+    setExpandedAdvisoryIds(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Crop Advisor sub-tab state ('overview' | 'recommendation' | 'water' | 'simulator')
+  const [advisorSubTab, setAdvisorSubTab] = useState<'overview' | 'recommendation' | 'water' | 'simulator'>('overview');
+
+  // Financial Health sub-tab state ('overview' | 'loan')
+  const [finSubTab, setFinSubTab] = useState<'overview' | 'loan'>('overview');
+  const [finBreakdownView, setFinBreakdownView] = useState<'crop' | 'farm'>('crop');
+  const [showLoanDetails, setShowLoanDetails] = useState<boolean>(false);
+  // Government Assistance Platform sub-tab state ('schemes' | 'loans')
+  const [supportSubTab, setSupportSubTab] = useState<'schemes' | 'loans'>('schemes');
+
   // Yield Calculator state (top-level to follow React hooks rules)
   const [yieldCrop, setYieldCrop] = useState<string>('tomato');
   const [yieldArea, setYieldArea] = useState<number>(1.0);
-  const [yieldRainfall, setYieldRainfall] = useState<number>(0);
+  const [yieldRainfall, _setYieldRainfall] = useState<number>(0);
   const [yieldSoil, setYieldSoil] = useState<string>('loam');
   const [yieldIrrigation, setYieldIrrigation] = useState<string>('drip');
   const [yieldResult, setYieldResult] = useState<any>(null);
-  const [, setYieldLoading] = useState<boolean>(false);
-  // Community Risk Map state (top-level to follow React hooks rules)
-  const [communityData, setCommunityData] = useState<any[]>([]);
-  const [communityLoading, setCommunityLoading] = useState<boolean>(true);
+  const [yieldLoading, setYieldLoading] = useState<boolean>(false);
   // PWA offline indicator
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
@@ -165,6 +251,12 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   const [language, setLanguage] = useState<LanguageType>(
     (localStorage.getItem('kr_language') as LanguageType) || 'english'
   );
+
+  // Sync Google Translate Web Element whenever language selector is changed
+  useEffect(() => {
+    localStorage.setItem('kr_language', language);
+    setGoogleTranslateLanguage(language);
+  }, [language]);
   const [showNotificationPanel, setShowNotificationPanel] = useState<boolean>(false);
   const t = translations[language];
   const nativeDigits = useNativeDigits(language);
@@ -174,45 +266,45 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
 
   // Crop modal: which farm to add crop to (default to selectedFarm.id)
   const [cropFarmId, setCropFarmId] = useState<number | null>(null);
+  const [showAllMandis, setShowAllMandis] = useState<boolean>(false);
 
   const fetchFarmsAndCrops = async () => {
     if (!token) return;
     try {
-      const farmRes = await fetch('http://localhost:8000/api/v1/farmers/me/farms', {
+      const farmRes = await fetch(`${API_BASE}/api/v1/farmers/me/farms`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (farmRes.ok) {
         const farmData = await farmRes.json();
         setFarms(farmData);
-        if (farmData.length > 0) {
-          // If no farm selected yet, pick first
-          const currentFarm = selectedFarm || farmData[0];
-          setSelectedFarm(currentFarm);
 
-          // Load crops from the selected farm (for modal UI)
-          const cropRes = await fetch(`http://localhost:8000/api/v1/farms/${currentFarm.id}/crops`, {
+        if (farmData.length > 0) {
+          const currentFarm = selectedFarm ? farmData.find((f: any) => f.id === selectedFarm.id) || farmData[0] : farmData[0];
+          setSelectedFarm(currentFarm);
+          setCropFarmId(currentFarm.id);
+          localStorage.setItem('hasFarm', 'true');
+          setHasFarm(true);
+
+          const cropRes = await fetch(`${API_BASE}/api/v1/farms/${currentFarm.id}/crops`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (cropRes.ok) {
             const cropData = await cropRes.json();
             setCrops(cropData);
-            if (cropData.length > 0) {
-              setSelectedCrop(selectedCrop && cropData.some((c: any) => c.id === selectedCrop.id) ? selectedCrop : cropData[0]);
-            } else {
-              setSelectedCrop(null);
+            if (cropData.length > 0 && !selectedCrop) {
+              setSelectedCrop(cropData[0]);
             }
           }
 
-          // --- Load ALL crops from ALL farms (for home card grid + advisory) ---
+          // Also fetch ALL crops across ALL farms for "My Crop" grouped views
           const allCropResults: any[] = [];
           await Promise.all(farmData.map(async (farm: any) => {
             try {
-              const r = await fetch(`http://localhost:8000/api/v1/farms/${farm.id}/crops`, {
+              const r = await fetch(`${API_BASE}/api/v1/farms/${farm.id}/crops`, {
                 headers: { 'Authorization': `Bearer ${token}` }
               });
               if (r.ok) {
                 const d = await r.json();
-                // Attach farm info to each crop for display
                 d.forEach((c: any) => {
                   allCropResults.push({ ...c, farm_name: farm.name || `Farm ${farm.id}`, farm_district: farm.district, farm_area: farm.area });
                 });
@@ -245,12 +337,18 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     if (token) {
       localStorage.setItem('token', token);
       
-      // Fetch profile
-      fetch('http://localhost:8000/api/v1/farmers/me', {
+      const storedRole = localStorage.getItem('krishi_auth_role');
+      if (userRole === 'officer' || storedRole === 'officer') {
+        fetchOfficerDashboardData();
+        return;
+      }
+      
+      // Fetch profile for farmers only
+      fetch(`${API_BASE}/api/v1/farmers/me`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       .then(res => {
-        if (res.ok) return res.json()
+        if (res.ok) return res.json();
         throw new Error("API failed");
       })
       .then(data => {
@@ -268,17 +366,17 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         fetchFarmsAndCrops();
       })
       .catch(() => {
-        // Clear invalid token and fallback to mock
-        setToken(null);
-        // Fallback to mock
-        setFarmer({
-          name: regName || 'Ramesh Kumar',
-          phone: loginPhone || regPhone || '+91 98765 43210',
-          language: language,
-          location_id: localStorage.getItem('onboardLocation') || 'Niphad_Nashik',
-          risk_profile: 'High'
-        });
-        fetchFarmsAndCrops();
+        if (localStorage.getItem('krishi_auth_role') !== 'officer') {
+          setToken(null);
+          setFarmer({
+            name: regName || 'Ramesh Kumar',
+            phone: loginPhone || regPhone || '+91 98765 43210',
+            language: language,
+            location_id: localStorage.getItem('onboardLocation') || 'Niphad_Nashik',
+            risk_profile: 'High'
+          });
+          fetchFarmsAndCrops();
+        }
       });
     } else {
       localStorage.removeItem('token');
@@ -292,7 +390,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
       setSelectedFarm(null);
       setSelectedCrop(null);
     }
-  }, [token]);
+  }, [token, userRole]);
 
   const getActiveLocationId = (farmObj?: any) => {
     const targetFarm = (farmObj && typeof farmObj === 'object' && farmObj.id) ? farmObj : selectedFarm;
@@ -318,7 +416,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     if (!validLocId) return;
     setLoadingWeather(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/weather/${encodeURIComponent(validLocId)}`);
+      const res = await fetch(`${API_BASE}/api/v1/weather/${encodeURIComponent(validLocId)}`);
       if (res.ok) {
         const data = await res.json();
         if (data.observation) {
@@ -356,7 +454,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     if (!validLocId) return;
     setLoadingWeather(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/weather/${encodeURIComponent(validLocId)}/refresh`, {
+      const res = await fetch(`${API_BASE}/api/v1/weather/${encodeURIComponent(validLocId)}/refresh`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -373,7 +471,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   // Fetch Advisories and Alerts
   const fetchAdvisoriesAndAlerts = async () => {
     try {
-      const advRes = await fetch('http://localhost:8000/api/v1/advisories', {
+      const advRes = await fetch(`${API_BASE}/api/v1/advisories`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (advRes.ok) {
@@ -381,7 +479,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         setAdvisories(data);
       }
       
-      const alertRes = await fetch('http://localhost:8000/api/v1/alerts', {
+      const alertRes = await fetch(`${API_BASE}/api/v1/alerts`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (alertRes.ok) {
@@ -401,41 +499,164 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
 
   // Fetch Weather + Advisories whenever active farm or location changes
   useEffect(() => {
+    if (userRole === 'officer' || localStorage.getItem('krishi_auth_role') === 'officer') return;
     if (token && (hasFarm || farmer?.location_id)) {
       fetchWeather();
       fetchAdvisoriesAndAlerts();
     }
-  }, [token, hasFarm, selectedFarm?.id, selectedFarm?.district, selectedFarm?.latitude, selectedFarm?.longitude, farmer?.location_id]);
+  }, [token, userRole, hasFarm, selectedFarm?.id, selectedFarm?.district, selectedFarm?.latitude, selectedFarm?.longitude, farmer?.location_id]);
 
   useEffect(() => {
+    if (userRole === 'officer' || localStorage.getItem('krishi_auth_role') === 'officer') return;
     if (token) {
       fetchDistressAndSchemes();
     }
-  }, [token, selectedCrop, selectedFarm?.id, activeTab]);
+  }, [token, userRole, selectedCrop, selectedFarm?.id, activeTab]);
+
+  // Auto-translate Advisories, Alerts, and Schemes whenever language or source data updates
+  useEffect(() => {
+    if (language === 'english') {
+      setTranslatedAdvisories([]);
+      setTranslatedAlerts([]);
+      setTranslatedSchemes([]);
+      return;
+    }
+
+    let isMounted = true;
+
+    async function doTranslateAll() {
+      // 1. Advisories
+      if (advisories.length > 0) {
+        const advPromises = advisories.map(async (adv) => {
+          const [recT, reasonT] = await Promise.all([
+            translateText(adv.recommendation || '', language),
+            translateText(adv.reason || '', language),
+          ]);
+          return { ...adv, recommendation: recT || adv.recommendation, reason: reasonT || adv.reason };
+        });
+        const resAdv = await Promise.all(advPromises);
+        if (isMounted) setTranslatedAdvisories(resAdv);
+      }
+
+      // 2. Alerts
+      if (alerts.length > 0) {
+        const alertPromises = alerts.map(async (al) => {
+          const [msgT, recT] = await Promise.all([
+            translateText(al.reason || al.message || '', language),
+            translateText(al.recommendation || '', language),
+          ]);
+          return { ...al, reason: msgT || al.reason, message: msgT || al.message, recommendation: recT || al.recommendation };
+        });
+        const resAl = await Promise.all(alertPromises);
+        if (isMounted) setTranslatedAlerts(resAl);
+      }
+
+      // 3. Government Schemes & Loans
+      if (schemes.length > 0) {
+        const schemePromises = schemes.map(async (sch) => {
+          const [nameT, fitT, sumT, typeT] = await Promise.all([
+            translateText(sch.name || '', language),
+            translateText(sch.why_recommended || sch.why_fits || '', language),
+            translateText(sch.benefit_summary || sch.support_type || '', language),
+            translateText(sch.support_type || '', language),
+          ]);
+          return {
+            ...sch,
+            name: nameT || sch.name,
+            why_recommended: fitT || sch.why_recommended || sch.why_fits,
+            why_fits: fitT || sch.why_fits || sch.why_recommended,
+            benefit_summary: sumT || sch.benefit_summary,
+            support_type: typeT || sch.support_type,
+          };
+        });
+        const resSch = await Promise.all(schemePromises);
+        if (isMounted) setTranslatedSchemes(resSch);
+      }
+    }
+
+    doTranslateAll();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [language, advisories, alerts, schemes]);
 
   useEffect(() => {
+    if (userRole === 'officer' || localStorage.getItem('krishi_auth_role') === 'officer') return;
     if (token && selectedCrop) {
       fetchMandiPrices();
       fetchProjections();
     }
-  }, [token, selectedCrop]);
+  }, [token, userRole, selectedCrop]);
+
+  // Fetch latest Credit Assessment for farmer
+  useEffect(() => {
+    if (token && (userRole === 'farmer' || localStorage.getItem('krishi_auth_role') === 'farmer')) {
+      fetch(`${API_BASE}/api/v1/credit/latest`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data) {
+            setCreditAssessment(data);
+            if (data.loan_requested) setLoanRequestedInput(data.loan_requested);
+            setInfraColdStorage(!!data.has_cold_storage);
+            setInfraPrecisionTech(!!data.uses_precision_tech);
+            setInfraSellsStubble(!!data.sells_stubble);
+            setInfraDoesSorting(!!data.does_sorting);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [token, userRole]);
+
+  const handleAssessCredit = async () => {
+    if (!token) return;
+    setCreditLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/credit/assess`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          loan_requested: Number(loanRequestedInput) || 50000,
+          has_cold_storage: infraColdStorage ? 1 : 0,
+          uses_precision_tech: infraPrecisionTech ? 1 : 0,
+          sells_stubble: infraSellsStubble ? 1 : 0,
+          does_sorting: infraDoesSorting ? 1 : 0
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCreditAssessment(data);
+      }
+    } catch (e) {
+      console.error('Credit assessment error:', e);
+    } finally {
+      setCreditLoading(false);
+    }
+  };
 
   const fetchMandiPrices = async () => {
     if (!token || !selectedCrop) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/mandis/compare?crop=${selectedCrop.crop_type}`, {
+      const farmParam = selectedCrop.farm_id ? `&farm_id=${selectedCrop.farm_id}` : '';
+      const res = await fetch(`${API_BASE}/api/v1/mandis/compare?crop=${selectedCrop.crop_type}${farmParam}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
         setMandiPrices(data);
-        // Set selectedMandiId to the first mandi (highest net return due to sorting in backend)
+        const targetId = (data.length > 0) ? data[0].mandi_id : selectedMandiId;
         if (data.length > 0) {
           setSelectedMandiId(data[0].mandi_id);
         }
-        // Fetch price history and price crash for the selected mandi
-        await fetchPriceHistory();
-        await fetchPriceCrash();
+        if (targetId) {
+          await fetchPriceHistory(targetId);
+          await fetchPriceCrash(targetId);
+        }
       }
     } catch {
       // Fallback mocks
@@ -445,18 +666,17 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         { mandi_id: 3, mandi_name: 'Pimpalgaon APMC', distance_km: 35.0, sticker_price: 2850, transport_cost: 470, other_fees: 57.0, net_return: 2323.0 }
       ];
       setMandiPrices(mockData);
-      // Set selectedMandiId to the first mandi in mock data
       setSelectedMandiId(1);
-      // Fetch price history and price crash (will fallback to mocks)
-      await fetchPriceHistory();
-      await fetchPriceCrash();
+      await fetchPriceHistory(1);
+      await fetchPriceCrash(1);
     }
   };
 
-  const fetchPriceHistory = async () => {
-    if (!token || !selectedCrop || !selectedMandiId) return;
+  const fetchPriceHistory = async (overrideMandiId?: number) => {
+    const targetMandiId = overrideMandiId || selectedMandiId;
+    if (!token || !selectedCrop || !targetMandiId) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/market/price-history?crop=${selectedCrop.crop_type}&mandi_id=${selectedMandiId}&window=30`, {
+      const res = await fetch(`${API_BASE}/api/v1/market/price-history?crop=${selectedCrop.crop_type}&mandi_id=${targetMandiId}&window=30`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -485,10 +705,11 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     }
   };
 
-  const fetchPriceCrash = async () => {
-    if (!token || !selectedCrop || !selectedMandiId) return;
+  const fetchPriceCrash = async (overrideMandiId?: number) => {
+    const targetMandiId = overrideMandiId || selectedMandiId;
+    if (!token || !selectedCrop || !targetMandiId) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/market/price-crash?crop=${selectedCrop.crop_type}&mandi_id=${selectedMandiId}`, {
+      const res = await fetch(`${API_BASE}/api/v1/market/price-crash?crop=${selectedCrop.crop_type}&mandi_id=${targetMandiId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -501,16 +722,22 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         price_crash: false,
         price_change_pct: -5.2,
         recent_7day_avg: 2500,
-        baseline_30day_avg: 2600,
-        reason: "Price changed -5.2% vs 30-day baseline"
+        historical_30day_avg: 2637.1
       });
     }
   };
 
+  useEffect(() => {
+    if (token && selectedCrop && selectedMandiId) {
+      fetchPriceHistory(selectedMandiId);
+      fetchPriceCrash(selectedMandiId);
+    }
+  }, [selectedMandiId]);
+
   const fetchProjections = async () => {
     if (!token) return;
     try {
-      const res = await fetch('http://localhost:8000/api/v1/farmers/me/projections', {
+      const res = await fetch(`${API_BASE}/api/v1/farmers/me/projections`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -539,10 +766,10 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     if (!token) return;
     try {
       const [distressRes, schemesRes] = await Promise.all([
-        fetch('http://localhost:8000/api/v1/farmers/me/distress', {
+        fetch(`${API_BASE}/api/v1/farmers/me/distress`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch('http://localhost:8000/api/v1/farmers/me/schemes', {
+        fetch(`${API_BASE}/api/v1/farmers/me/schemes`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
       ]);
@@ -564,12 +791,13 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   };
 
   useEffect(() => {
+    if (userRole === 'officer' || localStorage.getItem('krishi_auth_role') === 'officer') return;
     if (token && selectedCrop) {
       fetchMandiPrices();
       fetchProjections();
       fetchDistressAndSchemes();
     }
-  }, [token, selectedCrop]);
+  }, [token, userRole, selectedCrop]);
 
   // Force-sync: invalidate server-side cache then re-fetch everything fresh
   const forceSyncAll = async () => {
@@ -669,12 +897,156 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     }
   };
 
+  // Fetch Officer Profile & Locality Farmers Data
+  const fetchOfficerDashboardData = async () => {
+    if (!token || userRole !== 'officer') return;
+    try {
+      const meRes = await fetch(`${API_BASE}/api/v1/officers/me`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        setOfficerProfile(meData);
+      }
+
+      const farmersRes = await fetch(`${API_BASE}/api/v1/officers/locality-farmers`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (farmersRes.ok) {
+        const farmersData = await farmersRes.json();
+        setLocalityFarmers(farmersData);
+      }
+
+      const mapRes = await fetch(`${API_BASE}/api/v1/officers/locality-map`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (mapRes.ok) {
+        const mapData = await mapRes.json();
+        setLocalityMapPoints(mapData);
+      }
+
+      // Load all available schemes for scheme recommender
+      const schemesRes = await fetch(`${API_BASE}/api/v1/officers/schemes`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (schemesRes.ok) {
+        const schemesData = await schemesRes.json();
+        setOfficerSchemes(schemesData);
+      }
+    } catch (e) {
+      console.error("Error loading Agro Officer dashboard data:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (token && userRole === 'officer') {
+      fetchOfficerDashboardData();
+    }
+  }, [token, userRole]);
+
+  const handleOpenFarmerDetail = async (farmerId: number) => {
+    if (!token) return;
+    setOfficerDetailTab('overview');
+    setSelectedSchemeId(null);
+    setSchemeRecommendNote('');
+    try {
+      const [detailRes, schemeRes] = await Promise.all([
+        fetch(`${API_BASE}/api/v1/officers/farmers/${farmerId}/details`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${API_BASE}/api/v1/officers/farmers/${farmerId}/recommended-schemes`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
+      if (detailRes.ok) {
+        const data = await detailRes.json();
+        setSelectedFarmerDetail(data);
+        setInterventionStatusInput(data.intervention?.status || 'Pending');
+        setInterventionNotesInput(data.intervention?.notes || '');
+        setIsFarmerDetailOpen(true);
+      }
+      if (schemeRes.ok) {
+        const schemeData = await schemeRes.json();
+        setFarmerRecommendedSchemes(schemeData);
+      }
+    } catch (e) {
+      toast.error('Error', 'Could not fetch farmer detailed record.');
+    }
+  };
+
+  const handleRecommendScheme = async (farmerId: number) => {
+    if (!token || !selectedSchemeId) return;
+    const chosenScheme = officerSchemes.find(s => s.id === selectedSchemeId);
+    if (!chosenScheme) return;
+    setIsSavingScheme(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/officers/farmers/${farmerId}/recommend-scheme`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scheme_id: chosenScheme.id,
+          scheme_name: chosenScheme.name,
+          scheme_type: chosenScheme.support_type?.toLowerCase().includes('loan') ? 'loan' : 'scheme',
+          notes: schemeRecommendNote
+        })
+      });
+      if (res.ok) {
+        toast.success('Scheme Recommended!', `${chosenScheme.name} recommended to farmer.`);
+        const updated = await fetch(`${API_BASE}/api/v1/officers/farmers/${farmerId}/recommended-schemes`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (updated.ok) setFarmerRecommendedSchemes(await updated.json());
+        setSelectedSchemeId(null);
+        setSchemeRecommendNote('');
+      } else {
+        toast.error('Failed', 'Could not save scheme recommendation.');
+      }
+    } catch {
+      toast.error('Error', 'Connection failed.');
+    } finally {
+      setIsSavingScheme(false);
+    }
+  };
+
+  const handleSaveIntervention = async (farmerId: number) => {
+    if (!token) return;
+    setIsSavingIntervention(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/officers/farmers/${farmerId}/intervention`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status: interventionStatusInput,
+          notes: interventionNotesInput
+        })
+      });
+      if (res.ok) {
+        toast.success('Updated!', 'Officer action & intervention status updated successfully.');
+        fetchOfficerDashboardData();
+        setIsFarmerDetailOpen(false);
+      } else {
+        toast.error('Failed', 'Could not save intervention status.');
+      }
+    } catch (e) {
+      toast.error('Error', 'Connection failed while updating intervention.');
+    } finally {
+      setIsSavingIntervention(false);
+    }
+  };
+
   // Login
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loginPhone && loginPassword) {
+      const endpoint = authRoleToggle === 'officer' 
+        ? `${API_BASE}/api/v1/auth/officer/login`
+        : `${API_BASE}/api/v1/auth/login`;
+
       try {
-        const res = await fetch('http://localhost:8000/api/v1/auth/login', {
+        const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
@@ -684,6 +1056,8 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         });
         if (res.ok) {
           const data = await res.json();
+          setUserRole(authRoleToggle);
+          localStorage.setItem('krishi_auth_role', authRoleToggle);
           setToken(data.access_token);
         } else {
           const errorData = await res.json();
@@ -699,9 +1073,58 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   // Register
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (authRoleToggle === 'officer') {
+      if (!officerRegName || !officerRegPhone || !officerRegPassword || !officerRegDesignation || !officerRegDistrict) {
+        toast.warning('Incomplete', 'Please fill all required Agro Officer fields.');
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/auth/officer/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: officerRegName,
+            phone: officerRegPhone,
+            email: officerRegEmail,
+            password: officerRegPassword,
+            designation: officerRegDesignation,
+            state: officerRegState,
+            district: officerRegDistrict,
+            municipality: officerRegMunicipality,
+            ward: officerRegWard
+          })
+        });
+        if (res.ok) {
+          const loginRes = await fetch(`${API_BASE}/api/v1/auth/officer/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              username: officerRegPhone,
+              password: officerRegPassword
+            })
+          });
+          if (loginRes.ok) {
+            const loginData = await loginRes.json();
+            setUserRole('officer');
+            localStorage.setItem('krishi_auth_role', 'officer');
+            setToken(loginData.access_token);
+          } else {
+            toast.warning('Registered!', 'Auto-login failed. Please log in manually.');
+          }
+        } else {
+          const errorData = await res.json();
+          toast.error('Registration failed', errorData.detail || 'Could not create Agro Officer account.');
+        }
+      } catch (err) {
+        console.error(err);
+        toast.error('Connection error', 'Cannot reach server during Agro Officer registration.');
+      }
+      return;
+    }
+
     if (regName && regPhone && regPassword) {
       try {
-        const res = await fetch('http://localhost:8000/api/v1/auth/register', {
+        const res = await fetch(`${API_BASE}/api/v1/auth/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -714,7 +1137,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         if (res.ok) {
           await res.json();
           // Auto-login after registration
-          const loginRes = await fetch('http://localhost:8000/api/v1/auth/login', {
+          const loginRes = await fetch(`${API_BASE}/api/v1/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
@@ -724,10 +1147,10 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           });
           if (loginRes.ok) {
             const loginData = await loginRes.json();
+            setUserRole('farmer');
+            localStorage.setItem('krishi_auth_role', 'farmer');
             setToken(loginData.access_token);
           } else {
-            // If auto-login fails, still set token from registration response if it includes token
-            // But our registration endpoint doesn't return token, so we rely on the login call above
             toast.warning('Registered!', 'Auto-login failed. Please log in manually.');
           }
         } else {
@@ -745,7 +1168,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   const handleVoicePlayback = async () => {
     if (isVoicePlaying) { stopSpeech(); setIsVoicePlaying(false); return; }
     setIsVoicePlaying(true);
-    const text = buildVoiceText({ activeTab, advisories, distressData, mandiPrices, schemes, selectedCrop, language });
+    const text = buildVoiceText({ activeTab, advisories, distressData, mandiPrices, schemes, selectedCrop, language, weatherData: weather, farms, allCrops, cashFlow });
     try {
       await speakText(text, language, (err) => { setIsVoicePlaying(false); toast.error('Voice error', err); });
       const checkDone = setInterval(() => {
@@ -797,9 +1220,8 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         setVoiceAnswerText(answer);
         setVoiceState('speaking');
 
-        const { translateText } = await import('./translate');
-        const translated = await translateText(answer, language);
-        await speakText(translated, language);
+        // Gemini already replies in the target language — speak directly, no double-translate
+        await speakText(answer, language);
 
         // Auto-reset after speech ends
         const check = setInterval(() => {
@@ -870,18 +1292,6 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     return () => { cancelled = true; };
   }, [alerts, language]);
 
-  // Community risk map: fetch when tab becomes active
-  useEffect(() => {
-    if (activeTab !== 'community' || !token) return;
-    setCommunityLoading(true);
-    fetch(`${API_BASE}/api/v1/community/district-risk`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then(r => r.ok ? r.json() : [])
-      .then(d => { setCommunityData(d); setCommunityLoading(false); })
-      .catch(() => setCommunityLoading(false));
-  }, [activeTab, token]);
-
   // PWA: online/offline detection
   useEffect(() => {
     const goOnline  = () => { setIsOnline(true);  setLastSyncTime(new Date().toLocaleTimeString('en-IN')); };
@@ -929,50 +1339,61 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
       case 'home':
         return (
           <div className="space-y-6">
-            {/* Header Greeting */}
-            <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                <h2 className="text-2xl font-bold font-sans my-0">{t.homeGreeting}, {farmer?.name}!</h2>
-                <p className="text-slate-500 font-sans text-sm mt-1 mb-0">Farm Location: {farmer?.location_id || 'Not Set'}</p>
+            {/* 1. Today's Farm Summary Row (TOP OF HOMEPAGE) */}
+            <div className="bg-gradient-to-r from-earth-50 via-white to-earth-50 p-5 rounded-2xl border border-earth-200 shadow-sm text-left">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-earth-100 pb-3 mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">🌟</span>
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 text-base sm:text-lg my-0"><T lang={language}>Today's Farm Summary</T></h3>
+                    <p className="text-slate-500 text-xs my-0"><T lang={language}>Daily executive snapshot for your farms</T></p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                    distressData?.score >= 50 ? 'bg-high-light text-high-dark border-high/20' :
+                    distressData?.score >= 30 ? 'bg-watch-light text-watch-dark border-watch/20' :
+                    'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  }`}>
+                    {distressData?.score >= 50 ? <T lang={language}>🔴 High Risk</T> : distressData?.score >= 30 ? <T lang={language}>🟡 Moderate Watch</T> : <T lang={language}>🟢 Healthy & Stable</T>}
+                  </span>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-sky-50 text-sky-800 border border-sky-200">
+                    ⛅ <T lang={language}>Weather Ready</T>
+                  </span>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                    💰 <T lang={language}>Mandi Price</T>: ₹{mandiPrices[0]?.modal_price || '2,290'}/q
+                  </span>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-stable-light text-stable-dark border border-stable/20">
+                    ⚡ {advisories.filter(a => !completedAdvisoryIds.includes(a.id)).length} <T lang={language}>Actions Pending</T>
+                  </span>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2 items-center">
-                {/* Voice — read advisory */}
-                <button
-                  onClick={handleVoicePlayback}
-                  title="Read today's advisory aloud"
-                  className={`text-xs px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all border ${isVoicePlaying ? 'bg-high text-white border-high animate-pulse' : 'bg-earth-50 text-earth-dark border-earth-200 hover:bg-stable hover:text-white hover:border-stable'}`}
-                >
-                  <span>🔊</span> {isVoicePlaying ? 'Stop' : 'Read Advisory'}
-                </button>
-                {/* Voice — ask Farm AI */}
-                <button
-                  onClick={handleInstantMic}
-                  title="Speak a farming question"
-                  className="text-xs px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all border bg-stable-light text-stable-dark border-stable/30 hover:bg-stable hover:text-white"
-                >
-                  <span>🎙</span> Ask Gemini
-                </button>
-                {/* Weather refresh */}
-                <button
-                  onClick={() => refreshWeatherFromApi()}
-                  disabled={loadingWeather}
-                  className="bg-slate-100 text-slate-600 hover:bg-stable hover:text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-50"
-                >
-                  <span className={`h-2.5 w-2.5 rounded-full bg-stable ${loadingWeather ? 'animate-ping' : ''}`}></span>
-                  {loadingWeather ? 'Syncing...' : 'Refresh Weather'}
-                </button>
-              </div>
+
+              <p className="text-slate-800 text-sm font-medium leading-relaxed my-0">
+                {(() => {
+                  const activeCount = advisories.filter(a => !completedAdvisoryIds.includes(a.id)).length;
+                  const weatherText = (weather?.observation?.rainfall ?? 0) > 10 ? "heavy rain expected today" : "weather is clear for fieldwork";
+                  const riskText = distressData?.score >= 50 ? "some risk factors require attention" : "your farms are in healthy condition overall";
+                  const mandiNote = mandiPrices.length > 0 ? `Mandi rate for ${selectedCrop ? selectedCrop.crop_type : 'crop'} is ₹${mandiPrices[0].modal_price}/q.` : "Mandi prices are stable today.";
+                  
+                  const summaryStr = activeCount === 0
+                    ? `🎉 All tasks completed for today! ${capitalize(riskText)}, and ${weatherText}. ${mandiNote}`
+                    : `Overall, ${riskText}. ${capitalize(weatherText)}. ${mandiNote} You have ${activeCount} pending action item${activeCount > 1 ? 's' : ''} recommended for today below.`;
+
+                  return <T lang={language}>{summaryStr}</T>;
+                })()}
+              </p>
             </div>
 
-            {/* 3-Column Single Row Dashboard Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* 2. 2-Column Dashboard Grid (Weather Advisor & Farm Health Risk) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Card 1: Farm Weather Advisor */}
               <div className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm text-left hover:border-stable transition-colors flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <div className="text-sky-500 flex items-center gap-2">
                       <CloudRain size={24} />
-                      <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider my-0">Weather Advisor</h3>
+                      <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider my-0"><T lang={language}>Weather Advisor</T></h3>
                     </div>
                     <div className="flex items-center gap-1.5">
                       {farms.length > 1 && (
@@ -986,7 +1407,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                               fetchWeather(locId);
                             }
                           }}
-                          className="text-[11px] font-bold px-2 py-0.5 rounded-lg border border-earth-200 bg-earth-50 text-slate-700 focus:outline-none max-w-[120px] truncate"
+                          className="text-xs font-bold px-2 py-1 rounded-lg border border-earth-200 bg-earth-50 text-slate-700 focus:outline-none max-w-[120px] truncate"
                           title="Select farm for weather details"
                         >
                           {farms.map((f, i) => (
@@ -1007,9 +1428,9 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                     </div>
                   </div>
 
-                  <p className="text-slate-500 text-[11px] font-medium my-0 flex items-center gap-1">
-                    <MapPin size={12} className="text-amber-500" />
-                    <span className="font-semibold text-slate-700">
+                  <p className="text-slate-600 text-xs font-medium my-0 flex items-center gap-1">
+                    <MapPin size={13} className="text-amber-500" />
+                    <span className="font-semibold text-slate-800">
                       {selectedFarm?.name && selectedFarm.name !== selectedFarm?.district
                         ? selectedFarm.name
                         : (selectedFarm?.district || 'Main Farm')}
@@ -1023,18 +1444,42 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                     </span>
                   </p>
 
-                  <p className="text-slate-900 text-2xl font-extrabold mt-2 my-0">
-                    {weather?.observation?.temperature != null ? `${weather.observation.temperature.toFixed(1)}°C` : '27.0°C'}
-                  </p>
+                  <div className="flex items-baseline justify-between mt-2">
+                    <p className="text-slate-900 text-3xl font-black my-0">
+                      {weather?.observation?.temperature != null ? `${weather.observation.temperature.toFixed(1)}°C` : '27.0°C'}
+                    </p>
+                    <span className="text-xs font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-0.5 rounded-full">
+                      {(() => {
+                        const rain = weather?.observation?.rainfall ?? 0;
+                        const hum = weather?.observation?.humidity ?? 80;
+                        if (rain > 10) return <T lang={language}>Rainy</T>;
+                        if (hum > 78) return <T lang={language}>Warm & Moist</T>;
+                        return <T lang={language}>Clear & Sunny</T>;
+                      })()}
+                    </span>
+                  </div>
 
-                  <div className="flex items-center justify-between text-slate-500 text-[11px] font-semibold mt-2 pt-2 border-t border-slate-100">
-                    <span className="flex items-center gap-1"><CloudRain size={12} className="text-sky-500" /> {weather?.observation?.rainfall != null ? (weather.observation.rainfall > 0 ? `${weather.observation.rainfall.toFixed(1)}mm` : '0mm') : '5mm'}</span>
-                    <span className="flex items-center gap-1"><Droplets size={12} className="text-blue-500" /> {weather?.observation?.humidity != null ? `${weather.observation.humidity.toFixed(0)}%` : '82%'}</span>
-                    <span className="flex items-center gap-1"><Wind size={12} className="text-teal-500" /> {weather?.observation?.wind_speed != null ? `${weather.observation.wind_speed.toFixed(0)}km/h` : '14km/h'}</span>
+                  {/* Toggleable Raw Weather Metrics */}
+                  <div className="mt-2 pt-2 border-t border-slate-100">
+                    <button
+                      onClick={() => setShowRawWeatherMetrics(!showRawWeatherMetrics)}
+                      className="text-xs text-slate-500 hover:text-slate-800 font-semibold flex items-center justify-between w-full"
+                    >
+                      <span><T lang={language}>Weather Metrics</T></span>
+                      <ChevronDown size={14} className={`transition-transform ${showRawWeatherMetrics ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {showRawWeatherMetrics && (
+                      <div className="flex items-center justify-between text-slate-600 text-xs font-semibold mt-2 pt-1">
+                        <span className="flex items-center gap-1"><CloudRain size={12} className="text-sky-500" /> {weather?.observation?.rainfall != null ? (weather.observation.rainfall > 0 ? `${weather.observation.rainfall.toFixed(1)}mm` : '0mm') : '5mm'}</span>
+                        <span className="flex items-center gap-1"><Droplets size={12} className="text-blue-500" /> {weather?.observation?.humidity != null ? `${weather.observation.humidity.toFixed(0)}%` : '82%'}</span>
+                        <span className="flex items-center gap-1"><Wind size={12} className="text-teal-500" /> {weather?.observation?.wind_speed != null ? `${weather.observation.wind_speed.toFixed(0)}km/h` : '14km/h'}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Weather Action Pill */}
+                {/* Weather Action Guidance Pill */}
                 {(() => {
                   const rain = weather?.observation?.rainfall ?? 5.0;
                   const wind = weather?.observation?.wind_speed ?? 14.0;
@@ -1042,63 +1487,38 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
 
                   if (rain > 10 || (weather?.forecasts && weather.forecasts[0]?.rainfall_forecast > 15)) {
                     return (
-                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-red-100 text-red-800 border border-red-200 mt-3 block">
-                        🔴 Heavy Rain — Skip Chemical Spraying
+                      <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-red-100 text-red-800 border border-red-200 mt-3 block">
+                        🔴 <T lang={language}>Heavy Rain — Postpone Chemical Spraying</T>
                       </span>
                     );
                   } else if (wind > 15) {
                     return (
-                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 border border-amber-200 mt-3 block">
-                        🟠 High Wind — Postpone Foliar Spraying
+                      <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-amber-100 text-amber-800 border border-amber-200 mt-3 block">
+                        🟠 <T lang={language}>High Wind — Hold Spraying Fieldwork</T>
                       </span>
                     );
                   } else if (hum > 78) {
                     return (
-                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 border border-amber-200 mt-3 block">
-                        🟠 High Humidity — Inspect Fungal Disease Risk
+                      <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-amber-100 text-amber-800 border border-amber-200 mt-3 block">
+                        🟠 <T lang={language}>High Humidity — Inspect Fungal Disease Risk</T>
                       </span>
                     );
                   }
                   return (
-                    <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 mt-3 block">
-                      🟢 Optimal Weather — Good for Fieldwork
+                    <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200 mt-3 block">
+                      🟢 <T lang={language}>Good Weather — Optimal for Fieldwork</T>
                     </span>
                   );
                 })()}
               </div>
 
-              {/* Card 2: Mandi Pricing */}
-              <button 
-                onClick={() => setActiveTab('market')}
-                className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm hover:border-stable transition-colors text-left flex flex-col justify-between"
-              >
-                <div>
-                  <div className="text-elevated mb-1 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <ShoppingCart size={24} />
-                      <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wider my-0">{t.marketTitle}</h3>
-                    </div>
-                    <ChevronRight size={18} className="text-slate-400" />
-                  </div>
-                  <p className="text-slate-500 text-[11px] font-medium my-0">
-                    📍 {selectedCrop ? capitalize(selectedCrop.crop_type) : 'Tomato'} · Pimpalgaon Mandi
-                  </p>
-                  <p className="text-slate-900 text-2xl font-extrabold mt-2 my-0">
-                    ₹{mandiPrices.length > 0 ? mandiPrices[0].modal_price : '2,290'} <span className="text-xs font-normal text-slate-500">/q</span>
-                  </p>
-                </div>
-                <span className="text-high text-[10px] font-bold mt-3 inline-flex items-center gap-0.5">
-                  <TrendingDown size={12} /> Price Crash Alert (-22% drop)
-                </span>
-              </button>
-
-              {/* Card 3: Distress Risk */}
+              {/* Card 2: Distress Risk */}
               <div 
                 onClick={() => setActiveTab('risk-detail')}
                 className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-colors flex flex-col justify-between ${
-                  distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High'
+                  distressData?.score >= 50
                     ? 'bg-high-light border-high-dark/20 hover:bg-high-light/80'
-                    : distressData?.risk_level === 'Elevated'
+                    : distressData?.score >= 30
                     ? 'bg-watch-light border-watch-dark/20 hover:bg-watch-light/80'
                     : 'bg-stable-light border-stable-dark/20 hover:bg-stable-light/80'
                 }`}
@@ -1106,86 +1526,163 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <div className={`flex items-center gap-2 ${
-                      distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High' ? 'text-high' :
-                      distressData?.risk_level === 'Elevated' ? 'text-watch' : 'text-stable'
+                      distressData?.score >= 50 ? 'text-high' :
+                      distressData?.score >= 30 ? 'text-watch' : 'text-stable'
                     }`}>
                       <AlertTriangle size={24} />
-                      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600 my-0">{t.homeDistressCard}</h3>
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-700 my-0"><T lang={language}>Farm Health & Risk</T></h3>
                     </div>
                     <ChevronRight size={18} className="text-slate-400" />
                   </div>
-                  <p className="text-slate-500 text-[11px] font-medium my-0">
-                    5-Pillar Multi-Risk Intelligence
+                  <p className="font-bold text-slate-900 text-lg mt-1 my-0">
+                    {distressData?.score >= 50 ? <T lang={language}>🔴 Attention Needed</T> : distressData?.score >= 30 ? <T lang={language}>🟡 Moderate Watch</T> : <T lang={language}>🟢 Healthy & Stable</T>}
                   </p>
-                  <p className="text-slate-900 text-2xl font-extrabold mt-2 my-0">
-                    {distressData?.score ?? '38'} <span className="text-sm font-normal text-slate-500">/ 100</span>
+                  <p className="text-slate-600 text-xs mt-1 my-0 font-medium leading-snug">
+                    <T lang={language}>
+                      {distressData?.score >= 50
+                        ? 'Multiple stress factors detected. Review recommendations below.'
+                        : distressData?.score >= 30
+                        ? 'Market price fluctuations are currently the primary concern.'
+                        : 'All farm conditions, soil, and financial indicators are healthy.'
+                      }
+                    </T>
                   </p>
                 </div>
-                <span className={`text-white text-[9px] font-bold px-2 py-0.5 rounded-full mt-3 inline-block uppercase w-fit ${
-                  distressData?.risk_level === 'Critical' || distressData?.risk_level === 'High' ? 'bg-high' :
-                  distressData?.risk_level === 'Elevated' ? 'bg-watch' :
-                  distressData?.risk_level === 'Watch' ? 'bg-elevated' : 'bg-stable'
-                }`}>{distressData?.risk_level ?? 'Watch'}</span>
+                <span className="text-xs font-bold text-slate-700 mt-3 inline-flex items-center gap-1">
+                  <T lang={language}>View Financial Details</T> <ChevronRight size={13} />
+                </span>
               </div>
             </div>
 
-                {/* What should I do today section */}
-                <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-                    <h3 className="text-lg font-bold text-slate-900 my-0">{t.homeWhatToDo}</h3>
-                    <span className="text-xs font-semibold text-slate-500 bg-earth-50 px-2.5 py-1 rounded-full border border-earth-200">
-                      All Registered Farms ({farms.length})
-                    </span>
-                  </div>
-                  <div className="space-y-4">
-                    {advisories.length > 0 ? (
-                      (() => {
-                        const priorityOrderMap: Record<string, number> = { high: 1, medium: 2, low: 3 };
-                        const sortedList = [...(translatedAdvisories.length > 0 ? translatedAdvisories : advisories)].sort((a, b) => {
-                          const pA = priorityOrderMap[(a.priority || '').toLowerCase()] || 4;
-                          const pB = priorityOrderMap[(b.priority || '').toLowerCase()] || 4;
-                          return pA - pB;
-                        });
-
-                        return sortedList.map((adv) => {
-                          const farmObj = farms.find((f: any) => f.id === adv.farm_id);
-                          const cropObj = allCrops.find((c: any) => c.farm_id === adv.farm_id);
-                          const farmLabel = farmObj?.name || (farmObj?.district ? `${farmObj.district} Farm` : `Farm #${adv.farm_id}`);
-                          const cropLabel = cropObj ? `${capitalize(cropObj.crop_type)} (${cropObj.variety || 'Local'})` : null;
-
-                          return (
-                            <div key={adv.id} className="flex gap-4 items-start p-4 bg-earth-50/70 rounded-xl border border-earth-200 hover:border-stable/30 transition-all">
-                              <span className={`p-2.5 rounded-xl text-white shrink-0 mt-0.5 ${
-                                adv.priority === 'high' ? 'bg-high' : adv.priority === 'medium' ? 'bg-elevated' : 'bg-stable'
-                              }`}><AlertTriangle size={18} /></span>
-                              <div className="flex-1 text-left min-w-0">
-                                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                                  <span className="text-[10px] bg-stable/10 text-stable font-bold px-2 py-0.5 rounded-full border border-stable/20 flex items-center gap-1">
-                                    📍 {farmLabel}
-                                  </span>
-                                  {cropLabel && (
-                                    <span className="text-[10px] bg-amber-50 text-amber-800 font-bold px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
-                                      🌱 {cropLabel}
-                                    </span>
-                                  )}
-                                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase text-white ml-auto ${
-                                    adv.priority === 'high' ? 'bg-high' : adv.priority === 'medium' ? 'bg-elevated' : 'bg-stable'
-                                  }`}>
-                                    {adv.priority} Priority
-                                  </span>
-                                </div>
-                                <h4 className="font-semibold text-sm text-slate-900 leading-snug my-0">{adv.recommendation}</h4>
-                                <p className="text-slate-500 text-xs mt-1 my-0 leading-relaxed">{adv.reason}</p>
-                              </div>
-                            </div>
-                          );
-                        });
-                      })()
-                    ) : (
-                      <p className="text-slate-400 text-sm py-2">No alerts or advisories for today. Your crops are in optimal condition!</p>
-                    )}
-                  </div>
+            {/* What should I do today section */}
+            <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm text-left">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3 mb-4">
+                <div>
+                  <h3 className="text-xl font-extrabold text-slate-900 my-0">{t.homeWhatToDo}</h3>
+                  <p className="text-slate-500 text-xs mt-0.5 my-0">Check off actions as you complete them on your farm</p>
                 </div>
+                <div className="flex items-center gap-2">
+                  {completedAdvisoryIds.length > 0 && (
+                    <button
+                      onClick={() => setShowCompletedAdvisories(!showCompletedAdvisories)}
+                      className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                    >
+                      {showCompletedAdvisories ? 'Hide Completed' : `View Completed (${completedAdvisoryIds.length})`}
+                    </button>
+                  )}
+                  <span className="text-xs font-semibold text-slate-600 bg-earth-50 px-2.5 py-1 rounded-full border border-earth-200">
+                    All Farms ({farms.length})
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {advisories.length > 0 ? (
+                  (() => {
+                    const priorityOrderMap: Record<string, number> = { high: 1, medium: 2, low: 3 };
+                    const rawList = translatedAdvisories.length > 0 ? translatedAdvisories : advisories;
+                    const filteredList = showCompletedAdvisories 
+                      ? rawList 
+                      : rawList.filter(a => !completedAdvisoryIds.includes(a.id));
+
+                    const sortedList = [...filteredList].sort((a, b) => {
+                      const pA = priorityOrderMap[(a.priority || '').toLowerCase()] || 4;
+                      const pB = priorityOrderMap[(b.priority || '').toLowerCase()] || 4;
+                      return pA - pB;
+                    });
+
+                    if (sortedList.length === 0) {
+                      return (
+                        <div className="p-8 text-center bg-emerald-50/60 rounded-xl border border-emerald-200">
+                          <p className="text-3xl mb-2 my-0">🎉</p>
+                          <h4 className="font-bold text-emerald-900 text-base my-0">All Actions Completed!</h4>
+                          <p className="text-emerald-700 text-xs mt-1 my-0 font-medium">You have checked off all recommendations for today. Your crops are well managed!</p>
+                        </div>
+                      );
+                    }
+
+                    return sortedList.map((adv) => {
+                      const isDone = completedAdvisoryIds.includes(adv.id);
+                      const isExpanded = !!expandedAdvisoryIds[adv.id];
+                      const farmObj = farms.find((f: any) => f.id === adv.farm_id);
+                      const matchedCrop = adv.crop_name 
+                        ? allCrops.find((c: any) => c.farm_id === adv.farm_id && c.crop_type.toLowerCase() === adv.crop_name.toLowerCase())
+                        : allCrops.find((c: any) => c.farm_id === adv.farm_id);
+                      const farmLabel = farmObj?.name || (farmObj?.district ? `${farmObj.district} Farm` : `Farm #${adv.farm_id}`);
+                      const cropLabel = adv.crop_name 
+                        ? `${capitalize(adv.crop_name)}${matchedCrop?.variety ? ` (${matchedCrop.variety})` : ''}` 
+                        : (matchedCrop ? `${capitalize(matchedCrop.crop_type)} (${matchedCrop.variety || 'Local'})` : null);
+
+                      return (
+                        <div key={adv.id} className={`flex gap-3 items-start p-3.5 sm:p-4 rounded-2xl border transition-all ${
+                          isDone ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-earth-50/70 border-earth-200 hover:border-stable/40 hover:shadow-xs'
+                        }`}>
+                          {/* Left Column: Checkbox + Downward Chevron Arrow directly below it */}
+                          <div className="flex flex-col items-center shrink-0 gap-1 mt-0.5">
+                            <button
+                              onClick={() => toggleCompleteAdvisory(adv.id)}
+                              title={isDone ? "Mark as pending" : "Mark action as completed"}
+                              className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
+                                isDone ? 'text-emerald-600 bg-emerald-100' : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50'
+                              }`}
+                            >
+                              {isDone ? <CheckCircle2 size={22} /> : <Circle size={22} />}
+                            </button>
+
+                            {adv.reason && (
+                              <button
+                                onClick={() => toggleExpandAdvisory(adv.id)}
+                                className="p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors inline-flex items-center justify-center cursor-pointer"
+                                title="Toggle detailed explanation"
+                              >
+                                <ChevronDown size={18} className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Right Content Column */}
+                          <div className="flex-1 text-left min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className="text-xs bg-stable/10 text-stable-dark font-bold px-2.5 py-0.5 rounded-full border border-stable/20 flex items-center gap-1">
+                                📍 {farmLabel}
+                              </span>
+                              {cropLabel && (
+                                <span className="text-xs bg-amber-50 text-amber-800 font-bold px-2.5 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
+                                  🌱 {cropLabel}
+                                </span>
+                              )}
+                              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase text-white ml-auto ${
+                                adv.priority === 'high' ? 'bg-high' : adv.priority === 'medium' ? 'bg-elevated' : 'bg-stable'
+                              }`}>
+                                {adv.priority} Priority
+                              </span>
+                            </div>
+
+                            {/* Prominent Action Recommendation Heading */}
+                            <h4 className={`font-extrabold text-base sm:text-lg leading-snug my-0 ${isDone ? 'line-through text-slate-500' : 'text-slate-900'}`}>
+                              {adv.recommendation}
+                            </h4>
+
+                            {/* Collapsible Reason Box */}
+                            {adv.reason && (
+                              <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-2' : 'grid-rows-[0fr] opacity-0'}`}>
+                                <div className="overflow-hidden">
+                                  <p className="text-slate-600 text-xs sm:text-sm p-3 bg-white rounded-xl border border-earth-200 leading-relaxed my-0">
+                                    {adv.reason}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()
+                ) : (
+                  <p className="text-slate-400 text-sm py-2 my-0">No alerts or advisories for today. Your crops are in optimal condition!</p>
+                )}
+              </div>
+            </div>
               </div>
             );
           case 'crop': {
@@ -1685,11 +2182,14 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               )}
             </div>
             {selectedCrop && (
-              <div className="text-xs bg-stable-light text-stable-dark font-semibold rounded-lg px-4 py-2 flex items-center gap-2">
-                <span className="capitalize">🌾 {selectedCrop.crop_type}</span>
-                <span className="text-slate-400">·</span>
-                <span>{selectedCrop.farm_name || `Farm ${selectedCrop.farm_id}`}</span>
-                {selectedCrop.stage && <><span className="text-slate-400">·</span><span>{selectedCrop.stage}</span></>}
+              <div className="text-xs bg-stable-light text-stable-dark font-semibold rounded-lg px-4 py-2 flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="capitalize">🌾 {selectedCrop.crop_type}</span>
+                  <span className="text-slate-400">·</span>
+                  <span>📍 Origin Farm: <strong>{selectedFarm?.name || `Farm #${selectedCrop.farm_id}`}</strong> ({selectedFarm?.district || 'Nashik'})</span>
+                  {selectedCrop.stage && <><span className="text-slate-400">·</span><span>{selectedCrop.stage}</span></>}
+                </div>
+                <span className="text-[10px] text-slate-500 font-normal">Distances calculated dynamically from farm GPS</span>
               </div>
             )}
 
@@ -1708,7 +2208,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {mandiPrices.length > 0 ? (
-                    mandiPrices.map((m, idx) => (
+                    (showAllMandis ? mandiPrices : mandiPrices.slice(0, 5)).map((m, idx) => (
                       <tr 
                         key={m.mandi_id || idx} 
                         className={idx === 0 ? "bg-stable-light font-semibold text-stable" : "bg-white text-slate-700"}
@@ -1733,6 +2233,18 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                 </tbody>
               </table>
             </div>
+
+            {/* View More Mandis Button */}
+            {mandiPrices.length > 5 && (
+              <div className="flex justify-center pt-1">
+                <button
+                  onClick={() => setShowAllMandis(!showAllMandis)}
+                  className="px-5 py-2.5 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 cursor-pointer shadow-2xs"
+                >
+                  {showAllMandis ? 'Show Top 5 Local Mandis' : `View More Mandis (+${mandiPrices.length - 5} More)`}
+                </button>
+              </div>
+            )}
 
             {mandiPrices.length > 0 && (
               <div className="bg-stable-light p-3.5 rounded-xl border border-stable-dark/10 text-xs text-stable-dark text-left">
@@ -1910,84 +2422,110 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
             </div>
           </div>
         );
+      // ── GOVERNMENT SUPPORT & FARMER ASSISTANCE PLATFORM ─────────────────────
       case 'support': {
-        const schemeTypeColors: Record<string, string> = {
-          'Insurance': 'bg-blue-50 text-blue-700 border-blue-200',
-          'Direct Income': 'bg-green-50 text-green-700 border-green-200',
-          'Credit': 'bg-purple-50 text-purple-700 border-purple-200',
-          'Market': 'bg-orange-50 text-orange-700 border-orange-200',
-          'Subsidy': 'bg-yellow-50 text-yellow-700 border-yellow-200',
-          'Price Support': 'bg-red-50 text-red-700 border-red-200',
-          'State': 'bg-indigo-50 text-indigo-700 border-indigo-200',
-          'Infrastructure': 'bg-teal-50 text-teal-700 border-teal-200',
-        };
-        const getSchemeColor = (supportType: string) => {
-          for (const key of Object.keys(schemeTypeColors)) {
-            if (supportType.includes(key)) return schemeTypeColors[key];
-          }
-          return 'bg-slate-50 text-slate-700 border-slate-200';
+        const currentFarm = selectedFarm || farms[0] || { name: 'Main Farm', district: 'Nashik', state: 'Maharashtra', area: 1.0, soil_type: 'loam', irrigation: 'drip' };
+
+        const activeSchemesSource = translatedSchemes.length > 0 ? translatedSchemes : schemes;
+
+        // Filter schemes vs loans dynamically
+        const governmentSchemes = activeSchemesSource.filter((s: any) => s.category !== 'loan');
+        const agriLoans = activeSchemesSource.filter((s: any) => s.category === 'loan');
+
+        const activeItems = supportSubTab === 'schemes' ? governmentSchemes : agriLoans;
+        const recommendedItems = activeItems.filter((s: any) => s.is_recommended);
+        const otherItems = activeItems.filter((s: any) => !s.is_recommended);
+
+        // Helper to format descriptions into concise main bullet points
+        const getBenefitBullets = (text: string) => {
+          if (!text) return [];
+          const sentences = text.split(/[.;]/).map(s => s.trim()).filter(s => s.length > 3);
+          if (sentences.length <= 1) return [text];
+          return sentences;
         };
 
-        const recommendedSchemes = schemes.filter((s: any) => s.is_recommended);
-        const otherSchemes = schemes.filter((s: any) => !s.is_recommended);
-
-        const SchemeCard = ({ scheme, highlight }: { scheme: any; highlight?: boolean }) => {
-          let description = '';
-          try {
-            const cond = JSON.parse(scheme.conditions || '{}');
-            description = cond.description || '';
-          } catch {}
+        const AssistanceCard = ({ item, isHighPriority }: { item: any; isHighPriority?: boolean }) => {
+          const rawDescription = item.benefit_summary || item.support_type;
+          const benefitBullets = getBenefitBullets(rawDescription);
 
           return (
-            <div className={`p-5 rounded-xl border flex flex-col justify-between transition-all hover:shadow-md
-              ${highlight
-                ? 'bg-gradient-to-br from-stable-light/60 to-white border-stable/30 shadow-sm'
-                : 'bg-white border-earth-200 shadow-xs hover:border-stable/30'
-              }`}>
-              <div>
-                <div className="flex items-start gap-2 mb-2 flex-wrap">
-                  {highlight && (
-                    <span className="text-[9px] bg-stable text-white font-bold px-2 py-0.5 rounded-full uppercase shrink-0 mt-0.5 flex items-center gap-0.5">
-                      ⭐ Recommended
+            <div className={`p-6 rounded-2xl border flex flex-col justify-between transition-all space-y-4 ${
+              isHighPriority
+                ? 'bg-gradient-to-br from-emerald-50/90 via-white to-earth-50/70 border-emerald-300 shadow-sm hover:shadow-md'
+                : 'bg-white border-earth-200 shadow-xs hover:border-stable/40'
+            }`}>
+              <div className="space-y-3">
+                {/* Header Badge Strip */}
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {isHighPriority && (
+                      <span className="text-xs font-black bg-slate-900 text-white px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
+                        ⭐ <T lang={language}>Top Match</T>
+                      </span>
+                    )}
+                    <span className="text-xs font-extrabold bg-earth-100 text-slate-800 px-3 py-1 rounded-full border border-earth-200 uppercase">
+                      {item.support_type}
                     </span>
-                  )}
-                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 mt-0.5 border ${getSchemeColor(scheme.support_type)}`}>
-                    {(scheme.support_type || '').split('(')[0].trim()}
-                  </span>
-                  {scheme.state !== 'All' && (
-                    <span className="text-[9px] bg-earth-100 text-earth-dark font-bold px-2 py-0.5 rounded-full uppercase shrink-0 mt-0.5">
-                      {scheme.state} Only
-                    </span>
-                  )}
-                </div>
-                <h3 className="font-bold text-slate-900 text-sm leading-snug my-0">{scheme.name}</h3>
-                {description && (
-                  <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">{description}</p>
-                )}
-                {/* Relevance score bar */}
-                {scheme.relevance_score > 0 && (
-                  <div className="mt-2">
-                    <div className="flex justify-between text-[9px] text-slate-400 mb-0.5">
-                      <span>Relevance</span>
-                      <span className="font-bold text-stable">{scheme.relevance_score}%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-1">
-                      <div
-                        className="bg-stable rounded-full h-1 transition-all"
-                        style={{ width: `${Math.min(scheme.relevance_score, 100)}%` }}
-                      />
-                    </div>
+                    {item.state && item.state !== 'All' && (
+                      <span className="text-xs font-extrabold bg-amber-100 text-amber-900 px-3 py-1 rounded-full border border-amber-300 uppercase">
+                        📍 {item.state} <T lang={language}>Only</T>
+                      </span>
+                    )}
+                    {creditAssessment && (item.category === 'loan' || supportSubTab === 'loans') && (
+                      <span className={`text-xs font-bold px-3 py-1 rounded-full border ${
+                        creditAssessment.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
+                        creditAssessment.status === 'MANUAL REVIEW' ? 'bg-amber-100 text-amber-900 border-amber-300' :
+                        'bg-red-100 text-red-900 border-red-300'
+                      }`}>
+                        💳 Credit: {creditAssessment.status} ({creditAssessment.credit_score}/900)
+                      </span>
+                    )}
                   </div>
-                )}
+                  <span className="text-xs md:text-sm font-black text-emerald-900 bg-emerald-100 px-3.5 py-1 rounded-full border border-emerald-300">
+                    {item.relevance_score > 0 ? `${item.relevance_score}% Match` : <T lang={language}>Eligible</T>}
+                  </span>
+                </div>
+
+                {/* Title */}
+                <h3 className="font-extrabold text-slate-900 text-lg md:text-xl my-0 leading-snug">
+                  {item.name}
+                </h3>
+
+                {/* Plain-Language Relevance Reason Box */}
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs md:text-sm space-y-1 text-left">
+                  <p className="text-slate-500 font-extrabold uppercase my-0 tracking-wider text-[11px]">💡 <T lang={language}>Why This Fits Your Farm Context</T></p>
+                  <p className="text-slate-900 font-semibold my-0 leading-relaxed">
+                    {item.why_recommended || item.why_fits || `Matched for ${currentFarm.name} in ${currentFarm.district || 'your region'} with active crops.`}
+                  </p>
+                </div>
+
+                {/* Main Points / Bullet Benefits Box */}
+                <div className="p-3.5 rounded-xl bg-emerald-50/80 border border-emerald-200 text-xs md:text-sm space-y-1.5 text-left">
+                  <p className="text-emerald-900 font-extrabold uppercase my-0 tracking-wider text-[11px]">💰 <T lang={language}>Key Benefit Highlights</T></p>
+                  <ul className="space-y-1 pl-0 my-0 list-none font-semibold text-emerald-950">
+                    {benefitBullets.map((bullet: string, bIdx: number) => (
+                      <li key={bIdx} className="flex items-start gap-1.5 leading-relaxed">
+                        <span className="text-emerald-600 font-black text-sm select-none">•</span>
+                        <span>{bullet}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center">
-                <span className="text-[9px] bg-stable-light text-stable font-bold px-2 py-0.5 rounded-full uppercase">
-                  {highlight ? '✓ Best Match' : 'Eligible'}
+
+              {/* Action Button & Verification Portal Link */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+                <span className="text-xs font-bold text-slate-500">
+                  <T lang={language}>Official Portal</T>
                 </span>
-                {scheme.verification_url && (
-                  <a href={scheme.verification_url} target="_blank" rel="noreferrer"
-                     className="text-xs font-semibold text-stable hover:text-stable-dark hover:underline transition-colors">
-                    Apply Portal →
+                {item.verification_url && (
+                  <a
+                    href={item.verification_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs md:text-sm font-extrabold hover:bg-slate-800 transition-colors flex items-center gap-1.5 shrink-0"
+                  >
+                    <T lang={language}>Apply on Official Portal</T> <ExternalLink size={15} />
                   </a>
                 )}
               </div>
@@ -1996,63 +2534,87 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         };
 
         return (
-          <div className="space-y-6">
-            {/* Header + Distress Banner */}
-            <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-4">
-              <div>
-                <h2 className="text-xl font-bold my-0">Government Support Schemes</h2>
-                <p className="text-slate-500 text-xs mt-1 mb-0">AI-ranked by relevance to your crops, location & distress level</p>
+          <div className="space-y-6 text-left pb-8">
+            {/* Sticky Sub-Tab Bar: Schemes vs Loans (Pinned flush at absolute top edge when scrolling) */}
+            <div className="sticky -top-4 md:-top-8 z-20 bg-earth-50/95 backdrop-blur-md pt-3 pb-3 border-b border-earth-200 shadow-xs -mx-4 md:-mx-8 px-4 md:px-8">
+              <div className="grid grid-cols-2 md:flex md:items-center gap-3">
+                <button
+                  onClick={() => setSupportSubTab('schemes')}
+                  className={`w-full md:w-auto px-5 py-3 rounded-xl text-xs md:text-sm font-extrabold transition-all flex items-center justify-center gap-2 ${
+                    supportSubTab === 'schemes'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-white text-slate-700 border border-earth-200 hover:bg-earth-50'
+                  }`}
+                >
+                  <span>🏛️ {t.supportSchemesTab}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-black ${
+                    supportSubTab === 'schemes' ? 'bg-white/20 text-white' : 'bg-earth-100 text-slate-800'
+                  }`}>
+                    {governmentSchemes.length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setSupportSubTab('loans')}
+                  className={`w-full md:w-auto px-5 py-3 rounded-xl text-xs md:text-sm font-extrabold transition-all flex items-center justify-center gap-2 ${
+                    supportSubTab === 'loans'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-white text-slate-700 border border-earth-200 hover:bg-earth-50'
+                  }`}
+                >
+                  <span>🏦 Agricultural Loans &amp; Credit</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-black ${
+                    supportSubTab === 'loans' ? 'bg-white/20 text-white' : 'bg-earth-100 text-slate-800'
+                  }`}>
+                    {agriLoans.length}
+                  </span>
+                </button>
               </div>
-              {distressData && (
-                <div className={`p-4 rounded-xl border text-sm flex gap-4 items-center ${
-                  distressData.risk_level === 'Critical' || distressData.risk_level === 'High' ? 'bg-high-light border-high-dark/20 text-high-dark' :
-                  distressData.risk_level === 'Elevated' ? 'bg-watch-light border-watch-dark/20 text-watch-dark' :
-                  'bg-stable-light border-stable-dark/20 text-stable-dark'
-                }`}>
-                  <div className="text-3xl font-extrabold font-mono">{distressData.score}</div>
-                  <div>
-                    <div className="font-bold text-sm">Distress Level: {distressData.risk_level}</div>
-                    <div className="text-[11px] opacity-80 mt-0.5">Score 0-100 · Based on weather, yield, market, financial & urgency signals</div>
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* Recommended Section */}
-            {recommendedSchemes.length > 0 && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-lg">⭐</span>
-                  <h3 className="text-base font-bold text-slate-900 my-0">Recommended for You</h3>
-                  <span className="text-[10px] bg-stable text-white font-bold px-2 py-0.5 rounded-full">{recommendedSchemes.length}</span>
+            {/* TOP RECOMMENDED SECTION */}
+            {recommendedItems.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">⭐</span>
+                  <h3 className="text-lg font-extrabold text-slate-900 my-0">
+                    Top Recommended {supportSubTab === 'schemes' ? 'Schemes' : 'Credit Options'} for Your Farm
+                  </h3>
+                  <span className="text-xs font-black bg-emerald-100 text-emerald-900 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                    {recommendedItems.length} Matched
+                  </span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {recommendedSchemes.map((scheme: any) => (
-                    <SchemeCard key={scheme.id} scheme={scheme} highlight={true} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {recommendedItems.map((item: any) => (
+                    <AssistanceCard key={item.id} item={item} isHighPriority={true} />
                   ))}
                 </div>
               </div>
             )}
 
-            {/* All Schemes Section */}
-            {otherSchemes.length > 0 && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-lg">📋</span>
-                  <h3 className="text-base font-bold text-slate-900 my-0">All Available Schemes</h3>
-                  <span className="text-[10px] bg-slate-200 text-slate-600 font-bold px-2 py-0.5 rounded-full">{otherSchemes.length}</span>
+            {/* OTHER ELIGIBLE SECTION */}
+            {otherItems.length > 0 && (
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">{supportSubTab === 'schemes' ? '📋' : '💳'}</span>
+                  <h3 className="text-lg font-extrabold text-slate-900 my-0">
+                    All Available {supportSubTab === 'schemes' ? 'Government Schemes' : 'Loan Programs'}
+                  </h3>
+                  <span className="text-xs font-black bg-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full">
+                    {otherItems.length}
+                  </span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {otherSchemes.map((scheme: any) => (
-                    <SchemeCard key={scheme.id} scheme={scheme} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {otherItems.map((item: any) => (
+                    <AssistanceCard key={item.id} item={item} isHighPriority={false} />
                   ))}
                 </div>
               </div>
             )}
 
-            {schemes.length === 0 && (
-              <div className="bg-white p-12 rounded-2xl border border-earth-200 text-center text-slate-400 text-sm">
-                Complete your farm profile to see matched schemes.
+            {activeItems.length === 0 && (
+              <div className="bg-white p-12 rounded-2xl border border-earth-200 text-center text-slate-500 font-semibold text-sm">
+                No {supportSubTab === 'schemes' ? 'schemes' : 'loans'} matched yet. Complete your farm profile to view eligible programs.
               </div>
             )}
           </div>
@@ -2397,123 +2959,147 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           </div>
         );
 
-      case 'community': {
-        // Phase 20: Community District Risk Map
-        // State + fetch are at top-level (communityData, communityLoading, useEffect)
 
-        const riskColor = (level: string) => {
-          switch (level) {
-            case 'Critical': return '#ef4444';
-            case 'High': return '#f97316';
-            case 'Elevated': return '#f59e0b';
-            case 'Watch': return '#facc15';
-            default: return '#22c55e';
+      // ── CROP ADVISOR TAB (formerly Yield Calculator) ─────────────────────────
+      case 'yield': {
+        // Globally limited to 5 primary crops
+        const CROP_DEFAULTS: Record<string, { baseYield: number; costPerAcre: number; msp: number; unit: string; bestSoil: string; waterReq: string; emoji: string }> = {
+          tomato: { baseYield: 120, costPerAcre: 18000, msp: 800,  unit: 'q/acre', bestSoil: 'loam', waterReq: 'Moderate', emoji: '🍅' },
+          onion:  { baseYield: 80,  costPerAcre: 16000, msp: 600,  unit: 'q/acre', bestSoil: 'loam', waterReq: 'Moderate', emoji: '🧅' },
+          wheat:  { baseYield: 20,  costPerAcre: 12000, msp: 2275, unit: 'q/acre', bestSoil: 'black', waterReq: 'Low-Moderate', emoji: '🌾' },
+          grapes: { baseYield: 90,  costPerAcre: 45000, msp: 3500, unit: 'q/acre', bestSoil: 'loam', waterReq: 'High-Precision', emoji: '🍇' },
+          rice:   { baseYield: 22,  costPerAcre: 14000, msp: 2183, unit: 'q/acre', bestSoil: 'clay', waterReq: 'High', emoji: '🌾' },
+        };
+
+        // Soil affinity matrix for 5 crops
+        const soilMatrix: Record<string, Record<string, number>> = {
+          tomato: { loam: 100, black: 90, clay: 75, sandy: 65, red: 75 },
+          onion:  { loam: 100, black: 85, clay: 65, sandy: 85, red: 75 },
+          wheat:  { black: 100, loam: 95, clay: 85, sandy: 60, red: 75 },
+          grapes: { loam: 100, black: 95, clay: 70, sandy: 75, red: 80 },
+          rice:   { clay: 100, loam: 80, black: 85, sandy: 40, red: 70 },
+        };
+
+        // Irrigation affinity matrix for 5 crops
+        const irrigMatrix: Record<string, Record<string, number>> = {
+          tomato: { drip: 98, sprinkler: 85, flood: 70, none: 50 },
+          onion:  { drip: 95, sprinkler: 90, flood: 75, none: 55 },
+          wheat:  { sprinkler: 98, drip: 90, flood: 85, none: 60 },
+          grapes: { drip: 100, sprinkler: 70, flood: 50, none: 40 },
+          rice:   { flood: 98, sprinkler: 75, drip: 80, none: 50 },
+        };
+
+        // Detailed crop-specific insights map
+        const cropInsights: Record<string, { irrigationTip: string; nutrientTip: string; protectionTip: string }> = {
+          tomato: {
+            irrigationTip: "Drip irrigation prevents soil splash and reduces fungal leaf spot infection by 40%.",
+            nutrientTip: "Apply Calcium Nitrate & Boron during flowering stage to prevent Blossom End Rot fruit cracking.",
+            protectionTip: "High humidity (>78%) promotes Early Blight; spray Copper Oxychloride if lower leaves turn spotty."
+          },
+          onion: {
+            irrigationTip: "Stop watering 15 days before harvesting to allow proper bulb hardening and prevent field rot.",
+            nutrientTip: "Apply Sulphur (20 kg/acre) along with Potash to increase bulb pungency, size, and storage life.",
+            protectionTip: "Watch for Purple Blotch during humid days. Keep drainage channels clear to prevent waterlogging."
+          },
+          wheat: {
+            irrigationTip: "Critical watering stage: Crown Root Initiation (21 days) and flowering stage boost grain fill.",
+            nutrientTip: "Split dose of Nitrogen: Top-dress Urea before 1st & 2nd irrigation for heavy, protein-rich grains.",
+            protectionTip: "Inspect field edges for Yellow/Brown Rust pustules during cool, misty morning weather."
+          },
+          grapes: {
+            irrigationTip: "Precision drip irrigation is mandatory. Regulate water strictly post-pruning to induce uniform buds.",
+            nutrientTip: "Apply Potassium Sulphate (SOP) and Phosphoric Acid during berry development to raise °Brix sugar.",
+            protectionTip: "High Downy Mildew risk in humid/rainy weather. Spray systemic fungicide prior to bloom."
+          },
+          rice: {
+            irrigationTip: "Maintain 2-5 cm standing water during active tillering; drain field 10 days before harvesting.",
+            nutrientTip: "Apply Zinc Sulphate (10 kg/acre) in clay soil to prevent Khaira leaf bronzing.",
+            protectionTip: "Warm, humid conditions favor Stem Borer and Blast. Check tillers for whiteheads or dead hearts."
           }
         };
 
-        return (
-          <div className="p-4 md:p-6 space-y-5">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900 my-0">🗺️ Community Risk Map</h2>
-                <p className="text-xs text-slate-500 mt-0.5">District-level farmer distress — anonymised aggregates</p>
-              </div>
-              <button
-                onClick={() => setActiveTab('home')}
-                className="text-xs text-slate-400 hover:text-slate-600 font-semibold"
-              >← Back</button>
-            </div>
+        // Current active farm context
+        const currentFarm = selectedFarm || farms[0] || { id: 1, name: 'Main Farm', district: 'Nashik', soil_type: 'loam', irrigation: 'drip', area: 1.0 };
+        const currentSoil = (yieldSoil || currentFarm.soil_type || 'loam').toLowerCase();
+        const currentIrrigation = (yieldIrrigation || currentFarm.irrigation || currentFarm.irrigation_type || 'drip').toLowerCase();
+        const currentArea = yieldArea > 0 ? yieldArea : (currentFarm.area || currentFarm.farm_area || 1.0);
+        
+        // Registered crop for this farm
+        const registeredCropObj = allCrops.find(c => c.farm_id === currentFarm.id) || allCrops[0];
+        const activeCropKey = CROP_DEFAULTS[(yieldCrop || registeredCropObj?.crop_type || 'tomato').toLowerCase()] ? (yieldCrop || registeredCropObj?.crop_type || 'tomato').toLowerCase() : 'tomato';
 
-            {communityLoading ? (
-              <div className="flex items-center justify-center h-48">
-                <div className="animate-spin w-8 h-8 border-4 border-stable border-t-transparent rounded-full" />
-              </div>
-            ) : communityData.length === 0 ? (
-              <div className="text-center py-12 text-slate-400">
-                <p className="text-4xl mb-3">🗺️</p>
-                <p className="font-semibold">No community data yet</p>
-                <p className="text-xs mt-1">More farmers need to join your district first</p>
-              </div>
-            ) : (
-              <>
-                <CommunityMap districts={communityData} />
+        // Dynamic Crop Suitability Evaluator (MCDA Model)
+        const evaluateCropSuitability = (cropKey: string) => {
+          const def = CROP_DEFAULTS[cropKey] || CROP_DEFAULTS.tomato;
+          const soilScore = soilMatrix[cropKey]?.[currentSoil] || 75;
+          const irrigScore = irrigMatrix[cropKey]?.[currentIrrigation] || 70;
+          
+          // Live weather score
+          const rain = weather?.observation?.rainfall ?? 0;
+          const hum = weather?.observation?.humidity ?? 80;
+          let weatherScore = 85;
+          if (cropKey === 'rice' && rain > 15) weatherScore = 98;
+          if (cropKey === 'grapes' && hum > 78) weatherScore = 65;
+          if (cropKey === 'wheat' && hum < 75) weatherScore = 92;
 
-                {/* Legend */}
-                <div className="flex flex-wrap gap-2">
-                  {[['Critical','#ef4444'],['High','#f97316'],['Elevated','#f59e0b'],['Stable','#22c55e']].map(([l,c]) => (
-                    <span key={l} className="flex items-center gap-1 text-xs font-semibold text-slate-600 bg-white border border-slate-100 rounded-full px-2 py-0.5 shadow-xs">
-                      <span style={{background:c}} className="w-2.5 h-2.5 rounded-full inline-block" />
-                      {l}
-                    </span>
-                  ))}
-                </div>
+          // Market score
+          const mandiPrice = mandiPrices.find(p => p.commodity?.toLowerCase().includes(cropKey.slice(0, 4)))?.modal_price || def.msp;
+          const marketScore = mandiPrice > def.msp * 1.15 ? 95 : mandiPrice >= def.msp ? 85 : 65;
 
-                {/* District cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {communityData.map((d: any, i: number) => (
-                    <div key={i} className="bg-white rounded-2xl border border-earth-100 shadow-xs p-4 flex items-center gap-4">
-                      <div
-                        className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold text-lg flex-shrink-0 shadow-sm"
-                        style={{ background: riskColor(d.risk_level) }}
-                      >
-                        {Math.round(d.avg_score)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-slate-900 text-sm truncate">{d.district}</p>
-                        <p className="text-xs text-slate-400">{d.state}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span
-                            className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white"
-                            style={{ background: riskColor(d.risk_level) }}
-                          >{d.risk_level}</span>
-                          <span className="text-[10px] text-slate-400">{d.farmer_count} farmer{d.farmer_count !== 1 ? 's' : ''}</span>
-                        </div>
-                      </div>
-                      {/* Mini score bar */}
-                      <div className="w-24 flex-shrink-0">
-                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{ width: `${Math.min(d.avg_score, 100)}%`, background: riskColor(d.risk_level) }}
-                          />
-                        </div>
-                        <p className="text-[10px] text-slate-400 mt-0.5 text-right">{d.avg_score}/100</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+          // Net profit per acre calculation
+          const yieldPerAcre = Math.round(def.baseYield * (irrigScore / 85) * (soilScore / 85));
+          const grossRev = yieldPerAcre * mandiPrice;
+          const netProfit = grossRev - def.costPerAcre;
 
-                <p className="text-[10px] text-slate-400 text-center">
-                  All data is anonymised. District scores are averages across all farmers in that district.
-                </p>
-              </>
-            )}
-          </div>
-        );
-      }
+          // Economic Score Index (normalized based on profit per acre)
+          const econScore = Math.min(98, Math.max(55, Math.round(50 + netProfit / 4000)));
 
+          // Balanced MCDA Weighted Score (35% Agronomic, 35% Economic, 15% Market, 15% Resource/Irrigation)
+          const totalMatch = Math.round(soilScore * 0.35 + econScore * 0.35 + marketScore * 0.15 + irrigScore * 0.15);
 
-      // ── YIELD CALCULATOR TAB ─────────────────────────────────────────────
-      case 'yield': {
-        const CROP_DEFAULTS: Record<string, { baseYield: number; costPerAcre: number; msp: number; unit: string }> = {
-          tomato:   { baseYield: 120, costPerAcre: 18000, msp: 800,  unit: 'q/acre' },
-          wheat:    { baseYield: 20,  costPerAcre: 12000, msp: 2275, unit: 'q/acre' },
-          rice:     { baseYield: 22,  costPerAcre: 14000, msp: 2183, unit: 'q/acre' },
-          onion:    { baseYield: 80,  costPerAcre: 16000, msp: 600,  unit: 'q/acre' },
-          potato:   { baseYield: 100, costPerAcre: 15000, msp: 500,  unit: 'q/acre' },
-          soybean:  { baseYield: 12,  costPerAcre: 8000,  msp: 4600, unit: 'q/acre' },
-          maize:    { baseYield: 25,  costPerAcre: 9000,  msp: 1870, unit: 'q/acre' },
-          cotton:   { baseYield: 10,  costPerAcre: 20000, msp: 6620, unit: 'q/acre' },
-          sugarcane:{ baseYield: 400, costPerAcre: 22000, msp: 315,  unit: 'q/acre' },
-          mustard:  { baseYield: 10,  costPerAcre: 7000,  msp: 5650, unit: 'q/acre' },
+          return {
+            cropKey,
+            totalMatch: Math.min(99, Math.max(55, totalMatch)),
+            soilScore,
+            econScore,
+            irrigScore,
+            weatherScore,
+            marketScore,
+            yieldPerAcre,
+            mandiPrice,
+            grossRev,
+            inputCost: def.costPerAcre,
+            netProfit,
+            def,
+            insights: cropInsights[cropKey] || cropInsights.tomato
+          };
         };
 
-        const irrigationMultiplier: Record<string, number> = { flood: 1.0, drip: 1.15, sprinkler: 1.10, none: 0.75 };
-        const soilMultiplier: Record<string, number> = { loam: 1.0, clay: 0.90, sandy: 0.80, black: 1.10, red: 0.85 };
+        const currentCropEval = evaluateCropSuitability(activeCropKey);
+
+        // Ranked 5 crops for recommendation
+        const rankedCrops = Object.keys(CROP_DEFAULTS)
+          .map(c => evaluateCropSuitability(c))
+          .sort((a, b) => b.totalMatch - a.totalMatch);
+
+        const top3Crops = rankedCrops.slice(0, 3);
 
         const calcYield = async () => {
           setYieldLoading(true);
+          const defaults = CROP_DEFAULTS[yieldCrop] || CROP_DEFAULTS.tomato;
+          const irrigMult = (irrigMatrix[yieldCrop]?.[yieldIrrigation] || 80) / 85;
+          const soilMult = (soilMatrix[yieldCrop]?.[yieldSoil] || 80) / 85;
+          const localQPerAcre = parseFloat((defaults.baseYield * irrigMult * soilMult).toFixed(1));
+          const localTotalQ = parseFloat((localQPerAcre * yieldArea).toFixed(1));
+          const pricePerQ = mandiPrices.find(p => p.commodity?.toLowerCase().includes(yieldCrop.slice(0,4)))?.modal_price || defaults.msp;
+          const localRevenue = Math.round(localTotalQ * pricePerQ);
+          const inputCost = Math.round(defaults.costPerAcre * yieldArea);
+          const localProfit = localRevenue - inputCost;
+          const localRoi = inputCost > 0 ? ((localProfit / inputCost) * 100).toFixed(1) : '0';
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 2000);
+
           try {
             const params = new URLSearchParams({
               crop_type: yieldCrop,
@@ -2524,13 +3110,12 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
             });
             const res = await fetch(`${API_BASE}/api/v1/yield/estimate?${params}`, {
               method: 'POST',
-              headers: { Authorization: `Bearer ${token}` }
+              headers: { Authorization: `Bearer ${token}` },
+              signal: controller.signal
             });
+            clearTimeout(timeoutId);
             if (res.ok) {
               const data = await res.json();
-              // Calculate input cost and profit
-              const defaults = CROP_DEFAULTS[yieldCrop] || CROP_DEFAULTS.tomato;
-              const inputCost = Math.round(defaults.costPerAcre * yieldArea);
               const profit = Math.round(data.projected_gross_revenue - inputCost);
               const roi = inputCost > 0 ? ((profit / inputCost) * 100).toFixed(1) : '0';
               setYieldResult({
@@ -2541,206 +3126,495 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                 inputCost,
                 profit,
                 roi,
-                defaults
+                defaults,
+                isML: true
               });
-              toast.success("Yield estimated", "Estimation calculated using ML Model.");
+              toast.success("Yield calculated", `Updated via ML model: ~${data.estimated_yield_q_per_acre} q/ac.`);
               setYieldLoading(false);
               return;
-            } else {
-              const err = await res.json();
-              toast.warning("Server calculation failed", err.detail || "Falling back to local simulation.");
             }
-          } catch (err) {
-            toast.warning("Offline / Server issue", "Using local offline model.");
+          } catch {
+            // Instant local calculation fallback
           }
 
-          // Fallback algorithm
-          const defaults = CROP_DEFAULTS[yieldCrop] || CROP_DEFAULTS.tomato;
-          const rainfallFactor = 1 + (yieldRainfall / 200);
-          const irrigMult = irrigationMultiplier[yieldIrrigation] || 1.0;
-          const soilMult = soilMultiplier[yieldSoil] || 1.0;
-          const qPerAcre = parseFloat((defaults.baseYield * irrigMult * soilMult * rainfallFactor).toFixed(1));
-          const totalQ = parseFloat((qPerAcre * yieldArea).toFixed(1));
-          const pricePerQ = mandiPrices.find(p => p.commodity?.toLowerCase().includes(yieldCrop.slice(0,4)))?.modal_price || defaults.msp;
-          const revenue = Math.round(totalQ * pricePerQ);
-          const inputCost = Math.round(defaults.costPerAcre * yieldArea);
-          const profit = revenue - inputCost;
-          const roi = inputCost > 0 ? ((profit / inputCost) * 100).toFixed(1) : '0';
-          setYieldResult({ qPerAcre, totalQ, pricePerQ, revenue, inputCost, profit, roi, defaults });
+          setYieldResult({
+            qPerAcre: localQPerAcre,
+            totalQ: localTotalQ,
+            pricePerQ,
+            revenue: localRevenue,
+            inputCost,
+            profit: localProfit,
+            roi: localRoi,
+            defaults,
+            isML: false
+          });
+          toast.success("Yield calculated", `Updated estimate: ~${localQPerAcre} q/ac.`);
           setYieldLoading(false);
         };
 
         return (
-          <div className="space-y-5 pb-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900 my-0 flex items-center gap-2"><Calculator size={22} className="text-stable" /> Yield Calculator</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Estimate harvest, revenue &amp; profit for any crop × farm combination</p>
-              </div>
-            </div>
-
-            {/* Input Form */}
-            <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
-              <h3 className="font-bold text-slate-800 text-sm mb-4 uppercase tracking-wider">Crop &amp; Field Parameters</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Crop</label>
-                  <select value={yieldCrop} onChange={e => setYieldCrop(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-earth-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40">
-                    {Object.keys(CROP_DEFAULTS).map(c => <option key={c} value={c}>{translateCrop(language, c)}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Area (Acres)</label>
-                  <input type="number" min={0.1} step={0.1} value={yieldArea} onChange={e => setYieldArea(parseFloat(e.target.value)||1)}
-                    className="w-full px-3 py-2 rounded-xl border border-earth-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Soil Type</label>
-                  <select value={yieldSoil} onChange={e => setYieldSoil(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-earth-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40">
-                    <option value="loam">{translateSoil(language, 'loam')} (Best)</option>
-                    <option value="black">{translateSoil(language, 'black')}</option>
-                    <option value="clay">{translateSoil(language, 'clay')}</option>
-                    <option value="sandy">{translateSoil(language, 'sandy')}</option>
-                    <option value="red">{translateSoil(language, 'red')}</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Irrigation</label>
-                  <select value={yieldIrrigation} onChange={e => setYieldIrrigation(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-earth-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40">
-                    {['drip', 'sprinkler', 'flood', 'none'].map(ir => (
-                      <option key={ir} value={ir}>{translateIrrigation(language, ir)}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Rainfall Deviation (mm)</label>
-                  <input type="number" step={10} value={yieldRainfall} onChange={e => setYieldRainfall(parseFloat(e.target.value)||0)}
-                    placeholder="+50 above avg / -30 below"
-                    className="w-full px-3 py-2 rounded-xl border border-earth-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40" />
-                  <p className="text-[10px] text-slate-400 mt-1">Positive = surplus rain, Negative = deficit</p>
-                </div>
-                <div className="flex items-end">
-                  <button onClick={calcYield}
-                    className="w-full px-4 py-2.5 bg-stable text-white rounded-xl font-bold text-sm hover:bg-stable-dark transition-colors flex items-center justify-center gap-2">
-                    <Calculator size={16} /> Calculate
+          <div className="space-y-6 pb-8 text-left">
+            {/* Sub-Tab Navigation Header (Sticky Flush at absolute top edge on Scroll) */}
+            <div className="sticky -top-4 md:-top-8 z-20 bg-earth-50/95 backdrop-blur-md pt-3 pb-3 border-b border-earth-200 shadow-xs -mx-4 md:-mx-8 px-4 md:px-8">
+              <div className="grid grid-cols-2 md:flex md:items-center gap-2">
+                {[
+                  { id: 'overview', label: 'Executive Overview', icon: '📋' },
+                  { id: 'recommendation', label: 'Crop Recommendation', icon: '💡' },
+                  { id: 'water', label: 'Water & Soil Optimizer', icon: '💧' },
+                  { id: 'simulator', label: 'Yield & Profit Simulator', icon: '📊' },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setAdvisorSubTab(tab.id as any)}
+                    className={`w-full md:w-auto px-3.5 sm:px-5 py-2.5 rounded-xl text-xs md:text-sm font-extrabold transition-all text-center justify-center flex items-center gap-1.5 ${
+                      advisorSubTab === tab.id
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-white text-slate-700 border border-earth-200 hover:bg-earth-50'
+                    }`}
+                  >
+                    <span>{tab.icon}</span>
+                    <T lang={language}>{tab.label}</T>
                   </button>
-                </div>
+                ))}
               </div>
             </div>
 
-            {/* Results */}
-            {yieldResult && (
-              <>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {[
-                    { label: 'Yield per Acre', value: `${yieldResult.qPerAcre} q`, icon: '🌾', color: 'text-stable' },
-                    { label: 'Total Harvest', value: `${yieldResult.totalQ} q`, icon: '📦', color: 'text-slate-800' },
-                    { label: t.marketTitle, value: `₹${Number(yieldResult.pricePerQ).toLocaleString('en-IN')}/q`, icon: '📊', color: 'text-elevated' },
-                    { label: 'Est. Revenue', value: `₹${Number(yieldResult.revenue).toLocaleString('en-IN')}`, icon: '💰', color: 'text-watch' },
-                  ].map(item => (
-                    <div key={item.label} className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm text-center">
-                      <p className="text-2xl mb-1">{item.icon}</p>
-                      <p className="text-xs text-slate-400 uppercase font-bold">{item.label}</p>
-                      <p className={`text-lg font-extrabold mt-0.5 ${item.color}`}>{item.value}</p>
+            {/* SUB-TAB 1: EXECUTIVE OVERVIEW */}
+            {advisorSubTab === 'overview' && (
+              <div className="space-y-6">
+                {/* Dynamic Executive Decision Summary Banner */}
+                <div className="bg-gradient-to-r from-stable-light via-white to-earth-50 p-6 rounded-2xl border border-stable/30 shadow-sm space-y-4">
+                  {/* Compact Farm & Crop Selector Strip */}
+                  <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-stable/20">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {/* Farm Selector */}
+                      {farms.length > 0 && (
+                        <div className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-xl border border-earth-200 shadow-xs">
+                          <MapPin size={16} className="text-amber-500 shrink-0" />
+                          <span className="text-xs font-bold text-slate-500 uppercase">Farm:</span>
+                          <select
+                            value={currentFarm.id}
+                            onChange={(e) => {
+                              const f = farms.find(farm => farm.id === parseInt(e.target.value));
+                              if (f) {
+                                setSelectedFarm(f);
+                                setYieldSoil(f.soil_type || 'loam');
+                                setYieldIrrigation(f.irrigation || f.irrigation_type || 'drip');
+                                setYieldArea(f.area || f.farm_area || 1.0);
+                                const farmCrop = allCrops.find(c => c.farm_id === f.id)?.crop_type;
+                                if (farmCrop && CROP_DEFAULTS[farmCrop.toLowerCase()]) {
+                                  setYieldCrop(farmCrop.toLowerCase());
+                                }
+                              }
+                            }}
+                            className="text-xs font-extrabold bg-transparent text-slate-900 focus:outline-none cursor-pointer"
+                          >
+                            {farms.map((f, i) => (
+                              <option key={f.id} value={f.id}>
+                                📍 {f.name || f.district || `Farm #${i+1}`} ({f.area || f.farm_area || 1} ac)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Crop Selector */}
+                      <div className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-xl border border-earth-200 shadow-xs">
+                        <Sprout size={16} className="text-stable shrink-0" />
+                        <span className="text-xs font-bold text-slate-500 uppercase">Crop:</span>
+                        <select
+                          value={activeCropKey}
+                          onChange={(e) => setYieldCrop(e.target.value)}
+                          className="text-xs font-extrabold bg-transparent text-slate-900 focus:outline-none cursor-pointer capitalize"
+                        >
+                          {Object.entries(CROP_DEFAULTS).map(([key, def]) => (
+                            <option key={key} value={key}>
+                              {def.emoji} {capitalize(translateCrop(language, key))}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                  ))}
+
+                    <span className={`text-xs md:text-sm font-extrabold px-3.5 py-1 rounded-full border ${
+                      currentCropEval.totalMatch >= 85 ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
+                      currentCropEval.totalMatch >= 70 ? 'bg-amber-100 text-amber-900 border-amber-300' :
+                      'bg-red-100 text-red-900 border-red-300'
+                    }`}>
+                      {currentCropEval.totalMatch}% {currentCropEval.totalMatch >= 85 ? 'Excellent Match' : 'Moderate Match'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-3xl">{currentCropEval.def.emoji}</span>
+                    <h3 className="font-extrabold text-slate-900 text-lg md:text-xl my-0">
+                      {capitalize(translateCrop(language, activeCropKey))} <T lang={language}>Suitability & Farm Summary</T>
+                    </h3>
+                  </div>
+
+                  <p className="text-slate-900 text-base md:text-lg font-medium leading-relaxed my-0">
+                    <T lang={language}>{`For ${currentFarm.name || currentFarm.district || 'Main Farm'} (${translateSoil(language, currentSoil)} Soil, ${translateIrrigation(language, currentIrrigation)} Irrigation), growing ${translateCrop(language, activeCropKey)} yields ~${currentCropEval.yieldPerAcre} q/acre with expected net profit of ₹${formatInteger(currentCropEval.netProfit * currentArea, language)} across ${currentArea} acres. Mandi price: ₹${currentCropEval.mandiPrice}/q.`}</T>
+                  </p>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-4">
-                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-sm">Profit &amp; Loss Breakdown</h3>
-                  <div className="space-y-2">
-                    {[
-                      { label: 'Gross Revenue', value: yieldResult.revenue, positive: true },
-                      { label: `Input Costs (seed, fert, labour — ₹${Number(yieldResult.defaults.costPerAcre).toLocaleString('en-IN')}/acre)`, value: -yieldResult.inputCost, positive: false },
-                      { label: 'Net Profit', value: yieldResult.profit, positive: yieldResult.profit >= 0, bold: true },
-                    ].map(row => (
-                      <div key={row.label} className={`flex justify-between items-center py-2 ${row.bold ? 'border-t-2 border-slate-100 pt-3 mt-1' : ''}`}>
-                        <span className={`text-sm ${row.bold ? 'font-extrabold text-slate-900' : 'font-medium text-slate-600'}`}>{row.label}</span>
-                        <span className={`text-sm font-bold ${row.positive ? 'text-stable' : 'text-high'} ${row.bold ? 'text-base' : ''}`}>
-                          {row.value >= 0 ? '' : '−'} ₹{Math.abs(row.value).toLocaleString('en-IN')}
+                {/* Side-by-side Grid: Compatibility (Left) & Field Action Plan (Right) */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Suitability Gauge & 4 Key Factor Chips */}
+                  <div className="bg-white p-6 md:p-7 rounded-2xl border border-earth-200 shadow-sm space-y-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+                        <h3 className="text-base md:text-lg font-extrabold text-slate-900 my-0"><T lang={language}>Crop Compatibility</T> ({capitalize(translateCrop(language, activeCropKey))})</h3>
+                        <span className="text-xs font-black text-emerald-900 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-300">
+                          {currentCropEval.totalMatch}% <T lang={language}>Match</T>
                         </span>
                       </div>
-                    ))}
-                  </div>
-                  <div className={`flex items-center gap-2 p-3 rounded-xl text-sm font-bold ${yieldResult.profit >= 0 ? 'bg-stable-light text-stable-dark' : 'bg-high-light text-high-dark'}`}>
-                    {yieldResult.profit >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
-                    ROI: {yieldResult.roi}% — {yieldResult.profit >= 0
-                      ? `Good margin. For every ₹1 invested, you earn ₹${(1 + yieldResult.profit/yieldResult.inputCost).toFixed(2)}.`
-                      : 'Loss-making at current prices. Consider reducing input costs or switching variety.'}
-                  </div>
 
-                  {/* Fill with my registered farms */}
-                  {farms.length > 0 && (
-                    <div>
-                      <p className="text-xs text-slate-400 font-bold uppercase mb-2">Quick fill from my farms</p>
-                      <div className="flex flex-wrap gap-2">
-                        {farms.map((f: any, i: number) => (
-                          <button key={f.id} onClick={() => { setYieldArea(f.area); setYieldSoil(f.soil_type); setYieldIrrigation(f.irrigation_type || 'drip'); }}
-                            className="px-3 py-1.5 text-xs border border-earth-200 rounded-lg hover:bg-earth-50 font-semibold">
-                            Farm #{i+1} ({f.area}ac, {f.soil_type})
-                          </button>
-                        ))}
+                      {/* Progress Gauge */}
+                      <div className="w-full bg-slate-100 h-3.5 rounded-full overflow-hidden border border-slate-200 mb-4">
+                        <div 
+                          className="bg-gradient-to-r from-stable via-emerald-500 to-emerald-600 h-full rounded-full transition-all duration-500"
+                          style={{ width: `${currentCropEval.totalMatch}%` }}
+                        />
                       </div>
                     </div>
-                  )}
-                </div>
 
-                {/* Crop comparison table */}
-                <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
-                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-sm mb-3">Compare All Crops at {yieldArea} Acres</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="text-slate-400 font-bold uppercase text-[10px]">
-                          <th className="text-left py-1.5">Crop</th>
-                          <th className="text-right py-1.5">Est. Yield (q)</th>
-                          <th className="text-right py-1.5">Revenue</th>
-                          <th className="text-right py-1.5">Input Cost</th>
-                          <th className="text-right py-1.5">Net Profit</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50">
-                        {Object.entries(CROP_DEFAULTS).map(([crop, def]) => {
-                          const iMult = irrigationMultiplier[yieldIrrigation] || 1.0;
-                          const sMult = soilMultiplier[yieldSoil] || 1.0;
-                          const rfFactor = 1 + (yieldRainfall / 200);
-                          const qty = parseFloat((def.baseYield * iMult * sMult * rfFactor * yieldArea).toFixed(1));
-                          const rev = Math.round(qty * def.msp);
-                          const cost = Math.round(def.costPerAcre * yieldArea);
-                          const net = rev - cost;
-                          return (
-                            <tr key={crop} className={`${crop === yieldCrop ? 'bg-stable/5 font-bold' : ''}`}>
-                              <td className="py-2 capitalize">{crop} {crop === yieldCrop ? '←' : ''}</td>
-                              <td className="text-right py-2">{qty}</td>
-                              <td className="text-right py-2">₹{rev.toLocaleString('en-IN')}</td>
-                              <td className="text-right py-2 text-slate-400">₹{cost.toLocaleString('en-IN')}</td>
-                              <td className={`text-right py-2 font-bold ${net >= 0 ? 'text-stable' : 'text-high'}`}>₹{net.toLocaleString('en-IN')}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                    {/* 4 Factor Chips Grid */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-earth-50 p-3.5 rounded-xl border border-earth-200 text-center">
+                        <p className="text-xs text-slate-500 font-bold uppercase my-0">🧪 <T lang={language}>Soil Fit</T></p>
+                        <p className="text-xl font-black text-slate-900 mt-1 my-0">{currentCropEval.soilScore}%</p>
+                        <p className="text-xs text-slate-600 font-bold my-0 capitalize">{translateSoil(language, currentSoil)}</p>
+                      </div>
+                      <div className="bg-earth-50 p-3.5 rounded-xl border border-earth-200 text-center">
+                        <p className="text-xs text-slate-500 font-bold uppercase my-0">💧 <T lang={language}>Irrigation System</T></p>
+                        <p className="text-xl font-black text-slate-900 mt-1 my-0">{currentCropEval.irrigScore}%</p>
+                        <p className="text-xs text-slate-600 font-bold my-0 capitalize">{translateIrrigation(language, currentIrrigation)}</p>
+                      </div>
+                      <div className="bg-earth-50 p-3.5 rounded-xl border border-earth-200 text-center">
+                        <p className="text-xs text-slate-500 font-bold uppercase my-0">⛅ <T lang={language}>Weather</T></p>
+                        <p className="text-xl font-black text-slate-900 mt-1 my-0">{currentCropEval.weatherScore}%</p>
+                        <p className="text-xs text-slate-600 font-bold my-0"><T lang={language}>Seasonal fit</T></p>
+                      </div>
+                      <div className="bg-earth-50 p-3.5 rounded-xl border border-earth-200 text-center">
+                        <p className="text-xs text-slate-500 font-bold uppercase my-0">💰 <T lang={language}>Market Price</T></p>
+                        <p className="text-xl font-black text-slate-900 mt-1 my-0">{currentCropEval.marketScore}%</p>
+                        <p className="text-xs text-slate-600 font-bold my-0">₹{currentCropEval.mandiPrice}/q</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Crop-Specific Action Plan */}
+                  <div className="bg-white p-6 md:p-7 rounded-2xl border border-earth-200 shadow-sm space-y-3">
+                    <div className="border-b border-slate-100 pb-2.5">
+                      <h3 className="text-base md:text-lg font-extrabold text-slate-900 my-0"><T lang={language}>Field Action Plan for</T> {capitalize(translateCrop(language, activeCropKey))}</h3>
+                      <p className="text-slate-600 text-xs mt-0.5 my-0 font-medium"><T lang={language}>Tailored field management guidance</T></p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="p-3.5 rounded-xl bg-earth-50/90 border border-earth-200 text-left flex items-start gap-3">
+                        <span className="text-2xl shrink-0 mt-0.5">💧</span>
+                        <div>
+                          <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider my-0"><T lang={language}>Irrigation Guidance</T></h4>
+                          <p className="text-slate-800 text-xs mt-1 my-0 leading-relaxed font-semibold">
+                            <T lang={language}>{currentCropEval.insights.irrigationTip}</T>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-earth-50/90 border border-earth-200 text-left flex items-start gap-3">
+                        <span className="text-2xl shrink-0 mt-0.5">🧪</span>
+                        <div>
+                          <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider my-0"><T lang={language}>Nutrient & Fertilizers</T></h4>
+                          <p className="text-slate-800 text-xs mt-1 my-0 leading-relaxed font-semibold">
+                            <T lang={language}>{currentCropEval.insights.nutrientTip}</T>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-earth-50/90 border border-earth-200 text-left flex items-start gap-3">
+                        <span className="text-2xl shrink-0 mt-0.5">🛡️</span>
+                        <div>
+                          <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider my-0"><T lang={language}>Pest & Disease Protection</T></h4>
+                          <p className="text-slate-800 text-xs mt-1 my-0 leading-relaxed font-semibold">
+                            <T lang={language}>{currentCropEval.insights.protectionTip}</T>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </>
+              </div>
+            )}
+
+            {/* SUB-TAB 2: CROP RECOMMENDATIONS */}
+            {advisorSubTab === 'recommendation' && (
+              <div className="bg-white p-6 md:p-8 rounded-2xl border border-earth-200 shadow-sm space-y-6">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                  <div>
+                    <h3 className="text-xl font-extrabold text-slate-900 my-0"><T lang={language}>What Crop Should I Grow Right Now?</T></h3>
+                    <p className="text-slate-600 text-sm mt-1 my-0 font-semibold"><T lang={language}>{`Top recommended crops evaluated for ${currentFarm.name} (${translateSoil(language, currentSoil)} Soil, ${translateIrrigation(language, currentIrrigation)} Irrigation)`}</T></p>
+                  </div>
+                  <span className="text-xs md:text-sm font-extrabold text-slate-700 bg-earth-100 px-3 py-1.5 rounded-full border border-earth-200">
+                    5 <T lang={language}>Crops Evaluated</T>
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  {top3Crops.map((item, idx) => {
+                    const medal = idx === 0 ? '🥇 Best Match' : idx === 1 ? '🥈 2nd Choice' : '🥉 3rd Choice';
+                    const isCurrent = item.cropKey === activeCropKey;
+                    const isExpanded = !!expandedAdvisoryIds[`rec_${item.cropKey}`];
+
+                    return (
+                      <div key={item.cropKey} className={`p-5 rounded-2xl border transition-all flex flex-col justify-between ${
+                        idx === 0 ? 'bg-emerald-50/60 border-emerald-300 shadow-xs' : 'bg-earth-50/60 border-earth-200'
+                      }`}>
+                        <div>
+                          <div className="flex items-center justify-between gap-1 mb-3">
+                            <span className="text-xs font-black uppercase px-2.5 py-1 rounded-full bg-slate-900 text-white">
+                              <T lang={language}>{medal}</T>
+                            </span>
+                            <span className="text-xs md:text-sm font-black text-emerald-900 bg-emerald-200 px-2.5 py-1 rounded-full">
+                              {item.totalMatch}% <T lang={language}>Match</T>
+                            </span>
+                          </div>
+
+                          <h4 className="font-black text-xl text-slate-900 capitalize my-0 flex items-center gap-2">
+                            {item.def.emoji} {capitalize(translateCrop(language, item.cropKey))}
+                            {isCurrent && <span className="text-xs font-bold px-2 py-0.5 bg-stable text-white rounded-md"><T lang={language}>Selected</T></span>}
+                          </h4>
+
+                          <div className="mt-4 space-y-2 text-sm text-slate-800 font-semibold">
+                            <div className="flex justify-between">
+                              <span className="text-slate-500"><T lang={language}>Expected Yield:</T></span>
+                              <span className="font-extrabold text-slate-900">{item.yieldPerAcre} q / acre</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500"><T lang={language}>Mandi Rate:</T></span>
+                              <span className="font-extrabold text-slate-900">₹{item.mandiPrice} / q</span>
+                            </div>
+                            <div className="flex justify-between border-t border-slate-200 pt-2 mt-2">
+                              <span className="text-slate-600 font-bold"><T lang={language}>Est. Profit / Acre:</T></span>
+                              <span className="font-black text-emerald-800 text-base">₹{formatInteger(item.netProfit, language)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Chevron toggle for "Why this crop?" (NO TEXT, JUST ICON) */}
+                        <div className="mt-4 pt-2 border-t border-slate-200/80">
+                          <button
+                            onClick={() => toggleExpandAdvisory(`rec_${item.cropKey}`)}
+                            className="p-1.5 rounded-full text-slate-400 hover:text-slate-800 hover:bg-slate-200/60 transition-colors inline-flex items-center justify-center"
+                            title="Toggle suitability breakdown"
+                          >
+                            <ChevronDown size={20} className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                          </button>
+
+                          <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-2' : 'grid-rows-[0fr] opacity-0'}`}>
+                            <div className="overflow-hidden">
+                              <div className="p-3.5 bg-white rounded-xl border border-earth-200 text-xs md:text-sm space-y-1.5 text-slate-700 font-semibold">
+                                <p className="my-0">💰 <strong><T lang={language}>Profit Return:</T></strong> {item.econScore}% (₹{formatInteger(item.netProfit, language)}/acre)</p>
+                                <p className="my-0">🧪 <strong><T lang={language}>Soil Fit:</T></strong> {item.soilScore}% on {translateSoil(language, currentSoil)}</p>
+                                <p className="my-0">💧 <strong><T lang={language}>Water Fit:</T></strong> {item.irrigScore}% with {translateIrrigation(language, currentIrrigation)}</p>
+                                <p className="my-0">📈 <strong><T lang={language}>Market Fit:</T></strong> Mandi score {item.marketScore}%</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* SUB-TAB 3: WATER & SOIL OPTIMIZER */}
+            {advisorSubTab === 'water' && (
+              <div className="space-y-6">
+                <div className="bg-white p-6 md:p-8 rounded-2xl border border-earth-200 shadow-sm space-y-5">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div>
+                      <h3 className="text-xl font-extrabold text-slate-900 my-0"><T lang={language}>Water & Irrigation Optimizer</T></h3>
+                      <p className="text-slate-600 text-sm mt-1 my-0 font-semibold"><T lang={language}>{`Comparison for ${translateSoil(language, currentSoil)} soil with ${translateCrop(language, activeCropKey)}`}</T></p>
+                    </div>
+                    <span className="text-xs md:text-sm font-extrabold text-slate-700 bg-earth-100 px-3 py-1.5 rounded-full border border-earth-200">
+                      <T lang={language}>Water Advisor</T>
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="p-5 rounded-2xl bg-emerald-50/80 border border-emerald-300 text-left">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-black uppercase px-3 py-1 rounded-full bg-emerald-200 text-emerald-900">
+                          <T lang={language}>Current:</T> {translateIrrigation(language, currentIrrigation)}
+                        </span>
+                        <span className="text-xs md:text-sm font-bold text-emerald-800">
+                          {currentIrrigation === 'drip' ? <T lang={language}>🟢 Optimal</T> : <T lang={language}>🟡 Action Recommended</T>}
+                        </span>
+                      </div>
+                      <p className="text-slate-900 text-base font-semibold my-0 leading-relaxed">
+                        <T lang={language}>{currentCropEval.insights.irrigationTip}</T>
+                      </p>
+                    </div>
+
+                    <div className="p-5 rounded-2xl bg-sky-50/80 border border-sky-300 text-left">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-black uppercase px-3 py-1 rounded-full bg-sky-200 text-sky-900">
+                          <T lang={language}>Recommended Best Practice</T>
+                        </span>
+                        <span className="text-xs md:text-sm font-extrabold text-sky-800">{translateIrrigation(language, 'drip')}</span>
+                      </div>
+                      <p className="text-slate-900 text-base font-semibold my-0 leading-relaxed">
+                        <T lang={language}>
+                          {currentIrrigation === 'drip'
+                            ? 'Keep current Drip Irrigation system active. Clean dripper nozzles bi-weekly.'
+                            : 'Switching from Flood to Drip saves ~35% water and boosts net return by ₹14,500/acre.'
+                          }
+                        </T>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 md:p-8 rounded-2xl border border-earth-200 shadow-sm space-y-4">
+                  <h3 className="text-lg font-extrabold text-slate-900 my-0"><T lang={language}>Soil & Nutrient Guidance</T> ({translateSoil(language, currentSoil)})</h3>
+                  <div className="p-5 rounded-2xl bg-earth-50 border border-earth-200">
+                    <p className="text-slate-900 text-base font-semibold leading-relaxed my-0">
+                      <T lang={language}>{currentCropEval.insights.nutrientTip}</T>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* SUB-TAB 4: YIELD & PROFIT SIMULATOR */}
+            {advisorSubTab === 'simulator' && (
+              <div className="bg-white p-6 md:p-8 rounded-2xl border border-earth-200 shadow-sm space-y-6">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
+                  <div>
+                    <h3 className="text-xl font-extrabold text-slate-900 my-0"><T lang={language}>Outcome Forecast & Parameter Simulator</T></h3>
+                    <p className="text-slate-600 text-sm mt-1 my-0 font-semibold"><T lang={language}>{`Expected yield, input costs, and projected net income for ${translateCrop(language, activeCropKey)}`}</T></p>
+                  </div>
+                  <span className={`text-xs md:text-sm font-extrabold px-3 py-1 rounded-full border ${
+                    yieldResult ? 'bg-emerald-100 text-emerald-900 border-emerald-300' : 'bg-earth-100 text-slate-700 border-earth-200'
+                  }`}>
+                    {yieldResult ? `✨ ML Model Calculated (+${yieldResult.roi}% ROI)` : <T lang={language}>📊 Live Estimate</T>}
+                  </span>
+                </div>
+
+                {/* Unified Single Stat Chips Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-earth-50 p-5 rounded-2xl border border-earth-200 text-center">
+                    <p className="text-3xl mb-1 my-0">{currentCropEval.def.emoji}</p>
+                    <p className="text-xs text-slate-500 font-bold uppercase my-0"><T lang={language}>Expected Yield</T></p>
+                    <p className="text-2xl md:text-3xl font-black text-slate-900 mt-1 my-0">
+                      {yieldResult ? yieldResult.qPerAcre : currentCropEval.yieldPerAcre} q/ac
+                    </p>
+                    <p className="text-xs text-slate-600 my-0 font-bold">
+                      <T lang={language}>Total:</T> {yieldResult ? yieldResult.totalQ : (currentCropEval.yieldPerAcre * currentArea).toFixed(1)} q
+                    </p>
+                  </div>
+
+                  <div className="bg-earth-50 p-5 rounded-2xl border border-earth-200 text-center">
+                    <p className="text-3xl mb-1 my-0">📊</p>
+                    <p className="text-xs text-slate-500 font-bold uppercase my-0"><T lang={language}>Mandi Price</T></p>
+                    <p className="text-2xl md:text-3xl font-black text-slate-900 mt-1 my-0">
+                      ₹{yieldResult ? yieldResult.pricePerQ : currentCropEval.mandiPrice}/q
+                    </p>
+                    <p className="text-xs text-slate-600 my-0 font-bold">Pimpalgaon Mandi</p>
+                  </div>
+
+                  <div className="bg-earth-50 p-5 rounded-2xl border border-earth-200 text-center">
+                    <p className="text-3xl mb-1 my-0">📉</p>
+                    <p className="text-xs text-slate-500 font-bold uppercase my-0"><T lang={language}>Total Input Cost</T></p>
+                    <p className="text-2xl md:text-3xl font-black text-high mt-1 my-0">
+                      ₹{formatInteger(yieldResult ? yieldResult.inputCost : currentCropEval.inputCost * currentArea, language)}
+                    </p>
+                    <p className="text-xs text-slate-600 my-0 font-bold">
+                      ₹{formatInteger(currentCropEval.inputCost, language)} / acre
+                    </p>
+                  </div>
+
+                  <div className="bg-emerald-50 p-5 rounded-2xl border border-emerald-200 text-center">
+                    <p className="text-3xl mb-1 my-0">💰</p>
+                    <p className="text-xs text-emerald-800 font-bold uppercase my-0"><T lang={language}>Projected Net Income</T></p>
+                    <p className="text-2xl md:text-3xl font-black text-emerald-900 mt-1 my-0">
+                      ₹{formatInteger(yieldResult ? yieldResult.profit : currentCropEval.netProfit * currentArea, language)}
+                    </p>
+                    <p className="text-xs text-emerald-700 my-0 font-black"><T lang={language}>Positive Return</T></p>
+                  </div>
+                </div>
+
+                {/* Interactive Parameter Adjuster (Form) */}
+                <div className="p-5 rounded-2xl bg-earth-50/70 border border-earth-200 space-y-4">
+                  <h4 className="font-extrabold text-slate-800 text-sm uppercase tracking-wider my-0"><T lang={language}>Tweak Parameters to Re-estimate</T></h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1"><T lang={language}>Crop</T></label>
+                      <select value={yieldCrop} onChange={e => setYieldCrop(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-earth-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40 bg-white">
+                        {Object.keys(CROP_DEFAULTS).map(c => <option key={c} value={c}>{translateCrop(language, c)}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1"><T lang={language}>Area (Acres)</T></label>
+                      <input type="number" min={0.1} step={0.1} value={yieldArea} onChange={e => setYieldArea(parseFloat(e.target.value)||1)}
+                        className="w-full px-3 py-2 rounded-xl border border-earth-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40 bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1"><T lang={language}>Soil Type</T></label>
+                      <select value={yieldSoil} onChange={e => setYieldSoil(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-earth-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40 bg-white">
+                        <option value="loam">{translateSoil(language, 'loam')}</option>
+                        <option value="black">{translateSoil(language, 'black')}</option>
+                        <option value="clay">{translateSoil(language, 'clay')}</option>
+                        <option value="sandy">{translateSoil(language, 'sandy')}</option>
+                        <option value="red">{translateSoil(language, 'red')}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1"><T lang={language}>Irrigation System</T></label>
+                      <select value={yieldIrrigation} onChange={e => setYieldIrrigation(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-earth-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-stable/40 bg-white">
+                        {['drip', 'sprinkler', 'flood', 'none'].map(ir => (
+                          <option key={ir} value={ir}>{translateIrrigation(language, ir)}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      onClick={calcYield}
+                      disabled={yieldLoading}
+                      className="px-5 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-xs hover:bg-slate-800 transition-colors flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                    >
+                      {yieldLoading ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Calculator size={15} />
+                      )}
+                      {yieldLoading ? <T lang={language}>Calculating ML Model...</T> : <T lang={language}>Recalculate with ML Model</T>}
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         );
       }
 
-      // ── FINANCIAL RESILIENCE TAB ─────────────────────────────────────────────
+      // ── FINANCIAL HEALTH TAB (Redesigned & Simplified) ───────────────────────────
       case 'financial': {
         const totalFarmArea = farms.reduce((s: number, f: any) => s + (f.area || 0), 0);
         const totalObligations = cashFlow?.obligations?.reduce((s: number, o: any) => s + o.amount, 0) || 0;
         const avgDistress = distressData?.score ?? 0;
 
-        // Estimate annual income from all crops using current mandi prices + NDVI data
+        // Estimate annual income from all crops using current mandi prices
         const cropRevenues = allCrops.map((cr: any) => {
           const matchFarm = farms.find((f: any) => f.id === cr.farm_id);
           const area = matchFarm?.area || 1;
+          const farmName = matchFarm?.name || 'Main Farm';
           const CROP_YIELD: Record<string, number> = {
             tomato:80, wheat:20, rice:22, onion:70, potato:90, soybean:12, maize:25, cotton:10, sugarcane:350, mustard:10
           };
@@ -2755,146 +3629,580 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           const pricePerQ = MSP[ct] || 2000;
           const revenue = Math.round(baseQ * pricePerQ);
           const cost = Math.round((COST[ct] || 12000) * area);
-          return { crop: cr.crop_type, area, revenue, cost, profit: revenue - cost };
+          return { id: cr.id, crop: cr.crop_type, farmId: cr.farm_id, farmName, area, revenue, cost, profit: revenue - cost };
         });
+
+        // Farm level grouping
+        const farmRevenuesMap: Record<string, { farmName: string; area: number; revenue: number; cost: number; profit: number; cropsCount: number }> = {};
+        cropRevenues.forEach((cr: any) => {
+          if (!farmRevenuesMap[cr.farmName]) {
+            farmRevenuesMap[cr.farmName] = { farmName: cr.farmName, area: 0, revenue: 0, cost: 0, profit: 0, cropsCount: 0 };
+          }
+          farmRevenuesMap[cr.farmName].area += cr.area;
+          farmRevenuesMap[cr.farmName].revenue += cr.revenue;
+          farmRevenuesMap[cr.farmName].cost += cr.cost;
+          farmRevenuesMap[cr.farmName].profit += cr.profit;
+          farmRevenuesMap[cr.farmName].cropsCount += 1;
+        });
+        const farmRevenues = Object.values(farmRevenuesMap);
 
         const totalRevenue = cropRevenues.reduce((s: number, c: any) => s + c.revenue, 0);
         const totalCost = cropRevenues.reduce((s: number, c: any) => s + c.cost, 0);
-        const totalProfit = totalRevenue - totalCost - totalObligations;
+        const netMoneyLeft = totalRevenue - totalCost - totalObligations;
 
         const resilienceScore = Math.max(0, Math.min(100,
           50
-          + (totalProfit > 0 ? 20 : -20)
+          + (netMoneyLeft > 0 ? 20 : -20)
           + (totalFarmArea >= 5 ? 10 : totalFarmArea >= 2 ? 5 : 0)
           + (totalObligations === 0 ? 15 : totalObligations < 50000 ? 5 : -10)
           - Math.round(avgDistress * 0.3)
         ));
 
-        const rColor = resilienceScore >= 70 ? '#22c55e' : resilienceScore >= 45 ? '#f59e0b' : '#ef4444';
-        const rLabel = resilienceScore >= 70 ? 'Strong' : resilienceScore >= 45 ? 'Moderate' : 'Vulnerable';
+        const rColor = resilienceScore >= 70 ? '#16a34a' : resilienceScore >= 45 ? '#d97706' : '#dc2626';
+        const rLabel = resilienceScore >= 70 ? 'Strong' : resilienceScore >= 45 ? 'Moderate' : 'Needs Care';
+
+        // Dynamic natural-language reasoning summary for farm financial health (rich, contextual & multi-scenario)
+        const generateFinancialSummaryText = () => {
+          const parts: string[] = [];
+
+          // 1. Earning & Profitability Analysis
+          if (netMoneyLeft > 100000) {
+            parts.push(`Your farm is performing strongly with an excellent profit surplus of ₹${Math.abs(netMoneyLeft).toLocaleString('en-IN')} after crop expenses.`);
+          } else if (netMoneyLeft > 30000) {
+            parts.push(`Your farm is earning a healthy income surplus of ₹${Math.abs(netMoneyLeft).toLocaleString('en-IN')} above costs.`);
+          } else if (netMoneyLeft > 0) {
+            parts.push(`Your farm is maintaining a positive cash margin of ₹${Math.abs(netMoneyLeft).toLocaleString('en-IN')}.`);
+          } else if (netMoneyLeft === 0) {
+            parts.push(`Your harvest income currently breaks even with cultivation expenses.`);
+          } else {
+            parts.push(`Your farm operates at a net loss of ₹${Math.abs(netMoneyLeft).toLocaleString('en-IN')} this season due to cultivation costs exceeding current returns.`);
+          }
+
+          // 2. Debt & Obligations Liquidity Analysis
+          if (totalObligations > 0) {
+            if (netMoneyLeft > 0 && totalObligations > netMoneyLeft) {
+              parts.push(`However, you have ₹${totalObligations.toLocaleString('en-IN')} in upcoming payments due, which exceeds your profit surplus and requires careful cash flow management.`);
+            } else if (netMoneyLeft > 0) {
+              parts.push(`You have ₹${totalObligations.toLocaleString('en-IN')} in upcoming payments due, which your farm surplus can comfortably cover.`);
+            } else {
+              parts.push(`In addition, you have ₹${totalObligations.toLocaleString('en-IN')} in upcoming debt obligations due, increasing financial strain.`);
+            }
+          } else {
+            parts.push(`Encouragingly, your farm is debt-free with zero upcoming payment obligations.`);
+          }
+
+          // 3. Crop Diversification & Risk Exposure
+          if (allCrops.length === 1) {
+            const cropName = allCrops[0]?.crop_type || 'single crop';
+            parts.push(`Planting a single crop (${cropName}) increases market price risk; consider crop diversification next season.`);
+          } else if (allCrops.length >= 2) {
+            parts.push(`Your multi-crop portfolio (${allCrops.length} crops) helps spread market and weather risks.`);
+          }
+
+          // 4. Land Acreage Efficiency Context
+          if (totalFarmArea < 2.0) {
+            parts.push(`On a small holding of ${totalFarmArea.toFixed(1)} acres, strict input cost control is key.`);
+          } else if (totalFarmArea >= 5.0) {
+            parts.push(`Your larger farm area (${totalFarmArea.toFixed(1)} acres) provides scale and financial buffer.`);
+          }
+
+          // 5. Regional Distress & Weather Exposure
+          if (avgDistress > 60) {
+            parts.push(`High regional distress (${avgDistress}%) signals potential weather or pest risk.`);
+          }
+
+          return parts.join(' ');
+        };
+        const farmSummaryText = generateFinancialSummaryText();
 
         return (
-          <div className="space-y-5 pb-6">
-            <div>
-              <h2 className="text-xl font-bold text-slate-900 my-0 flex items-center gap-2"><PiggyBank size={22} className="text-stable" /> Financial Resilience</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Comprehensive farm profit analysis &amp; financial health score</p>
-            </div>
-
-            {/* Resilience Score */}
-            <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm flex items-center gap-6">
-              <div className="relative flex-shrink-0">
-                <svg width={100} height={100} viewBox="0 0 100 100">
-                  <circle cx={50} cy={50} r={44} fill="none" stroke="#f1f5f9" strokeWidth={10} />
-                  <circle cx={50} cy={50} r={44} fill="none" stroke={rColor} strokeWidth={10}
-                    strokeDasharray={`${(resilienceScore / 100) * 276.5} 276.5`}
-                    strokeLinecap="round"
-                    transform="rotate(-90 50 50)" />
-                  <text x={50} y={54} textAnchor="middle" fontSize={22} fontWeight="bold" fill="#1e293b">{resilienceScore}</text>
-                </svg>
-              </div>
+          <div className="space-y-6 pb-8">
+            {/* Header Title & 2-Tab Navigation Bar */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-white p-4 md:p-5 rounded-2xl border border-earth-200 shadow-sm">
               <div>
-                <h3 className="text-2xl font-extrabold" style={{ color: rColor }}>{rLabel}</h3>
-                <p className="text-sm text-slate-500 mt-1">Financial resilience score based on your farm size, crop portfolio, obligations &amp; distress risk</p>
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {[
-                    totalFarmArea >= 2 ? '✅ Sufficient farm area' : '⚠️ Small farm area',
-                    totalProfit > 0 ? '✅ Profitable season' : '❌ Loss-making at MSP',
-                    totalObligations === 0 ? '✅ Debt-free' : `⚠️ ₹${(totalObligations/1000).toFixed(0)}K obligation`,
-                  ].map(m => <span key={m} className="text-xs bg-slate-50 border border-slate-100 rounded-full px-2 py-0.5 text-slate-600">{m}</span>)}
-                </div>
+                <h2 className="text-xl md:text-2xl font-black text-slate-900 my-0 flex items-center gap-2">
+                  <PiggyBank size={26} className="text-emerald-600" />
+                  <T lang={language}>Financial Health</T>
+                </h2>
+                <p className="text-xs md:text-sm text-slate-500 font-medium mt-0.5 my-0">
+                  <T lang={language}>Simple overview of your farm's income, expenses, and loan safety</T>
+                </p>
+              </div>
+
+              {/* 2-Tab Navigation Switcher */}
+              <div className="bg-slate-100 p-1 rounded-2xl flex items-center gap-1 w-full md:w-auto border border-slate-200">
+                <button
+                  onClick={() => setFinSubTab('overview')}
+                  className={`flex-1 md:flex-none px-5 py-2.5 rounded-xl text-xs md:text-sm font-extrabold transition-all flex items-center justify-center gap-2 ${
+                    finSubTab === 'overview'
+                      ? 'bg-white text-indigo-950 shadow-xs border border-slate-200/80'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>🌾</span> <T lang={language}>Farm Overview</T>
+                </button>
+                <button
+                  onClick={() => setFinSubTab('loan')}
+                  className={`flex-1 md:flex-none px-5 py-2.5 rounded-xl text-xs md:text-sm font-extrabold transition-all flex items-center justify-center gap-2 ${
+                    finSubTab === 'loan'
+                      ? 'bg-white text-indigo-950 shadow-xs border border-slate-200/80'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>🛡️</span> <T lang={language}>Loan & Risk</T>
+                </button>
               </div>
             </div>
 
-            {/* Profit Summary Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                { label: 'Total Farm Area', value: `${totalFarmArea.toFixed(1)} Acres`, icon: '🌱' },
-                { label: 'Gross Revenue', value: `₹${totalRevenue.toLocaleString('en-IN')}`, icon: '💰' },
-                { label: 'Total Input Cost', value: `₹${totalCost.toLocaleString('en-IN')}`, icon: '📉', neg: true },
-                { label: 'Net Profit', value: `₹${Math.abs(totalProfit).toLocaleString('en-IN')}`, icon: totalProfit >= 0 ? '🟢' : '🔴', neg: totalProfit < 0 },
-              ].map(c => (
-                <div key={c.label} className={`bg-white p-5 rounded-2xl border shadow-sm text-center ${c.neg ? 'border-high/20' : 'border-earth-200'}`}>
-                  <p className="text-2xl mb-1">{c.icon}</p>
-                  <p className="text-[10px] text-slate-400 uppercase font-bold">{c.label}</p>
-                  <p className={`text-base font-extrabold mt-0.5 ${c.neg ? 'text-high' : 'text-stable'}`}>{c.value}</p>
-                </div>
-              ))}
-            </div>
+            {/* TAB 1: FARM OVERVIEW */}
+            {finSubTab === 'overview' && (
+              <div className="space-y-6">
+                {/* 1. TOP CARD: Farm Money Health Score & Dynamic Reasoning Summary */}
+                <div className="bg-gradient-to-br from-white via-white to-earth-50/50 p-5 md:p-6 rounded-2xl border border-earth-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
+                  <div className="flex items-start md:items-center gap-5">
+                    <div className="relative shrink-0">
+                      <svg width={84} height={84} viewBox="0 0 100 100">
+                        <circle cx={50} cy={50} r={42} fill="none" stroke="#f1f5f9" strokeWidth={10} />
+                        <circle cx={50} cy={50} r={42} fill="none" stroke={rColor} strokeWidth={10}
+                          strokeDasharray={`${(resilienceScore / 100) * 263.8} 263.8`}
+                          strokeLinecap="round"
+                          transform="rotate(-90 50 50)" />
+                        <text x={50} y={56} textAnchor="middle" fontSize={22} fontWeight="black" fill="#0f172a">{resilienceScore}</text>
+                      </svg>
+                    </div>
 
-            {/* Per-crop breakdown */}
-            {cropRevenues.length > 0 ? (
-              <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
-                <h3 className="font-bold text-slate-800 uppercase tracking-wider text-sm mb-3">Per-Crop Profit Breakdown</h3>
-                <div className="space-y-3">
-                  {cropRevenues.map((cr: any, i: number) => {
-                    const pct = totalRevenue > 0 ? (cr.revenue / totalRevenue) * 100 : 0;
+                    <div className="space-y-1.5">
+                      <div className="flex items-center flex-wrap gap-2.5">
+                        <h3 className="text-lg md:text-xl font-black text-slate-900 my-0">
+                          <T lang={language}>Farm Money Health</T> — <span style={{ color: rColor }}><T lang={language}>{rLabel}</T></span>
+                        </h3>
+                      </div>
+
+                      <p className="text-xs md:text-sm text-slate-700 font-semibold my-0 leading-relaxed max-w-2xl">
+                        <T lang={language}>{farmSummaryText}</T>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 bg-slate-50 border border-slate-200/70 p-3 rounded-xl text-center self-stretch md:self-auto flex flex-row md:flex-col justify-between items-center md:justify-center">
+                    <p className="text-[10px] font-extrabold uppercase text-slate-400 my-0">Health Rating</p>
+                    <p className="text-sm font-black my-0" style={{ color: rColor }}>
+                      <T lang={language}>{rLabel}</T> ({resilienceScore}/100)
+                    </p>
+                  </div>
+                </div>
+
+                {/* 2. SECOND ROW: 4 Summary Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                  {/* Total Income */}
+                  <div className="bg-gradient-to-br from-emerald-50/80 via-white to-white p-4 md:p-5 rounded-2xl border border-emerald-100 shadow-sm text-left">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-extrabold text-emerald-800 uppercase tracking-wide"><T lang={language}>Total Income</T></span>
+                      <span className="text-xl">💰</span>
+                    </div>
+                    <p className="text-lg md:text-2xl font-black text-emerald-950 my-0">
+                      ₹{totalRevenue.toLocaleString('en-IN')}
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-medium mt-1 my-0">
+                      <T lang={language}>From registered crops</T> ({totalFarmArea.toFixed(1)} <T lang={language}>acres</T>)
+                    </p>
+                  </div>
+
+                  {/* Total Costs */}
+                  <div className="bg-gradient-to-br from-rose-50/80 via-white to-white p-4 md:p-5 rounded-2xl border border-rose-100 shadow-sm text-left">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-extrabold text-rose-800 uppercase tracking-wide"><T lang={language}>Total Costs</T></span>
+                      <span className="text-xl">📉</span>
+                    </div>
+                    <p className="text-lg md:text-2xl font-black text-rose-950 my-0">
+                      ₹{totalCost.toLocaleString('en-IN')}
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-medium mt-1 my-0">
+                      <T lang={language}>Inputs & farming costs</T>
+                    </p>
+                  </div>
+
+                  {/* Money Left / Net Profit */}
+                  <div className={`bg-gradient-to-br ${netMoneyLeft >= 0 ? 'from-emerald-50/80 via-white to-white border-emerald-200' : 'from-rose-50/80 via-white to-white border-rose-200'} p-4 md:p-5 rounded-2xl border shadow-sm text-left`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`text-xs font-extrabold uppercase tracking-wide ${netMoneyLeft >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
+                        <T lang={language}>Money Left</T>
+                      </span>
+                      <span className="text-xl">{netMoneyLeft >= 0 ? '🟢' : '🔴'}</span>
+                    </div>
+                    <p className={`text-lg md:text-2xl font-black my-0 ${netMoneyLeft >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {netMoneyLeft >= 0 ? '+' : '−'}₹{Math.abs(netMoneyLeft).toLocaleString('en-IN')}
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-bold mt-1 my-0">
+                      {netMoneyLeft >= 0 ? <span className="text-emerald-600">🎉 <T lang={language}>Net Surplus</T></span> : <span className="text-rose-600">⚠️ <T lang={language}>Net Loss</T></span>}
+                    </p>
+                  </div>
+
+                  {/* Payments Due */}
+                  <div className="bg-gradient-to-br from-amber-50/80 via-white to-white p-4 md:p-5 rounded-2xl border border-amber-200/80 shadow-sm text-left">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-extrabold text-amber-900 uppercase tracking-wide"><T lang={language}>Payments Due</T></span>
+                      <span className="text-xl">💳</span>
+                    </div>
+                    <p className="text-lg md:text-2xl font-black text-amber-950 my-0">
+                      ₹{totalObligations.toLocaleString('en-IN')}
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-medium mt-1 my-0">
+                      {cashFlow?.obligations?.length || 0} <T lang={language}>upcoming payments</T>
+                    </p>
+                  </div>
+                </div>
+
+                {/* 2-Column Side-by-Side Grid Row: Profit Breakdown & Payments Due */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+                  {/* Left Column: Profit Breakdown */}
+                  <div className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm space-y-4 flex flex-col justify-between">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-3">
+                      <div>
+                        <h3 className="font-extrabold text-slate-900 text-base my-0 flex items-center gap-2">
+                          <BarChart3 size={18} className="text-indigo-600" /> <T lang={language}>Profit Breakdown</T>
+                        </h3>
+                        <p className="text-xs text-slate-500 my-0"><T lang={language}>View income & expenses per crop or farm</T></p>
+                      </div>
+
+                      {/* View Switcher: By Crop / By Farm */}
+                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold shrink-0">
+                        <button
+                          onClick={() => setFinBreakdownView('crop')}
+                          className={`px-3 py-1 rounded-lg transition-all ${
+                            finBreakdownView === 'crop' ? 'bg-white text-slate-900 shadow-xs font-extrabold' : 'text-slate-500 hover:text-slate-900'
+                          }`}
+                        >
+                          <T lang={language}>By Crop</T>
+                        </button>
+                        <button
+                          onClick={() => setFinBreakdownView('farm')}
+                          className={`px-3 py-1 rounded-lg transition-all ${
+                            finBreakdownView === 'farm' ? 'bg-white text-slate-900 shadow-xs font-extrabold' : 'text-slate-500 hover:text-slate-900'
+                          }`}
+                        >
+                          <T lang={language}>By Farm</T>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Breakdown List */}
+                    {finBreakdownView === 'crop' ? (
+                      cropRevenues.length > 0 ? (
+                        <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+                          {cropRevenues.map((cr: any, i: number) => {
+                            const pct = totalRevenue > 0 ? (cr.revenue / totalRevenue) * 100 : 0;
+                            return (
+                              <div key={i} className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/60 space-y-1.5">
+                                <div className="flex justify-between items-center text-xs font-bold">
+                                  <span className="capitalize text-slate-800">
+                                    {translateCrop(language, cr.crop)} <span className="text-slate-400 font-normal">({cr.area} ac · {cr.farmName})</span>
+                                  </span>
+                                  <span className={cr.profit >= 0 ? 'text-emerald-700 font-black' : 'text-rose-700 font-black'}>
+                                    {cr.profit >= 0 ? '+' : '−'}₹{Math.abs(cr.profit).toLocaleString('en-IN')}
+                                  </span>
+                                </div>
+
+                                <div className="h-1.5 bg-slate-200/80 rounded-full overflow-hidden">
+                                  <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                </div>
+
+                                <div className="flex justify-between text-[11px] text-slate-500 font-semibold">
+                                  <span><T lang={language}>Total Income</T>: ₹{cr.revenue.toLocaleString('en-IN')}</span>
+                                  <span><T lang={language}>Total Costs</T>: ₹{cr.cost.toLocaleString('en-IN')}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-slate-400">
+                          <p className="font-semibold text-sm my-0"><T lang={language}>No crops registered yet</T></p>
+                          <p className="text-xs mt-1"><T lang={language}>Add a farm and crops to see your profit breakdown</T></p>
+                        </div>
+                      )
+                    ) : (
+                      farmRevenues.length > 0 ? (
+                        <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+                          {farmRevenues.map((fr: any, i: number) => {
+                            const pct = totalRevenue > 0 ? (fr.revenue / totalRevenue) * 100 : 0;
+                            return (
+                              <div key={i} className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/60 space-y-1.5">
+                                <div className="flex justify-between items-center text-xs font-bold">
+                                  <span className="text-slate-800 font-extrabold">
+                                    📍 {fr.farmName} <span className="text-slate-400 font-normal">({fr.area} ac · {fr.cropsCount} crops)</span>
+                                  </span>
+                                  <span className={fr.profit >= 0 ? 'text-emerald-700 font-black' : 'text-rose-700 font-black'}>
+                                    {fr.profit >= 0 ? '+' : '−'}₹{Math.abs(fr.profit).toLocaleString('en-IN')}
+                                  </span>
+                                </div>
+
+                                <div className="h-1.5 bg-slate-200/80 rounded-full overflow-hidden">
+                                  <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                </div>
+
+                                <div className="flex justify-between text-[11px] text-slate-500 font-semibold">
+                                  <span><T lang={language}>Total Income</T>: ₹{fr.revenue.toLocaleString('en-IN')}</span>
+                                  <span><T lang={language}>Total Costs</T>: ₹{fr.cost.toLocaleString('en-IN')}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-slate-400">
+                          <p className="font-semibold text-sm my-0"><T lang={language}>No farms registered yet</T></p>
+                        </div>
+                      )
+                    )}
+                  </div>
+
+                  {/* Right Column: Payments Due */}
+                  <div className="bg-white p-5 rounded-2xl border border-earth-200 shadow-sm space-y-4 flex flex-col justify-between">
+                    <div className="flex justify-between items-center border-b border-slate-100 pb-3 flex-wrap gap-2">
+                      <div>
+                        <h3 className="font-extrabold text-slate-900 text-base my-0 flex items-center gap-2">
+                          <span>💳</span> <T lang={language}>Payments Due</T>
+                        </h3>
+                        <p className="text-xs text-slate-500 my-0"><T lang={language}>Manage upcoming loans & farm payments</T></p>
+                      </div>
+
+                      <button
+                        onClick={() => setShowAddObligationModal(true)}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-3.5 py-1.5 rounded-xl shadow-xs transition-all flex items-center gap-1.5 shrink-0"
+                      >
+                        <Plus size={14} /> <T lang={language}>Add Payment</T>
+                      </button>
+                    </div>
+
+                    {cashFlow?.obligations?.length > 0 ? (
+                      <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                        {cashFlow.obligations.map((ob: any) => (
+                          <div key={ob.id} className="flex justify-between items-center p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100/80 transition-colors">
+                            <div className="flex items-center gap-2.5">
+                              <span className="text-base">
+                                {ob.type === 'loan' ? '🏦' : ob.type === 'inputs' ? '🌱' : ob.type === 'lease' ? '🚜' : '📦'}
+                              </span>
+                              <div>
+                                <p className="font-extrabold text-slate-800 text-xs my-0 capitalize">
+                                  {translateObligation(language, ob.type)}
+                                </p>
+                                <p className="text-[10px] text-slate-400 font-medium my-0">Due: {ob.due_date}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2.5">
+                              <span className="font-black text-rose-600 text-xs md:text-sm">
+                                ₹{Number(ob.amount).toLocaleString('en-IN')}
+                              </span>
+                              <button
+                                onClick={() => handleDeleteObligation(ob.id)}
+                                className="p-1 text-slate-300 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                                title="Delete payment"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                        <p className="text-xs font-bold text-slate-500 my-0">🎉 No upcoming payments due!</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Click "+ Add Payment" above to record a payment.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: LOAN & RISK */}
+            {finSubTab === 'loan' && (
+              <div className="space-y-6">
+                {/* Header Card */}
+                <div className="bg-gradient-to-br from-indigo-50/80 via-white to-earth-50/60 p-5 rounded-2xl border border-indigo-100 shadow-sm space-y-4">
+                  <div className="flex justify-between items-center flex-wrap gap-2 border-b border-indigo-100/60 pb-3">
+                    <div>
+                      <h3 className="font-extrabold text-slate-900 text-lg md:text-xl my-0 flex items-center gap-2">
+                        <span>🛡️</span> <T lang={language}>Loan Check</T>
+                      </h3>
+                      <p className="text-xs md:text-sm text-slate-500 font-medium mt-0.5">
+                        <T lang={language}>Can I safely take a loan for my farm? Check your safe limit instantly</T>
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { setActiveTab('support'); setSupportSubTab('loans'); }}
+                      className="text-xs font-extrabold text-indigo-700 bg-indigo-100/80 hover:bg-indigo-200 px-3.5 py-1.5 rounded-full transition-colors"
+                    >
+                      View Government Loan Schemes →
+                    </button>
+                  </div>
+
+                  {/* Loan Risk Score Gauge & Result Banner */}
+                  {(() => {
+                    const cScore = creditAssessment?.credit_score || 730;
+                    const cStatus = creditAssessment?.status || 'MANUAL REVIEW';
+                    const cColor = cScore >= 750 ? '#16a34a' : cScore >= 600 ? '#d97706' : '#dc2626';
+
                     return (
-                      <div key={i} className="space-y-1">
-                        <div className="flex justify-between text-xs font-semibold">
-                          <span className="capitalize text-slate-700">{cr.crop} <span className="text-slate-400">({cr.area} ac)</span></span>
-                          <span className={cr.profit >= 0 ? 'text-stable font-bold' : 'text-high font-bold'}>
-                            {cr.profit >= 0 ? '+' : '−'}₹{Math.abs(cr.profit).toLocaleString('en-IN')} net
-                          </span>
-                        </div>
-                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-stable rounded-full transition-all" style={{ width: `${pct}%` }} />
-                        </div>
-                        <div className="flex justify-between text-[10px] text-slate-400">
-                          <span>Revenue: ₹{cr.revenue.toLocaleString('en-IN')}</span>
-                          <span>Cost: ₹{cr.cost.toLocaleString('en-IN')}</span>
+                      <div className="space-y-4">
+                        {/* Summary Result Banner */}
+                        <div className={`p-4 md:p-5 rounded-2xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${
+                          cStatus === 'APPROVED' ? 'bg-emerald-50 border-emerald-200 text-emerald-950' :
+                          cStatus === 'MANUAL REVIEW' ? 'bg-amber-50 border-amber-200 text-amber-950' :
+                          'bg-rose-50 border-rose-200 text-rose-950'
+                        }`}>
+                          <div className="flex items-center gap-4">
+                            <div className="relative shrink-0">
+                              <svg width={68} height={68} viewBox="0 0 100 100">
+                                <circle cx={50} cy={50} r={42} fill="none" stroke="#e2e8f0" strokeWidth={10} />
+                                <circle cx={50} cy={50} r={42} fill="none" stroke={cColor} strokeWidth={10}
+                                  strokeDasharray={`${(Math.max(0, Math.min(100, ((cScore - 300) / 600) * 100)) / 100) * 263.8} 263.8`}
+                                  strokeLinecap="round"
+                                  transform="rotate(-90 50 50)" />
+                                <text x={50} y={56} textAnchor="middle" fontSize={20} fontWeight="black" fill="#0f172a">{cScore}</text>
+                              </svg>
+                            </div>
+
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-base md:text-lg font-black uppercase tracking-wide" style={{ color: cColor }}>
+                                  {cStatus === 'APPROVED' ? '✅ Loan Approved' : cStatus === 'MANUAL REVIEW' ? '⚠️ Needs Review' : '❌ High Risk'}
+                                </span>
+                                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-white/90 border border-current text-slate-700">
+                                  Loan Risk: {cScore} / 900
+                                </span>
+                              </div>
+                              <p className="text-xs md:text-sm font-bold mt-1 my-0 text-slate-800">
+                                {cStatus === 'APPROVED' ? (
+                                  `🎉 Your requested loan of ₹${Number(creditAssessment?.loan_requested || loanRequestedInput).toLocaleString('en-IN')} is safe for your farm!`
+                                ) : (
+                                  `Based on your farm size and harvest income, a safer loan amount is ₹${Number(creditAssessment?.approved_amount || 56000).toLocaleString('en-IN')}.`
+                                )}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="bg-white/90 px-4 py-2.5 rounded-xl border border-current/20 shrink-0 text-right">
+                            <p className="text-[10px] uppercase font-extrabold text-slate-500 my-0">Suggested Safe Limit</p>
+                            <p className="text-xl font-black my-0 text-slate-900">
+                              ₹{Number(creditAssessment?.approved_amount || 56000).toLocaleString('en-IN')}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm text-center text-slate-400">
-                <PiggyBank size={40} className="mx-auto mb-2 text-slate-200" />
-                <p className="font-semibold">No crops registered yet</p>
-                <p className="text-xs mt-1">Add a farm and crops to see your profit breakdown</p>
-                <button onClick={() => setActiveTab('home')} className="mt-3 px-4 py-2 bg-stable text-white text-xs font-bold rounded-xl">Add Farm →</button>
-              </div>
-            )}
+                  })()}
 
-            {/* Obligations */}
-            {cashFlow?.obligations?.length > 0 && (
-              <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="font-bold text-slate-800 uppercase tracking-wider text-sm">Debt Obligations</h3>
-                  <span className="text-xs font-bold text-high">Total: ₹{totalObligations.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="space-y-2">
-                  {cashFlow.obligations.map((ob: any) => (
-                    <div key={ob.id} className="flex justify-between items-center text-sm border-b border-slate-50 pb-2">
+                  {/* Interactive Assessor Form */}
+                  <div className="bg-white p-4 md:p-5 rounded-xl border border-indigo-100/80 space-y-4">
+                    <h4 className="font-extrabold text-slate-900 text-sm my-0">Test a Loan Amount & AgTech Assets</h4>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <span className="font-semibold text-slate-700 capitalize">{ob.type}</span>
-                        <span className="text-slate-400 text-xs ml-2">Due: {ob.due_date}</span>
+                        <label className="block text-xs font-extrabold text-slate-700 mb-1">Requested Loan Amount (₹)</label>
+                        <input
+                          type="number"
+                          value={loanRequestedInput}
+                          onChange={(e) => setLoanRequestedInput(Number(e.target.value))}
+                          className="w-full text-base font-extrabold px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                          placeholder="50000"
+                          min={5000}
+                          step={5000}
+                        />
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-high">₹{Number(ob.amount).toLocaleString('en-IN')}</span>
-                        <button onClick={() => handleDeleteObligation(ob.id)} className="p-1 text-slate-300 hover:text-high transition-colors"><Trash2 size={13} /></button>
+
+                      <div>
+                        <label className="block text-xs font-extrabold text-slate-700 mb-1">AgTech & Infrastructure Toggles</label>
+                        <div className="grid grid-cols-2 gap-2 text-xs font-bold text-slate-700">
+                          <label className="flex items-center gap-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={infraColdStorage}
+                              onChange={(e) => setInfraColdStorage(e.target.checked)}
+                              className="rounded text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>❄️ Cold Storage</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={infraPrecisionTech}
+                              onChange={(e) => setInfraPrecisionTech(e.target.checked)}
+                              className="rounded text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>🛰️ Precision AgTech</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={infraSellsStubble}
+                              onChange={(e) => setInfraSellsStubble(e.target.checked)}
+                              className="rounded text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>🌾 Sell Stubble</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={infraDoesSorting}
+                              onChange={(e) => setInfraDoesSorting(e.target.checked)}
+                              className="rounded text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>🏷️ Produce Sorting</span>
+                          </label>
+                        </div>
                       </div>
                     </div>
-                  ))}
+
+                    <div className="flex justify-between items-center pt-2 flex-wrap gap-3">
+                      <button
+                        onClick={handleAssessCredit}
+                        disabled={creditLoading}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs md:text-sm px-6 py-2.5 rounded-xl shadow-xs transition-all flex items-center gap-2"
+                      >
+                        {creditLoading ? <RefreshCw size={16} className="animate-spin" /> : '⚡ Check Loan Safety'}
+                      </button>
+
+                      <p className="text-[11px] text-slate-400 italic my-0 font-medium">
+                        Estimates your safe loan limit based on farm capacity.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Expandable Detailed Calculations & Contributing Factors */}
+                  <div className="pt-2">
+                    <button
+                      onClick={() => setShowLoanDetails(!showLoanDetails)}
+                      className="w-full flex items-center justify-between p-3 rounded-xl bg-indigo-50/70 border border-indigo-100 hover:bg-indigo-100/70 transition-colors text-xs font-extrabold text-indigo-900"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>🔍</span> Show Detailed Calculations & Analysis
+                      </span>
+                      {showLoanDetails ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
+
+                    {showLoanDetails && (
+                      <div className="mt-3 p-4 rounded-xl bg-white border border-slate-200 space-y-3 text-xs text-slate-700 animate-fade-in">
+                        <p className="font-extrabold text-slate-900 uppercase tracking-wide my-0">Risk Analysis Factors:</p>
+                        {creditAssessment?.reason_codes?.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {creditAssessment.reason_codes.map((rc: string, idx: number) => (
+                              <p key={idx} className="my-0 font-medium leading-relaxed flex items-start gap-1.5">
+                                <span>{rc}</span>
+                              </p>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-slate-500 italic my-0">Standard profile evaluation based on land area and harvest capacity.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <p className="text-xs text-slate-400 mt-3">
-                  After deducting obligations, net position: <strong className={totalProfit >= 0 ? 'text-stable' : 'text-high'}>
-                    ₹{Math.abs(totalProfit).toLocaleString('en-IN')} {totalProfit >= 0 ? 'surplus' : 'deficit'}
-                  </strong>
-                </p>
               </div>
             )}
-
-            {/* Action CTA */}
-            <div className="flex gap-3 flex-wrap">
-              <button onClick={() => setActiveTab('yield')} className="flex items-center gap-2 px-4 py-2.5 bg-stable text-white rounded-xl text-sm font-bold hover:bg-stable-dark transition-colors">
-                <Calculator size={16} /> Open Yield Calculator
-              </button>
-              <button onClick={() => setActiveTab('risk-detail')} className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors">
-                <BarChart3 size={16} /> Distress Detail
-              </button>
-            </div>
           </div>
         );
       }
@@ -2915,6 +4223,31 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
             <p className="text-xs text-slate-500 font-sans uppercase tracking-wider font-semibold">Agricultural Early-Warning & Risk Intelligence</p>
           </div>
 
+          {/* Role Switcher: Farmer vs Agro Officer */}
+          <div className="space-y-1.5">
+            <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider text-center">Select Account Role</label>
+            <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-2xl">
+              <button
+                type="button"
+                onClick={() => setAuthRoleToggle('farmer')}
+                className={`py-2 px-3 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 ${
+                  authRoleToggle === 'farmer' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                👨‍🌾 Farmer
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthRoleToggle('officer')}
+                className={`py-2 px-3 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 ${
+                  authRoleToggle === 'officer' ? 'bg-indigo-950 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🏛️ Agro Officer
+              </button>
+            </div>
+          </div>
+
           <div className="flex bg-earth-100 p-1.5 rounded-2xl">
             <button
               onClick={() => setIsRegistering(false)}
@@ -2933,10 +4266,12 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           {!isRegistering ? (
             <form onSubmit={handleLoginSubmit} className="space-y-4 text-left">
               <div>
-                <label className="block text-slate-500 text-xs font-bold uppercase mb-1.5">Phone Number</label>
+                <label className="block text-slate-500 text-xs font-bold uppercase mb-1.5">
+                  {authRoleToggle === 'officer' ? 'Officer Phone Number' : 'Farmer Phone Number'}
+                </label>
                 <input
                   type="text"
-                  placeholder="e.g. +91 98765 43210"
+                  placeholder={authRoleToggle === 'officer' ? 'e.g. +91 99887 76655' : 'e.g. +91 98765 43210'}
                   value={loginPhone}
                   onChange={(e) => setLoginPhone(e.target.value)}
                   className="w-full text-sm px-4 py-3 rounded-xl border border-earth-200 focus:outline-none focus:border-stable bg-earth-50"
@@ -2956,9 +4291,11 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               </div>
               <button
                 type="submit"
-                className="w-full bg-stable text-white py-3.5 rounded-2xl text-sm font-bold shadow-sm hover:bg-stable-dark transition-colors flex items-center justify-center gap-1.5"
+                className={`w-full text-white py-3.5 rounded-2xl text-sm font-bold shadow-sm transition-colors flex items-center justify-center gap-1.5 ${
+                  authRoleToggle === 'officer' ? 'bg-indigo-950 hover:bg-indigo-900' : 'bg-stable hover:bg-stable-dark'
+                }`}
               >
-                <Lock size={16} /> Authenticate Account
+                <Lock size={16} /> Authenticate {authRoleToggle === 'officer' ? 'Officer Account' : 'Farmer Account'}
               </button>
 
               {/* Demo Account Quick Fill */}
@@ -2970,12 +4307,133 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                   <span className="bg-white px-2 text-slate-400 font-bold">or try demo</span>
                 </div>
               </div>
+
+              {authRoleToggle === 'officer' ? (
+                <button
+                  type="button"
+                  onClick={() => { setLoginPhone('+919988776655'); setLoginPassword('officer123'); }}
+                  className="w-full border border-indigo-200 bg-indigo-50/50 text-indigo-900 py-3 rounded-2xl text-sm font-bold hover:bg-indigo-100 transition-colors flex items-center justify-center gap-2"
+                >
+                  🏛️ Try Demo Agro Officer Account
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { setLoginPhone('+919876543210'); setLoginPassword('demo1234'); }}
+                  className="w-full border border-earth-200 text-slate-600 py-3 rounded-2xl text-sm font-bold hover:bg-earth-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  🚜 Try Demo Farmer Account
+                </button>
+              )}
+            </form>
+          ) : authRoleToggle === 'officer' ? (
+            <form onSubmit={handleRegisterSubmit} className="space-y-3.5 text-left text-xs">
+              <div>
+                <label className="block text-slate-500 font-bold uppercase mb-1">Full Officer Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Dr. Aniket Deshmukh"
+                  value={officerRegName}
+                  onChange={(e) => setOfficerRegName(e.target.value)}
+                  className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-earth-200 focus:outline-none focus:border-indigo-600 bg-earth-50"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-slate-500 font-bold uppercase mb-1">Phone Number *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. +919988776655"
+                  value={officerRegPhone}
+                  onChange={(e) => setOfficerRegPhone(e.target.value)}
+                  className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-earth-200 focus:outline-none focus:border-indigo-600 bg-earth-50"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-slate-500 font-bold uppercase mb-1">Official Email</label>
+                <input
+                  type="email"
+                  placeholder="e.g. officer@krishi.gov.in"
+                  value={officerRegEmail}
+                  onChange={(e) => setOfficerRegEmail(e.target.value)}
+                  className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-earth-200 focus:outline-none focus:border-indigo-600 bg-earth-50"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-500 font-bold uppercase mb-1">Designation / Role Title *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Block Agricultural Extension Officer"
+                  value={officerRegDesignation}
+                  onChange={(e) => setOfficerRegDesignation(e.target.value)}
+                  className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-earth-200 focus:outline-none focus:border-indigo-600 bg-earth-50"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-slate-500 font-bold uppercase mb-1">State *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Maharashtra"
+                    value={officerRegState}
+                    onChange={(e) => setOfficerRegState(e.target.value)}
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-earth-200 focus:outline-none focus:border-indigo-600 bg-earth-50"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 font-bold uppercase mb-1">District *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Nashik"
+                    value={officerRegDistrict}
+                    onChange={(e) => setOfficerRegDistrict(e.target.value)}
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-earth-200 focus:outline-none focus:border-indigo-600 bg-earth-50"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-slate-500 font-bold uppercase mb-1">Municipality / Block *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Niphad Block"
+                    value={officerRegMunicipality}
+                    onChange={(e) => setOfficerRegMunicipality(e.target.value)}
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-earth-200 focus:outline-none focus:border-indigo-600 bg-earth-50"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 font-bold uppercase mb-1">Ward / Sub-locality</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Ward #4"
+                    value={officerRegWard}
+                    onChange={(e) => setOfficerRegWard(e.target.value)}
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-earth-200 focus:outline-none focus:border-indigo-600 bg-earth-50"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-slate-500 font-bold uppercase mb-1">Create Password *</label>
+                <input
+                  type="password"
+                  placeholder="Minimum 6 characters"
+                  value={officerRegPassword}
+                  onChange={(e) => setOfficerRegPassword(e.target.value)}
+                  className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-earth-200 focus:outline-none focus:border-indigo-600 bg-earth-50"
+                  required
+                />
+              </div>
               <button
-                type="button"
-                onClick={() => { setLoginPhone('+919876543210'); setLoginPassword('demo1234'); }}
-                className="w-full border border-earth-200 text-slate-600 py-3 rounded-2xl text-sm font-bold hover:bg-earth-50 transition-colors flex items-center justify-center gap-2"
+                type="submit"
+                className="w-full bg-indigo-950 text-white py-3 rounded-2xl text-sm font-bold shadow-sm hover:bg-indigo-900 transition-colors"
               >
-                🚜 Try Demo Account
+                Register Officer Account
               </button>
             </form>
           ) : (
@@ -3026,6 +4484,580 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
             🔒 Fully encrypted. Secure communication.
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // Agro Officer Portal Layout
+  if (token && userRole === 'officer') {
+    const criticalFarmers = localityFarmers.filter(f => f.distress_level.toLowerCase() === 'critical');
+    const elevatedFarmers = localityFarmers.filter(f => f.distress_level.toLowerCase() === 'elevated');
+    const stableFarmers = localityFarmers.filter(f => f.distress_level.toLowerCase() === 'stable' || f.distress_level.toLowerCase() === 'watch');
+    const activeInterventions = localityFarmers.filter(f => f.intervention_status && f.intervention_status !== 'Pending');
+
+    const filteredRoster = localityFarmers.filter(f => {
+      if (officerRiskFilter !== 'all' && f.distress_level.toLowerCase() !== officerRiskFilter.toLowerCase()) {
+        return false;
+      }
+      if (officerStatusFilter !== 'all' && (f.intervention_status || 'Pending').toLowerCase() !== officerStatusFilter.toLowerCase()) {
+        return false;
+      }
+      if (officerSearchQuery) {
+        const q = officerSearchQuery.toLowerCase();
+        return f.name.toLowerCase().includes(q) || f.phone.includes(q) || f.location_id.toLowerCase().includes(q);
+      }
+      return true;
+    });
+
+    const handleSignOutOfficer = () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('krishi_auth_role');
+      setToken(null);
+      setUserRole('farmer');
+      setOfficerProfile(null);
+    };
+
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans pb-24 md:pb-8">
+        {/* Toast Container */}
+        <ToastContainer toasts={toasts} removeToast={removeToast} />
+
+        {/* Administrative Header Bar */}
+        <header className="bg-slate-900 text-white sticky top-0 z-30 px-4 py-4 md:px-8 flex items-center justify-between shadow-md">
+          <div className="flex items-center gap-3">
+            <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-sm">
+              <Building2 size={26} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl md:text-2xl font-black tracking-tight">KrishiRakshak</h1>
+                <span className="bg-indigo-900 border border-indigo-500 text-indigo-200 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                  Agro Officer
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 font-medium">
+                {officerProfile?.name || 'Officer'} · <span className="text-indigo-300 font-semibold">{officerProfile?.designation || 'Block Officer'}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as LanguageType)}
+              className="bg-slate-800 border border-slate-700 text-white text-xs md:text-sm px-3 py-2 rounded-xl focus:outline-none font-semibold"
+            >
+              <option value="english">English</option>
+              <option value="hindi">हिंदी</option>
+              <option value="marathi">मराठी</option>
+              <option value="bengali">বাংলা</option>
+              <option value="odia">ଓଡ଼ିଆ</option>
+            </select>
+
+            <button
+              onClick={handleSignOutOfficer}
+              className="flex items-center gap-1.5 bg-red-900/80 border border-red-700 hover:bg-red-800 text-white px-3 py-2 rounded-xl text-xs md:text-sm font-bold transition-all"
+            >
+              <LogOut size={16} /> <span className="hidden sm:inline">Sign Out</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Main Content Area */}
+        <main className="flex-1 p-4 md:p-8 max-w-6xl w-full mx-auto space-y-6">
+
+          {/* Location & Sync Banner */}
+          <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-indigo-700 font-extrabold text-xs uppercase tracking-wider">
+                <MapPin size={16} />
+                <span>{officerProfile?.municipality || 'Niphad'}, {officerProfile?.district || 'Nashik'} ({officerProfile?.state || 'Maharashtra'})</span>
+              </div>
+              <h2 className="text-xl md:text-2xl font-black text-slate-900 mt-1 tracking-tight">
+                🏛️ {translations[language]?.officerPortalTitle || 'Agricultural Officer Portal & Locality Distress Monitor'}
+              </h2>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              {/* Web & Mobile Tab Switcher */}
+              <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 gap-1 w-full md:w-auto">
+                <button
+                  onClick={() => setOfficerActiveView('roster')}
+                  className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs md:text-sm font-extrabold transition-all ${
+                    officerActiveView === 'roster'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                >
+                  <User size={16} /> 📋 Farmer Roster
+                </button>
+                <button
+                  onClick={() => setOfficerActiveView('map')}
+                  className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs md:text-sm font-extrabold transition-all ${
+                    officerActiveView === 'map'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                >
+                  <MapPin size={16} /> 🗺️ Locality Map
+                </button>
+              </div>
+
+              <button
+                onClick={fetchOfficerDashboardData}
+                className="w-full md:w-auto flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs md:text-sm font-extrabold px-4 py-2.5 rounded-2xl shadow-sm transition-all active:scale-95"
+              >
+                <RefreshCw size={16} /> Sync Data
+              </button>
+            </div>
+          </div>
+
+          {/* Critical Emergency Alert Banner */}
+          {criticalFarmers.length > 0 && (
+            <div className="bg-red-50 border-2 border-red-300 text-red-950 p-5 rounded-3xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="p-3 bg-red-600 rounded-2xl text-white mt-0.5 shadow-sm shrink-0">
+                  <AlertTriangle size={24} />
+                </div>
+                <div>
+                  <h3 className="text-base md:text-lg font-black text-red-900 tracking-tight">
+                    ⚠️ High Vulnerability Alert ({criticalFarmers.length} Farmers)
+                  </h3>
+                  <p className="text-xs md:text-sm text-red-800 mt-1 font-medium">
+                    Immediate extension visit & scheme allocation required for: <strong>{criticalFarmers.map(f => f.name).join(', ')}</strong>.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setOfficerRiskFilter('critical'); setOfficerActiveView('roster'); }}
+                className="w-full md:w-auto bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs md:text-sm px-4 py-3 rounded-2xl shadow-sm transition-all text-center whitespace-nowrap"
+              >
+                View Critical List →
+              </button>
+            </div>
+          )}
+
+          {/* 2 Summary KPI Cards (Consolidated & Readable) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            {/* Card 1: Locality Farmers & Risk Distribution */}
+            <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm space-y-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-xs font-extrabold uppercase text-slate-500 tracking-wider">Locality Summary</span>
+                  <h3 className="text-3xl font-black text-slate-900 mt-1">{localityFarmers.length} Farmers</h3>
+                </div>
+                <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-700 border border-indigo-100">
+                  <User size={24} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-slate-100">
+                <div className="bg-red-50 border border-red-200 p-2.5 rounded-2xl">
+                  <p className="text-xs font-bold text-red-700">Critical</p>
+                  <p className="text-lg font-black text-red-700 mt-0.5">{criticalFarmers.length}</p>
+                </div>
+                <div className="bg-amber-50 border border-amber-200 p-2.5 rounded-2xl">
+                  <p className="text-xs font-bold text-amber-700">Elevated</p>
+                  <p className="text-lg font-black text-amber-700 mt-0.5">{elevatedFarmers.length}</p>
+                </div>
+                <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-2xl">
+                  <p className="text-xs font-bold text-emerald-700">Stable</p>
+                  <p className="text-lg font-black text-emerald-700 mt-0.5">{stableFarmers.length}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Government Intervention & Action Status */}
+            <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm space-y-4 flex flex-col justify-between">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-xs font-extrabold uppercase text-slate-500 tracking-wider">Government Support</span>
+                  <h3 className="text-3xl font-black text-indigo-900 mt-1">{activeInterventions.length} Interventions</h3>
+                </div>
+                <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-700 border border-indigo-100">
+                  <Building2 size={24} />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs font-medium text-slate-600">
+                <span>Coverage: <strong>{localityFarmers.length > 0 ? Math.round(activeInterventions.length / localityFarmers.length * 100) : 0}%</strong> of farmers</span>
+                <span className="bg-indigo-100 text-indigo-900 px-3 py-1 rounded-full font-extrabold text-[11px]">Active Extension</span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Search & Filter Controls */}
+          <div className="bg-white border border-slate-200 p-4 rounded-3xl shadow-sm space-y-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search size={18} className="absolute left-3.5 top-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search farmer name or phone..."
+                  value={officerSearchQuery}
+                  onChange={(e) => setOfficerSearchQuery(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 pl-11 pr-4 py-3 rounded-2xl focus:outline-none focus:border-indigo-600 text-sm font-medium"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <select
+                  value={officerRiskFilter}
+                  onChange={(e) => setOfficerRiskFilter(e.target.value)}
+                  className="flex-1 sm:flex-none bg-slate-50 border border-slate-200 text-slate-800 px-3 py-3 rounded-2xl focus:outline-none text-xs md:text-sm font-bold"
+                >
+                  <option value="all">Risk: All</option>
+                  <option value="critical">Critical</option>
+                  <option value="elevated">Elevated</option>
+                  <option value="stable">Stable</option>
+                </select>
+
+                <select
+                  value={officerStatusFilter}
+                  onChange={(e) => setOfficerStatusFilter(e.target.value)}
+                  className="flex-1 sm:flex-none bg-slate-50 border border-slate-200 text-slate-800 px-3 py-3 rounded-2xl focus:outline-none text-xs md:text-sm font-bold"
+                >
+                  <option value="all">Status: All</option>
+                  <option value="pending">Pending</option>
+                  <option value="reviewed">Reviewed</option>
+                  <option value="contacted">Contacted</option>
+                  <option value="assistance provided">Assistance</option>
+                  <option value="resolved">Resolved</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Roster Tab vs Map Tab View */}
+          {officerActiveView === 'map' ? (
+            <div className="bg-white border border-slate-200 p-4 rounded-3xl shadow-sm space-y-3">
+              <div className="flex justify-between items-center px-1">
+                <h3 className="font-extrabold text-sm md:text-base text-slate-900 uppercase tracking-wider">
+                  🗺️ Locality Community Map
+                </h3>
+              </div>
+              <div className="h-96 rounded-2xl overflow-hidden border border-slate-200 shadow-inner">
+                <CommunityMap districts={localityMapPoints.map(p => ({
+                  district: p.district || 'Nashik',
+                  state: 'Maharashtra',
+                  avg_score: p.distress_score,
+                  risk_level: p.distress_level,
+                  farmer_count: 1,
+                  lat: p.latitude || 20.0,
+                  lon: p.longitude || 74.0
+                }))} />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex justify-between items-center px-2">
+                <h3 className="font-black text-base md:text-lg text-slate-900">
+                  Farmers in Locality ({filteredRoster.length})
+                </h3>
+              </div>
+
+              {filteredRoster.length === 0 ? (
+                <div className="bg-white border border-slate-200 p-12 text-center rounded-3xl text-slate-500 font-medium">
+                  <User size={40} className="mx-auto mb-2 text-slate-300" />
+                  No farmer records found matching criteria.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3">
+                  {filteredRoster.map((f: any) => {
+                    const levelLower = f.distress_level.toLowerCase();
+                    let badgeStyle = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+                    if (levelLower === 'critical') badgeStyle = 'bg-red-100 text-red-900 border-red-300 font-extrabold';
+                    else if (levelLower === 'elevated') badgeStyle = 'bg-amber-100 text-amber-900 border-amber-300';
+
+                    let statusStyle = 'bg-slate-100 text-slate-700 border-slate-200';
+                    if (f.intervention_status === 'Resolved') statusStyle = 'bg-emerald-100 text-emerald-900 border-emerald-300';
+                    else if (f.intervention_status === 'Assistance Provided') statusStyle = 'bg-indigo-100 text-indigo-900 border-indigo-300';
+                    else if (f.intervention_status === 'Contacted') statusStyle = 'bg-sky-100 text-sky-900 border-sky-300';
+
+                    return (
+                      <div
+                        key={f.farmer_id}
+                        className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+                      >
+                        <div className="space-y-2 flex-1">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <h4 className="text-lg font-black text-slate-900">{f.name}</h4>
+                            <span className={`px-3 py-1 rounded-full text-xs border ${badgeStyle}`}>
+                              Distress Score: {f.distress_score} · {f.distress_level}
+                            </span>
+                            {f.credit_score && (
+                              <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                                f.credit_status === 'APPROVED' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                                f.credit_status === 'MANUAL REVIEW' ? 'bg-amber-50 text-amber-800 border-amber-300' :
+                                'bg-red-50 text-red-800 border-red-200'
+                              }`}>
+                                💳 Credit: {f.credit_score}/900 · {f.credit_status}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-4 text-xs md:text-sm text-slate-600 flex-wrap font-medium">
+                            <span className="font-mono text-slate-800">📞 {f.phone}</span>
+                            <span>📍 {f.location_id}</span>
+                            <span>🌱 {f.total_acreage} Acres ({f.active_crops.length > 0 ? f.active_crops.join(', ') : 'No crops registered'})</span>
+                          </div>
+                        </div>
+
+                        <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-0 border-slate-100">
+                          <span className={`px-3 py-1.5 rounded-xl text-xs font-extrabold uppercase border ${statusStyle}`}>
+                            {f.intervention_status || 'Pending'}
+                          </span>
+                          <button
+                            onClick={() => handleOpenFarmerDetail(f.farmer_id)}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs md:text-sm px-4 py-2.5 rounded-2xl shadow-sm transition-all active:scale-95 whitespace-nowrap"
+                          >
+                            Inspect & Assist →
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+        </main>
+
+        {/* Mobile Sticky Navigation Bar */}
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-6 py-3.5 z-50 flex justify-around items-center text-white shadow-2xl">
+          <button
+            onClick={() => setOfficerActiveView('roster')}
+            className={`flex flex-col items-center gap-1 text-xs font-extrabold transition-all ${officerActiveView === 'roster' ? 'text-indigo-400 scale-105' : 'text-slate-400'}`}
+          >
+            <User size={22} />
+            <span>Farmers</span>
+          </button>
+          <button
+            onClick={() => setOfficerActiveView('map')}
+            className={`flex flex-col items-center gap-1 text-xs font-extrabold transition-all ${officerActiveView === 'map' ? 'text-indigo-400 scale-105' : 'text-slate-400'}`}
+          >
+            <MapPin size={22} />
+            <span>Locality Map</span>
+          </button>
+        </div>
+
+        {/* Farmer Inspection & Scheme Recommendation Sheet / Modal */}
+        {isFarmerDetailOpen && selectedFarmerDetail && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="bg-white border border-slate-200 max-w-2xl w-full max-h-[92vh] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden text-slate-900">
+              
+              {/* Header */}
+              <div className="bg-slate-900 text-white p-5 border-b border-slate-800 flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg md:text-xl font-black text-white">
+                    👨‍🌾 {selectedFarmerDetail.name}
+                  </h3>
+                  <p className="text-xs text-slate-300 font-medium">
+                    Phone: <span className="font-mono text-indigo-300">{selectedFarmerDetail.phone}</span> · Location: {selectedFarmerDetail.location_id || 'Niphad'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsFarmerDetailOpen(false)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-full transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Sub-tabs inside modal */}
+              <div className="flex border-b border-slate-200 bg-slate-50 px-4 pt-2 gap-2 text-xs font-extrabold">
+                <button
+                  onClick={() => setOfficerDetailTab('overview')}
+                  className={`px-4 py-2.5 rounded-t-xl border-b-2 transition-all ${
+                    officerDetailTab === 'overview'
+                      ? 'border-indigo-600 text-indigo-700 bg-white shadow-xs'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  📊 Distress & Profile
+                </button>
+                <button
+                  onClick={() => setOfficerDetailTab('action')}
+                  className={`px-4 py-2.5 rounded-t-xl border-b-2 transition-all ${
+                    officerDetailTab === 'action'
+                      ? 'border-indigo-600 text-indigo-700 bg-white shadow-xs'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  🏛️ Recommend Schemes & Actions
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-5 space-y-5 overflow-y-auto flex-1 text-xs md:text-sm bg-slate-50/50">
+
+                {officerDetailTab === 'overview' ? (
+                  <>
+                    {/* Distress Score Component breakdown */}
+                    {selectedFarmerDetail.distress_score && (
+                      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                        <div className="flex justify-between items-center">
+                          <h4 className="font-extrabold text-xs uppercase text-slate-700 tracking-wider">
+                            Distress Score: {selectedFarmerDetail.distress_score.score} / 100
+                          </h4>
+                          <span className="bg-red-100 text-red-900 border border-red-300 px-3 py-1 rounded-full text-xs font-bold">
+                            {selectedFarmerDetail.distress_score.risk_level} Risk
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-center">
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <p className="text-slate-500 text-[10px] uppercase font-bold">Weather Vulnerability</p>
+                            <p className="text-base font-black text-sky-700">{selectedFarmerDetail.distress_score.weather_component} / 100</p>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <p className="text-slate-500 text-[10px] uppercase font-bold">Market Price Risk</p>
+                            <p className="text-base font-black text-amber-700">{selectedFarmerDetail.distress_score.market_component} / 100</p>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <p className="text-slate-500 text-[10px] uppercase font-bold">Financial Debt Load</p>
+                            <p className="text-base font-black text-red-700">{selectedFarmerDetail.distress_score.financial_component} / 100</p>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <p className="text-slate-500 text-[10px] uppercase font-bold">Crop Failure Risk</p>
+                            <p className="text-base font-black text-emerald-700">{selectedFarmerDetail.distress_score.yield_component} / 100</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Farms & Registered Crops */}
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2">
+                      <h4 className="font-extrabold text-xs uppercase text-slate-700 tracking-wider">Registered Farms ({selectedFarmerDetail.farms?.length || 0})</h4>
+                      {selectedFarmerDetail.farms?.length > 0 ? (
+                        <div className="space-y-2">
+                          {selectedFarmerDetail.farms.map((f: any) => (
+                            <div key={f.id} className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-between items-center">
+                              <div>
+                                <p className="font-bold text-slate-900">{f.name || `Farm #${f.id}`}</p>
+                                <p className="text-slate-500 text-xs">{f.area} Acres · Soil: {f.soil_type}</p>
+                              </div>
+                              <span className="bg-indigo-50 text-indigo-800 border border-indigo-200 text-xs px-2.5 py-1 rounded-lg font-bold">
+                                {f.district || 'Nashik'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-slate-500 italic text-xs">No registered farms found in database.</p>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Scheme Recommendation Form */}
+                    <div className="bg-indigo-50/90 border-2 border-indigo-200 p-4 rounded-2xl space-y-3">
+                      <h4 className="font-black text-sm text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
+                        🏛️ Recommend Government Scheme / Loan
+                      </h4>
+
+                      <div>
+                        <label className="block text-indigo-900 text-xs font-extrabold uppercase mb-1">Select Scheme or Loan *</label>
+                        <select
+                          value={selectedSchemeId || ''}
+                          onChange={(e) => setSelectedSchemeId(Number(e.target.value) || null)}
+                          className="w-full bg-white border border-slate-300 text-slate-900 font-bold px-3 py-2.5 rounded-xl text-xs focus:outline-none focus:border-indigo-600"
+                        >
+                          <option value="">-- Pick Scheme / Relief Credit --</option>
+                          {officerSchemes.map((s: any) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name} ({s.support_type || 'Scheme'})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-indigo-900 text-xs font-extrabold uppercase mb-1">Recommendation Note</label>
+                        <textarea
+                          rows={2}
+                          placeholder="e.g. Approved for priority PM-KISAN relief & 4% interest subvention loan..."
+                          value={schemeRecommendNote}
+                          onChange={(e) => setSchemeRecommendNote(e.target.value)}
+                          className="w-full bg-white border border-slate-300 text-slate-900 px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-indigo-600 font-medium"
+                        />
+                      </div>
+
+                      <button
+                        onClick={() => handleRecommendScheme(selectedFarmerDetail.farmer_id)}
+                        disabled={!selectedSchemeId || isSavingScheme}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-extrabold py-3 rounded-xl shadow-xs transition-all text-xs"
+                      >
+                        {isSavingScheme ? 'Saving...' : '✉️ Issue Scheme Recommendation to Farmer'}
+                      </button>
+                    </div>
+
+                    {/* Previously Recommended Schemes for this Farmer */}
+                    {farmerRecommendedSchemes.length > 0 && (
+                      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2">
+                        <h4 className="font-extrabold text-xs uppercase text-slate-700 tracking-wider">Issued Recommendations ({farmerRecommendedSchemes.length})</h4>
+                        <div className="space-y-2">
+                          {farmerRecommendedSchemes.map((rec: any) => (
+                            <div key={rec.id} className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl text-xs text-emerald-950 space-y-1">
+                              <p className="font-bold text-emerald-900">✅ {rec.scheme_name}</p>
+                              {rec.notes && <p className="text-emerald-800 text-[11px] italic">"{rec.notes}"</p>}
+                              <p className="text-slate-400 text-[10px]">{new Date(rec.created_at).toLocaleDateString()}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Extension Intervention Status Form */}
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                      <h4 className="font-extrabold text-xs uppercase text-slate-800 tracking-wider">Update Locality Extension Status</h4>
+
+                      <div>
+                        <label className="block text-slate-700 text-xs font-bold uppercase mb-1">Status</label>
+                        <select
+                          value={interventionStatusInput}
+                          onChange={(e) => setInterventionStatusInput(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-300 text-slate-900 font-bold px-3 py-2.5 rounded-xl text-xs focus:outline-none"
+                        >
+                          <option value="Pending">Pending Review</option>
+                          <option value="Reviewed">Reviewed</option>
+                          <option value="Contacted">Contacted</option>
+                          <option value="Assistance Provided">Assistance Provided</option>
+                          <option value="Resolved">Resolved</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 text-xs font-bold uppercase mb-1">Officer Extension Notes</label>
+                        <textarea
+                          rows={2}
+                          placeholder="Type notes from field visit or officer consultation..."
+                          value={interventionNotesInput}
+                          onChange={(e) => setInterventionNotesInput(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-300 text-slate-900 px-3 py-2 rounded-xl text-xs focus:outline-none font-medium"
+                        />
+                      </div>
+
+                      <button
+                        onClick={() => handleSaveIntervention(selectedFarmerDetail.farmer_id)}
+                        disabled={isSavingIntervention}
+                        className="w-full bg-slate-900 hover:bg-slate-800 text-white font-extrabold py-3 rounded-xl shadow-xs transition-all text-xs"
+                      >
+                        {isSavingIntervention ? 'Saving...' : '💾 Save Extension Status'}
+                      </button>
+                    </div>
+                  </>
+                )}
+
+              </div>
+
+            </div>
+          </div>
+        )}
+
       </div>
     );
   }
@@ -3089,7 +5121,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
             onClick={() => setActiveTab('yield')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'yield' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
           >
-            <Calculator size={18} /> Yield Calculator
+            <Sprout size={18} /> Crop Advisor
           </button>
           <button 
             onClick={() => setActiveTab('financial')}
@@ -3102,12 +5134,6 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'support' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
           >
             <HelpCircle size={18} /> {t.navSupport}
-          </button>
-          <button 
-            onClick={() => setActiveTab('community')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'community' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
-          >
-            <span className="text-base">🗺️</span> Community Map
           </button>
         </nav>
 
@@ -3131,7 +5157,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           <div className="hidden md:block">
             {/* Breadcrumb or current tab name */}
             <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-              Dashboard / {activeTab === 'home' ? 'Home Summary' : activeTab === 'crop' ? 'My Crop' : activeTab === 'market' ? 'Market & Mandis' : activeTab === 'yield' ? 'Yield Calculator' : activeTab === 'financial' ? 'Financial Health' : activeTab === 'support' ? 'Schemes' : activeTab === 'community' ? 'Community Map' : activeTab.toUpperCase()}
+              Dashboard / {activeTab === 'home' ? 'Home Summary' : activeTab === 'crop' ? 'My Crop' : activeTab === 'market' ? 'Market & Mandis' : activeTab === 'yield' ? 'Crop Advisor' : activeTab === 'financial' ? 'Financial Health' : activeTab === 'support' ? 'Schemes' : activeTab === 'community' ? 'Community Map' : activeTab.toUpperCase()}
             </span>
           </div>
 
@@ -3200,6 +5226,18 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                 </div>
               )}
             </div>
+            {/* Profile Button in Header */}
+            <button
+              onClick={() => setActiveTab('profile')}
+              className={`p-2.5 rounded-xl transition-all flex items-center justify-center ${
+                activeTab === 'profile'
+                  ? 'bg-stable text-white shadow-xs'
+                  : 'bg-earth-50 text-slate-600 hover:bg-earth-100 hover:text-stable'
+              }`}
+              title="Farmer Profile & Settings"
+            >
+              <User size={20} />
+            </button>
           </div>
         </header>
 
@@ -3230,7 +5268,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           onClick={() => setActiveTab('yield')}
           className={`flex flex-col items-center text-[10px] font-bold ${activeTab === 'yield' ? 'text-stable' : 'text-slate-400'}`}
         >
-          <Calculator size={20} /> <span className="mt-1">Yield</span>
+          <Sprout size={20} /> <span className="mt-1">Advisor</span>
         </button>
         <button 
           onClick={() => setActiveTab('financial')}
@@ -3239,38 +5277,81 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           <PiggyBank size={20} /> <span className="mt-1">Finance</span>
         </button>
         <button 
-          onClick={() => setActiveTab('profile')}
-          className={`flex flex-col items-center text-[10px] font-bold ${activeTab === 'profile' ? 'text-stable' : 'text-slate-400'}`}
+          onClick={() => setActiveTab('support')}
+          className={`flex flex-col items-center text-[10px] font-bold ${activeTab === 'support' ? 'text-stable' : 'text-slate-400'}`}
         >
-          <User size={20} /> <span className="mt-1">Profile</span>
+          <HelpCircle size={20} /> <span className="mt-1">Support</span>
         </button>
       </nav>
 
 
       {/* ── Floating Mic Button — tap = instant voice record → AI answer → speak ── */}
-      <button
-        onClick={handleInstantMic}
-        title={
-          voiceState === 'idle' ? 'Tap to speak a question' :
-          voiceState === 'listening' ? 'Listening... tap to cancel' :
-          voiceState === 'thinking' ? 'Processing...' : 'Tap to stop'
-        }
-        className={`fixed bottom-20 right-6 md:bottom-8 md:right-8 text-white p-4 rounded-full shadow-xl transition-all z-50 border-2 border-white flex items-center justify-center
-          ${voiceState === 'listening' ? 'bg-high scale-110 animate-pulse' : ''}
-          ${voiceState === 'thinking' ? 'bg-elevated scale-105' : ''}
-          ${voiceState === 'speaking' ? 'bg-watch scale-110' : ''}
-          ${voiceState === 'idle' && !isVoicePlaying ? 'bg-stable hover:bg-stable-dark hover:scale-105' : ''}
-          ${isVoicePlaying && voiceState === 'idle' ? 'bg-watch animate-bounce' : ''}
-        `}
-        aria-label="Voice Assistant"
-      >
-        {voiceState === 'thinking' ? (
-          <svg className="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-          </svg>
-        ) : <Mic size={24} />}
-      </button>
+      {/* ── Floating Voice Assistant — Radio broadcast icon + mic icon ── */}
+      <div className="fixed bottom-16 md:bottom-6 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 bg-slate-900/95 text-white backdrop-blur-md px-3 py-2.5 rounded-full shadow-2xl border border-white/15 transition-all">
+
+        {/* Large Radio/Broadcast Button — explains current page */}
+        <button
+          onClick={handleVoicePlayback}
+          title="Broadcast page summary"
+          className={`flex items-center gap-2.5 text-xs md:text-sm font-extrabold bg-transparent border-none text-white cursor-pointer`}
+        >
+          <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-md ${
+            isVoicePlaying
+              ? 'bg-emerald-500 animate-pulse ring-2 ring-emerald-300'
+              : 'bg-stable hover:bg-stable-dark'
+          }`}>
+            {isVoicePlaying
+              ? <Volume2 size={22} className="text-white" />
+              : <Radio size={22} className="text-white" />}
+          </div>
+          <span className="whitespace-nowrap hidden sm:inline">
+            {isVoicePlaying ? 'Stop' : capitalize(activeTab === 'yield' ? 'Advisor' : activeTab === 'support' ? 'Support' : activeTab)}
+          </span>
+        </button>
+
+        {/* Divider */}
+        <span className="w-px h-6 bg-white/20" />
+
+        {/* Language Selector */}
+        <select
+          value={language}
+          onChange={(e) => setLanguage(e.target.value as any)}
+          className="bg-white/15 text-white text-xs font-black px-2 py-1 rounded-full border border-white/20 focus:outline-none cursor-pointer"
+        >
+          <option value="english" className="text-slate-900">EN</option>
+          <option value="hindi" className="text-slate-900">हिन्दी</option>
+          <option value="odia" className="text-slate-900">ଓଡ଼ିଆ</option>
+          <option value="marathi" className="text-slate-900">मराठी</option>
+          <option value="bengali" className="text-slate-900">বাংলা</option>
+        </select>
+
+        {/* Divider */}
+        <span className="w-px h-6 bg-white/20" />
+
+        {/* Mic Button — Ask Gemini by voice */}
+        <button
+          onClick={handleInstantMic}
+          title={voiceState === 'listening' ? 'Listening...' : voiceState === 'thinking' ? 'Thinking...' : 'Ask a question by voice'}
+          className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shrink-0 ${
+            voiceState === 'listening' ? 'bg-amber-500 animate-pulse ring-2 ring-amber-300' :
+            voiceState === 'thinking' ? 'bg-indigo-500 animate-spin' :
+            voiceState === 'speaking' ? 'bg-emerald-500 animate-pulse' :
+            'bg-white/15 hover:bg-white/30 text-amber-300'
+          }`}
+        >
+          <Mic size={18} />
+        </button>
+
+        {/* Chat / Text Q&A Button — Ask question by text */}
+        <button
+          onClick={() => setShowVoiceModal(true)}
+          title="Ask a question by text chat"
+          className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/30 text-white flex items-center justify-center transition-all shrink-0"
+        >
+          <MessageSquare size={18} />
+        </button>
+
+      </div>
 
       {/* Floating voice answer card — shows listening animation + answer */}
       {(voiceState !== 'idle' || voiceAnswerText) && (
@@ -3684,7 +5765,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                 </button>
                 <button onClick={async () => {
                   try {
-                    const res = await fetch('http://localhost:8000/api/v1/farmers/me/farms', {
+                    const res = await fetch(`${API_BASE}/api/v1/farmers/me/farms`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                       body: JSON.stringify({
@@ -3823,7 +5904,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                   const farmId = cropFarmId ?? selectedFarm?.id ?? farms[0]?.id;
                   if (!farmId) { toast.error("No farm selected", "Please add a farm first before registering a crop."); return; }
                   try {
-                    const res = await fetch(`http://localhost:8000/api/v1/farms/${farmId}/crops`, {
+                    const res = await fetch(`${API_BASE}/api/v1/farms/${farmId}/crops`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                       body: JSON.stringify({
@@ -3871,7 +5952,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in text-left">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-earth-200 shadow-xl space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h3 className="text-lg font-bold text-slate-900 my-0">Register Financial Obligation</h3>
+              <h3 className="text-lg font-bold text-slate-900 my-0">💳 Add New Payment</h3>
               <button 
                 onClick={() => setShowAddObligationModal(false)}
                 className="text-slate-400 hover:text-slate-600 font-bold text-sm"
@@ -3882,16 +5963,16 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
 
             <div className="space-y-3">
               <div>
-                <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Obligation Type</label>
+                <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Payment Category</label>
                 <select 
                   value={newObligationType} 
                   onChange={(e) => setNewObligationType(e.target.value)}
-                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
+                  className="w-full text-xs px-3.5 py-2.5 border border-earth-200 bg-earth-50 rounded-xl font-semibold text-slate-800"
                 >
-                  <option value="loan">{translateObligation(language, 'loan')}</option>
-                  <option value="lease">{translateObligation(language, 'lease')}</option>
-                  <option value="inputs">{translateObligation(language, 'inputs')}</option>
-                  <option value="other">{translateObligation(language, 'other')}</option>
+                  <option value="loan">🏦 Loan Payment</option>
+                  <option value="inputs">🌱 Input Payment (seeds, fertilizer, spraying)</option>
+                  <option value="lease">🚜 Rent / Lease Payment</option>
+                  <option value="other">📦 Other Farm Payment</option>
                 </select>
               </div>
 
@@ -3927,7 +6008,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
               <button 
                 onClick={async () => {
                   try {
-                    const res = await fetch('http://localhost:8000/api/v1/farmers/me/obligations', {
+                    const res = await fetch(`${API_BASE}/api/v1/farmers/me/obligations`, {
                       method: 'POST',
                       headers: { 
                         'Content-Type': 'application/json',
@@ -4045,7 +6126,7 @@ function OnboardingWizard({ onComplete, token }: OnboardingWizardProps) {
       const loc_id = `${block}_${district}`.replace(/\s+/g, '_');
       try {
         // 1. Update farmer location
-        await fetch('http://localhost:8000/api/v1/farmers/me', {
+        await fetch(`${API_BASE}/api/v1/farmers/me`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -4057,7 +6138,7 @@ function OnboardingWizard({ onComplete, token }: OnboardingWizardProps) {
         });
 
         // 2. Create farm
-        const farmRes = await fetch('http://localhost:8000/api/v1/farmers/me/farms', {
+        const farmRes = await fetch(`${API_BASE}/api/v1/farmers/me/farms`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -4075,7 +6156,7 @@ function OnboardingWizard({ onComplete, token }: OnboardingWizardProps) {
         if (farmRes.ok) {
           const farmData = await farmRes.json();
           // 3. Create crop
-          await fetch(`http://localhost:8000/api/v1/farms/${farmData.id}/crops`, {
+          await fetch(`${API_BASE}/api/v1/farms/${farmData.id}/crops`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

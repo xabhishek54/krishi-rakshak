@@ -1,5 +1,5 @@
 /**
- * Translation cache using MyMemory free API.
+ * Pure React translation engine using pre-compiled dictionaries & MyMemory API fallback.
  * Stores all translations in localStorage to avoid repeated API calls.
  * Cache key format: `kr_trans_${lang}_${text_hash}`
  */
@@ -80,4 +80,16 @@ export async function translateText(text: string, lang: string): Promise<string>
 export async function translateBatch(texts: string[], lang: string): Promise<string[]> {
   if (lang === 'english') return texts;
   return Promise.all(texts.map(t => translateText(t, lang)));
+}
+
+/**
+ * Clear any Google Translate cookies to ensure zero DOM mutation glitches.
+ */
+export function setGoogleTranslateLanguage(_lang: string): void {
+  try {
+    document.cookie = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    document.cookie = `googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname}`;
+  } catch {
+    // Ignore cookie errors
+  }
 }

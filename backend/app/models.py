@@ -171,6 +171,7 @@ class Advisory(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     farm_id = Column(Integer, ForeignKey("farms.id", ondelete="CASCADE"), nullable=False)
+    crop_name = Column(String, nullable=True) # Crop type (e.g. Tomato, Onion, Wheat)
     category = Column(String, nullable=False) # weather, irrigation, pests, etc.
     priority = Column(String, default="medium") # low, medium, high
     recommendation = Column(Text, nullable=False) # Localized message
@@ -219,3 +220,76 @@ class Scheme(Base):
     conditions = Column(Text, nullable=False) # JSON string representation of eligibility
     support_type = Column(String, nullable=False) # subsidy, compensation, loan_relief
     verification_url = Column(String, nullable=True)
+
+class AgroOfficer(Base):
+    __tablename__ = "agro_officers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    phone = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, nullable=True)
+    hashed_password = Column(String, nullable=False)
+    designation = Column(String, nullable=False) # e.g., Block Agricultural Officer, District Extension Officer
+    state = Column(String, nullable=False)       # e.g., Maharashtra
+    district = Column(String, nullable=False)    # e.g., Nashik
+    municipality = Column(String, nullable=False)# e.g., Niphad / Pimpalgaon
+    ward = Column(String, nullable=True)        # Optional ward
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # Relationships
+    interventions = relationship("OfficerIntervention", back_populates="officer", cascade="all, delete-orphan")
+    scheme_recommendations = relationship("OfficerSchemeRecommendation", back_populates="officer", cascade="all, delete-orphan")
+
+class OfficerIntervention(Base):
+    __tablename__ = "officer_interventions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    farmer_id = Column(Integer, ForeignKey("farmers.id", ondelete="CASCADE"), nullable=False)
+    officer_id = Column(Integer, ForeignKey("agro_officers.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String, default="Pending") # Pending | Reviewed | Contacted | Assistance Provided | Resolved
+    notes = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    # Relationships
+    officer = relationship("AgroOfficer", back_populates="interventions")
+    farmer = relationship("Farmer")
+
+
+class OfficerSchemeRecommendation(Base):
+    __tablename__ = "officer_scheme_recommendations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    farmer_id = Column(Integer, ForeignKey("farmers.id", ondelete="CASCADE"), nullable=False)
+    officer_id = Column(Integer, ForeignKey("agro_officers.id", ondelete="CASCADE"), nullable=False)
+    scheme_id = Column(Integer, ForeignKey("schemes.id", ondelete="CASCADE"), nullable=True)
+    scheme_name = Column(String, nullable=False)  # stored for display even if scheme deleted
+    scheme_type = Column(String, default="scheme")  # 'scheme' | 'loan'
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # Relationships
+    officer = relationship("AgroOfficer", back_populates="scheme_recommendations")
+    farmer = relationship("Farmer")
+
+
+class CreditAssessment(Base):
+    __tablename__ = "credit_assessments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    farmer_id = Column(Integer, ForeignKey("farmers.id", ondelete="CASCADE"), nullable=False)
+    loan_requested = Column(Float, nullable=False)
+    credit_score = Column(Integer, nullable=False)
+    repay_probability = Column(Float, nullable=False)
+    status = Column(String, nullable=False) # APPROVED | MANUAL REVIEW | REJECTED — HIGH RISK
+    approved_amount = Column(Float, nullable=False)
+    land_acres = Column(Float, default=1.0)
+    has_cold_storage = Column(Integer, default=0)
+    uses_precision_tech = Column(Integer, default=0)
+    sells_stubble = Column(Integer, default=0)
+    does_sorting = Column(Integer, default=0)
+    reason_codes = Column(Text, nullable=True) # JSON array of strings
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    farmer = relationship("Farmer")
+
+

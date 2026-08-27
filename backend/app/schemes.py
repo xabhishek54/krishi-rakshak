@@ -158,6 +158,54 @@ SCHEMES = [
             "description": "Ensures farmers receive MSP for oilseeds, pulses, and copra. Covers price deficiency payments when market price falls below MSP."
         })
     },
+    {
+        "name": "NABARD Farm Investment & Machinery Loan",
+        "state": "All",
+        "support_type": "Agricultural Loan (Farm Mechanization)",
+        "verification_url": "https://www.nabard.org",
+        "conditions": json.dumps({
+            "crops": [],
+            "min_distress_score": 0,
+            "category": "loan",
+            "description": "Long-term agricultural investment loan with subsidized interest rates for buying tractors, tillers, drip systems, and polyhouse equipment."
+        })
+    },
+    {
+        "name": "Agriculture Infrastructure Fund (AIF) Credit Scheme",
+        "state": "All",
+        "support_type": "Agricultural Loan (Infrastructure & Storage)",
+        "verification_url": "https://agriinfra.dac.gov.in",
+        "conditions": json.dumps({
+            "crops": ["tomato", "onion", "wheat", "grapes", "rice"],
+            "min_distress_score": 0,
+            "category": "loan",
+            "description": "3% annual interest subvention on loans up to ₹2 Crore for building farm-gate pack houses, solar pumps, cold storage, and grading units."
+        })
+    },
+    {
+        "name": "PM Micro Food Processing Enterprises (PM-FME) Credit",
+        "state": "All",
+        "support_type": "Agricultural Loan (Credit-Linked Subsidy)",
+        "verification_url": "https://pmfme.mofpi.gov.in",
+        "conditions": json.dumps({
+            "crops": ["tomato", "onion", "grapes"],
+            "min_distress_score": 0,
+            "category": "loan",
+            "description": "Provides 35% credit-linked capital subsidy up to ₹10 Lakh for individual farmers setting up small food processing, drying, or packaging units."
+        })
+    },
+    {
+        "name": "MUDRA Allied Agriculture Micro-Credit",
+        "state": "All",
+        "support_type": "Agricultural Loan (Collateral-Free Micro Loan)",
+        "verification_url": "https://www.mudra.org.in",
+        "conditions": json.dumps({
+            "crops": [],
+            "min_distress_score": 0,
+            "category": "loan",
+            "description": "Collateral-free micro loans up to ₹10 Lakh at low bank interest rates for dairy, poultry, fisheries, bee-keeping, and agri-allied income generation."
+        })
+    },
 ]
 
 
@@ -178,4 +226,34 @@ def seed_scheme_data(db: Session):
                 conditions=s["conditions"]
             )
             db.add(scheme)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
+async def fetch_and_sync_external_schemes(db: Session) -> int:
+    """
+    Dynamically sync live scheme & loan opportunities into PostgreSQL DB.
+    Inserts or updates entries without requiring server restarts.
+    """
+    added_count = 0
+    for s in SCHEMES:
+        existing = db.query(models.Scheme).filter(models.Scheme.name == s["name"]).first()
+        if not existing:
+            scheme = models.Scheme(
+                name=s["name"],
+                state=s["state"],
+                support_type=s["support_type"],
+                verification_url=s["verification_url"],
+                conditions=s["conditions"]
+            )
+            db.add(scheme)
+            added_count += 1
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    return added_count

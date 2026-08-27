@@ -54,3 +54,24 @@ def get_current_farmer(token: str = Depends(oauth2_scheme), db: Session = Depend
     if farmer is None:
         raise credentials_exception
     return farmer
+
+def get_current_officer(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> models.AgroOfficer:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate officer credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        phone: str = payload.get("sub")
+        role: str = payload.get("role", "farmer")
+        if phone is None or role != "officer":
+            raise credentials_exception
+    except Exception:
+        raise credentials_exception
+    
+    officer = db.query(models.AgroOfficer).filter(models.AgroOfficer.phone == phone).first()
+    if officer is None:
+        raise credentials_exception
+    return officer
+

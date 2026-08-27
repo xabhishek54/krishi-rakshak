@@ -59,3 +59,27 @@
   height: 100%;
   border-radius: 0.75rem;
 }
+
+/* Complete Google Translate Banner & Frame Suppression */
+body {
+  top: 0px !important;
+  position: static !important;
+}
+iframe.goog-te-banner-frame,
+.goog-te-banner-frame,
+.goog-te-banner,
+#goog-gt-tt,
+.goog-te-balloon-frame,
+.goog-tooltip,
+.goog-te-spinner-pos {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  height: 0 !important;
+  width: 0 !important;
+  pointer-events: none !important;
+}
+.goog-text-highlight {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}

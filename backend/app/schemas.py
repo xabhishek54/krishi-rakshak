@@ -124,6 +124,7 @@ class DistressScoreResponse(BaseModel):
 class AdvisoryResponse(BaseModel):
     id: int
     farm_id: int
+    crop_name: Optional[str] = None
     category: str
     priority: str
     recommendation: str
@@ -172,6 +173,9 @@ class SchemeResponse(BaseModel):
     verification_url: Optional[str]
     relevance_score: float = 0.0      # 0-100, higher = more relevant to this farmer
     is_recommended: bool = False      # True if top-ranked by distress+crop context
+    category: str = "scheme"          # "scheme" or "loan"
+    why_recommended: Optional[str] = None
+    benefit_summary: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -245,4 +249,141 @@ class DistressScoreResponse(BaseModel):
         from_attributes = True
 
 
+# Agro Officer Schemas
+class AgroOfficerCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    phone: str = Field(..., pattern=r"^\+?[1-9]\d{1,14}$")
+    email: Optional[str] = None
+    password: str = Field(..., min_length=6)
+    designation: str = Field(..., min_length=2)
+    state: str
+    district: str
+    municipality: str
+    ward: Optional[str] = None
 
+class AgroOfficerResponse(BaseModel):
+    id: int
+    name: str
+    phone: str
+    email: Optional[str] = None
+    designation: str
+    state: str
+    district: str
+    municipality: str
+    ward: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class OfficerInterventionUpdate(BaseModel):
+    status: str = Field(..., pattern="^(Pending|Reviewed|Contacted|Assistance Provided|Resolved)$")
+    notes: Optional[str] = None
+
+class OfficerInterventionResponse(BaseModel):
+    id: int
+    farmer_id: int
+    officer_id: int
+    status: str
+    notes: Optional[str] = None
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class CreditAssessmentRequest(BaseModel):
+    loan_requested: float
+    has_cold_storage: int = 0
+    uses_precision_tech: int = 0
+    sells_stubble: int = 0
+    does_sorting: int = 0
+
+
+class CreditAssessmentResponse(BaseModel):
+    id: Optional[int] = None
+    farmer_id: int
+    score_label: str = "Credit Score"
+    credit_score: int
+    repay_probability: float
+    status: str
+    loan_requested: float
+    approved_amount: float
+    land_acres: float
+    has_cold_storage: int
+    uses_precision_tech: int
+    sells_stubble: int
+    does_sorting: int
+    reason_codes: List[str] = []
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class OfficerLocalityFarmerSummary(BaseModel):
+    farmer_id: int
+    name: str
+    phone: str
+    language: str
+    location_id: Optional[str] = None
+    distress_score: float
+    distress_level: str # Stable, Watch, Elevated, High, Critical
+    farms_count: int
+    total_acreage: float
+    active_crops: List[str]
+    total_debt: float
+    credit_score: Optional[int] = None
+    credit_status: Optional[str] = None
+    approved_loan_amount: Optional[float] = None
+    intervention_status: str # Pending | Reviewed | Contacted | Assistance Provided | Resolved
+    intervention_notes: Optional[str] = None
+    last_updated: Optional[str] = None
+
+class OfficerFarmerDetailResponse(BaseModel):
+    farmer_id: int
+    name: str
+    phone: str
+    language: str
+    location_id: Optional[str] = None
+    distress_score: Optional[DistressScoreResponse] = None
+    farms: List[FarmResponse] = []
+    financial_obligations: List[FinancialObligationResponse] = []
+    alerts: List[AlertResponse] = []
+    advisories: List[AdvisoryResponse] = []
+    intervention: Optional[OfficerInterventionResponse] = None
+    latest_credit: Optional[CreditAssessmentResponse] = None
+
+class LocalityMapPoint(BaseModel):
+    farm_id: int
+    farm_name: str
+    farmer_id: int
+    farmer_name: str
+    farmer_phone: str
+    latitude: float
+    longitude: float
+    district: str
+    distress_score: float
+    distress_level: str
+    crop_type: Optional[str] = None
+    acreage: float
+
+
+class OfficerSchemeRecommendCreate(BaseModel):
+    scheme_id: Optional[int] = None
+    scheme_name: str
+    scheme_type: str = "scheme"   # 'scheme' | 'loan'
+    notes: Optional[str] = None
+
+
+class OfficerSchemeRecommendResponse(BaseModel):
+    id: int
+    farmer_id: int
+    officer_id: int
+    scheme_id: Optional[int] = None
+    scheme_name: str
+    scheme_type: str
+    notes: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

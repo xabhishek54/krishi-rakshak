@@ -1,24 +1,16 @@
 """
-Live Agmarknet price fetcher using data.gov.in API.
-Falls back to seeded DB data if the API is unavailable or quota is exceeded.
-
-API reference: https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070
+Offline Mandi price dataset reader. Loads data directly from backend/app/data/mandi_prices.csv
+(sourced from data.gov.in format). Zero external API calls, zero rate-limits.
 """
 import os
+import csv
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime
 from typing import Optional
-
-import httpx
 
 logger = logging.getLogger(__name__)
 
-# data.gov.in API key — set via env var or fallback to hardcoded key
-DATA_GOV_API_KEY = os.getenv("DATA_GOV_API_KEY", "579b464db66ec23bdd000001c5dbc8cb04004c3a7dbfdbe429d6a773")
-
-# Resource ID for Agmarknet daily arrivals & prices
-AGMARKNET_RESOURCE = "9ef84268-d588-465a-a308-a864a43d0070"
-BASE_URL = "https://api.data.gov.in/resource"
+CSV_PATH = os.path.join(os.path.dirname(__file__), "data", "mandi_prices.csv")
 
 
 def fetch_agmarknet_prices(
@@ -27,69 +19,57 @@ def fetch_agmarknet_prices(
     days: int = 7,
 ) -> list[dict]:
     """
-    Fetch recent commodity prices from Agmarknet via data.gov.in.
-
-    Args:
-        commodity: e.g. "Tomato", "Onion", "Wheat"
-        state: optional state filter e.g. "Maharashtra"
-        days: how many days back to fetch
-
-    Returns:
-        List of dicts with keys: arrival_date, market, state, min_price, max_price, modal_price
+    Fetch recent commodity prices directly from the offline CSV dataset (data.gov.in format).
     """
-    from_date = (date.today() - timedelta(days=days)).strftime("%d/%m/%Y")
+    if not os.path.exists(CSV_PATH):
+        logger.warning(f"Mandi CSV dataset not found at {CSV_PATH}")
+        return []
 
-    params = {
-        "api-key": DATA_GOV_API_KEY,
-        "format": "json",
-        "limit": 100,
-        "filters[Commodity]": commodity,
-    }
-    if state:
-        params["filters[State]"] = state
+    commodity_lower = commodity.lower().strip()
+    state_lower = state.lower().strip() if state else None
 
+    result = []
     try:
-        with httpx.Client(timeout=15.0) as client:
-            resp = client.get(f"{BASE_URL}/{AGMARKNET_RESOURCE}", params=params)
-            resp.raise_for_status()
-            data = resp.json()
+        with open(CSV_PATH, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                c_name = row.get("Commodity", "").lower().strip()
+                s_name = row.get("State", "").lower().strip()
 
-        records = data.get("records", [])
-        result = []
-        for r in records:
-            try:
-                result.append({
-                    "arrival_date": r.get("Arrival_Date", ""),
-                    "market": r.get("Market", ""),
-                    "state": r.get("State", ""),
-                    "district": r.get("District", ""),
-                    "min_price": float(r.get("Min_x0020_Price", 0) or 0),
-                    "max_price": float(r.get("Max_x0020_Price", 0) or 0),
-                    "modal_price": float(r.get("Modal_x0020_Price", 0) or 0),
-                })
-            except (ValueError, TypeError):
-                continue
+                # Match commodity & state if provided
+                if not commodity_lower or commodity_lower in c_name or c_name in commodity_lower:
+                    if state_lower and state_lower not in s_name:
+                        continue
 
-        logger.info(f"Agmarknet: fetched {len(result)} records for {commodity}")
+                    try:
+                        result.append({
+                            "arrival_date": row.get("Arrival_Date", ""),
+                            "market": row.get("Market", ""),
+                            "state": row.get("State", ""),
+                            "district": row.get("District", ""),
+                            "commodity": row.get("Commodity", ""),
+                            "variety": row.get("Variety", "Local"),
+                            "min_price": float(row.get("Min_Price", 0) or 0),
+                            "max_price": float(row.get("Max_Price", 0) or 0),
+                            "modal_price": float(row.get("Modal_Price", 0) or 0),
+                            "arrivals": float(row.get("Arrivals_Qtl", 0) or 0),
+                        })
+                    except (ValueError, TypeError):
+                        continue
+
+        logger.info(f"Mandi CSV: loaded {len(result)} records for commodity='{commodity}'")
         return result
 
-    except httpx.HTTPStatusError as e:
-        logger.error(f"Agmarknet API HTTP error for {commodity}: {e.response.status_code} - {e.response.text}")
-        return []
-    except httpx.ConnectError as e:
-        logger.error(f"Agmarknet API connection failed for {commodity}: {e}")
-        return []
     except Exception as e:
-        logger.error(f"Agmarknet API unexpected error for {commodity}: {e}")
+        logger.error(f"Error reading Mandi CSV dataset: {e}")
         return []
 
 
 def get_latest_modal_price(commodity: str, state: Optional[str] = None) -> Optional[float]:
-    """Get the most recent modal price for a commodity from Agmarknet."""
+    """Get the most recent modal price for a commodity from offline CSV dataset."""
     records = fetch_agmarknet_prices(commodity, state=state, days=3)
     if not records:
         return None
-    # Sort by date descending, take first non-zero modal price
     records_sorted = sorted(records, key=lambda x: x["arrival_date"], reverse=True)
     for r in records_sorted:
         if r["modal_price"] > 0:
@@ -97,12 +77,11 @@ def get_latest_modal_price(commodity: str, state: Optional[str] = None) -> Optio
     return None
 
 
-# Map our internal crop_type names to Agmarknet commodity names
 CROP_TO_AGMARKNET: dict[str, str] = {
     "tomato": "Tomato",
     "onion": "Onion",
     "wheat": "Wheat",
-    "rice": "Paddy(Dpr)",
+    "rice": "Rice",
     "potato": "Potato",
     "cotton": "Cotton",
     "maize": "Maize",
@@ -121,99 +100,74 @@ def agmarknet_commodity_name(crop_type: str) -> str:
     return CROP_TO_AGMARKNET.get(crop_type.lower(), crop_type.capitalize())
 
 
-# Top crops to pre-fetch at startup (Phase 19)
-TOP_CROPS = ["tomato", "onion", "wheat", "potato", "maize"]
+TOP_CROPS = ["tomato", "onion", "wheat", "potato", "maize", "rice", "soybean", "cotton"]
 
 
 async def background_fetch_and_store(db_session_factory) -> int:
     """
-    Async background task: fetch live prices for TOP_CROPS from Agmarknet
-    and upsert into the market_prices table.
-
-    Returns: number of new records stored.
-    Called at startup and by POST /api/v1/market/refresh-live-prices.
+    Load data.gov.in Mandi dataset from CSV and sync into market_prices DB table.
     """
-    import asyncio
     from datetime import datetime as dt
+    from app import models
 
     stored = 0
     db = db_session_factory()
 
     try:
-        # Delay startup fetch to allow API server to warm up
-        await asyncio.sleep(60) 
-        
-        for crop_type in TOP_CROPS:
-            commodity = agmarknet_commodity_name(crop_type)
-            # Run blocking HTTP call in threadpool
-            records = await asyncio.to_thread(
-                fetch_agmarknet_prices, commodity, days=3
-            )
-            # Throttle to prevent connection pool exhaustion
-            await asyncio.sleep(5) 
-            
-            if not records:
-                logger.info(f"[Phase19] No Agmarknet data for {commodity} — skip")
+        records = fetch_agmarknet_prices("", days=30)
+        mandis = db.query(models.Mandi).all()
+        mandi_map = {m.name.lower(): m for m in mandis}
+
+        for r in records:
+            if r["modal_price"] <= 0:
                 continue
 
-            # Find matching mandis in our DB
-            from app import models
-            mandis = db.query(models.Mandi).all()
-            mandi_map = {m.name.lower(): m for m in mandis}
+            market_lower = r["market"].lower()
+            mandi = None
+            for name, m in mandi_map.items():
+                if name in market_lower or market_lower in name:
+                    mandi = m
+                    break
 
-            new_count = 0
-            for r in records:
-                if r["modal_price"] <= 0:
-                    continue
-                # Try to match to a known mandi
-                market_lower = r["market"].lower()
-                mandi = None
-                for name, m in mandi_map.items():
-                    if any(part in market_lower for part in name.split()):
-                        mandi = m
-                        break
+            if not mandi:
+                continue
 
-                if not mandi:
-                    # Use first mandi as fallback
-                    mandi = mandis[0] if mandis else None
+            try:
+                date_val = dt.strptime(r["arrival_date"], "%Y-%m-%d").date()
+            except ValueError:
+                date_val = dt.utcnow().date()
 
-                if not mandi:
-                    continue
+            crop_name = r["commodity"].lower()
 
-                # Check if we already have a recent record
-                today_date = dt.utcnow().date()
-                existing = db.query(models.MarketPrice).filter(
-                    models.MarketPrice.mandi_id == mandi.id,
-                    models.MarketPrice.crop == crop_type,
-                    models.MarketPrice.date == today_date,
-                ).first()
+            existing = db.query(models.MarketPrice).filter(
+                models.MarketPrice.mandi_id == mandi.id,
+                models.MarketPrice.crop == crop_name,
+                models.MarketPrice.date == date_val,
+            ).first()
 
-                if existing:
-                    # Update existing record with live prices
-                    existing.modal_price = r["modal_price"]
-                    existing.min_price = r["min_price"]
-                    existing.max_price = r["max_price"]
-                    existing.source = "agmarknet_live"
-                else:
-                    mp = models.MarketPrice(
-                        mandi_id=mandi.id,
-                        crop=crop_type,
-                        date=today_date,
-                        modal_price=r["modal_price"],
-                        min_price=r["min_price"],
-                        max_price=r["max_price"],
-                        arrivals=0,
-                        source="agmarknet_live",
-                    )
-                    db.add(mp)
-                    new_count += 1
+            if existing:
+                existing.modal_price = r["modal_price"]
+                existing.min_price = r["min_price"]
+                existing.max_price = r["max_price"]
+                existing.source = "data_gov_in_csv"
+            else:
+                mp = models.MarketPrice(
+                    mandi_id=mandi.id,
+                    crop=crop_name,
+                    date=date_val,
+                    modal_price=r["modal_price"],
+                    min_price=r["min_price"],
+                    max_price=r["max_price"],
+                    arrivals=r.get("arrivals", 0),
+                    source="data_gov_in_csv",
+                )
+                db.add(mp)
+                stored += 1
 
-            db.commit()
-            stored += new_count
-            logger.info(f"[Phase19] Stored {new_count} live prices for {commodity}")
-
+        db.commit()
+        logger.info(f"Loaded {stored} records into DB from Mandi CSV dataset.")
     except Exception as e:
-        logger.error(f"[Phase19] background_fetch_and_store error: {e}")
+        logger.error(f"Failed to sync Mandi CSV into DB: {e}")
         db.rollback()
     finally:
         db.close()

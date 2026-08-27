@@ -49,7 +49,10 @@ backend/krishirakshak.db-journal
 # IDE / System files
 .vscode/
 .idea/
+.claude/
 .DS_Store
 Thumbs.db
 *.swp
 *.swo
+*.log
+*.ipynb
