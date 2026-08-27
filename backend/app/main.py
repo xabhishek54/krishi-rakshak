@@ -56,37 +56,42 @@ app = FastAPI(
 
 @app.on_event("startup")
 def startup_event():
-    db = next(get_db())
-    # Auto-apply any missing schema columns before anything else
-    try:
-        run_migrations(db)
-    except Exception as e:
-        print("Migration failed:", e)
-    try:
-        seed_mandi_data(db)
-    except Exception as e:
-        print("Mandi seeding failed:", e)
-    try:
-        seed_scheme_data(db)
-    except Exception as e:
-        print("Scheme seeding failed:", e)
-
-    # Auto-seed rich demo farmer if they don't exist or have fewer than 5 farms
-    try:
-        from seed_demo import seed_farmer_data, DEMO_PHONE
-        farmer = db.query(models.Farmer).filter(models.Farmer.phone.in_([DEMO_PHONE, "9876543210"])).first()
-        if not farmer or db.query(models.Farm).filter(models.Farm.farmer_id == farmer.id).count() < 5:
-            print("[startup] Auto-seeding rich demo farmer environment...")
-            seed_farmer_data(db)
-    except Exception as e:
-        print("Auto-seeding demo farmer failed:", e)
-
     # Warm up the yield ML model so the first user request is instant
     try:
         predict_yield_deviation("tomato", "loam", "drip", 0.0, 0.0)
         print("[startup] Yield model warm-up complete.")
     except Exception as e:
         print(f"[startup] Yield model warm-up failed (non-critical): {e}")
+
+    # Offload heavy DB migrations & seeding to background thread so Uvicorn binds port instantly!
+    import threading
+    def _bg_database_init():
+        db = SessionLocal()
+        try:
+            try:
+                run_migrations(db)
+            except Exception as e:
+                print("Migration failed:", e)
+            try:
+                seed_mandi_data(db)
+            except Exception as e:
+                print("Mandi seeding failed:", e)
+            try:
+                seed_scheme_data(db)
+            except Exception as e:
+                print("Scheme seeding failed:", e)
+            try:
+                from seed_demo import seed_farmer_data, DEMO_PHONE
+                farmer = db.query(models.Farmer).filter(models.Farmer.phone.in_([DEMO_PHONE, "9876543210"])).first()
+                if not farmer or db.query(models.Farm).filter(models.Farm.farmer_id == farmer.id).count() < 5:
+                    print("[startup] Auto-seeding rich demo farmer environment...")
+                    seed_farmer_data(db)
+            except Exception as e:
+                print("Auto-seeding demo farmer failed:", e)
+        finally:
+            db.close()
+
+    threading.Thread(target=_bg_database_init, daemon=True).start()
 
     # Phase 19: Launch Agmarknet background price fetch (non-blocking)
     async def _agmarknet_bg():
