@@ -7,7 +7,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 # This prevents uvicorn --reload from watching it and triggering an infinite
 # restart loop every time the database is written (seeding, background tasks, etc.)
 _DEFAULT_DB_PATH = pathlib.Path(__file__).resolve().parents[2] / "krishirakshak.db"
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{_DEFAULT_DB_PATH}")
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{_DEFAULT_DB_PATH}").strip()
 
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(
