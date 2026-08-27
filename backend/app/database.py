@@ -18,14 +18,14 @@ else:
     if DATABASE_URL.startswith("postgres://"):
         DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
     
-    # Auto-fix unencoded '@' in password if present: postgresql://user:password@host:port/db
+    # Safe password encoding (prevents double-encoding if %40 is already used): postgresql://user:password@host:port/db
     import re
-    from urllib.parse import quote_plus
+    from urllib.parse import quote_plus, unquote
     pattern = r"^(postgresql(?:\+[^:]+)?://)([^:]+):(.+)@([^@]+:\d+/[^?]+)(.*)$"
     match = re.match(pattern, DATABASE_URL)
     if match:
         prefix, user, password, host_and_db, query = match.groups()
-        encoded_pass = quote_plus(password)
+        encoded_pass = quote_plus(unquote(password))
         DATABASE_URL = f"{prefix}{user}:{encoded_pass}@{host_and_db}{query}"
 
     engine = create_engine(
