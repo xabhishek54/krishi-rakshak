@@ -42,8 +42,11 @@ def _cache_invalidate_prefix(prefix: str):
     for k in to_del:
         del _cache[k]
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+# Create database tables safely
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"[Database] Warning: Could not create tables on startup: {e}")
 
 app = FastAPI(
     title="KrishiRakshak API",
