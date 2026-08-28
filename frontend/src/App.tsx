@@ -218,6 +218,8 @@ function App() {
   const [isAuthenticating, setIsAuthenticating] = useState<boolean>(false);
   const [isRegisteringSubmit, setIsRegisteringSubmit] = useState<boolean>(false);
   const [isAuthInitialLoading, setIsAuthInitialLoading] = useState<boolean>(false);
+  // Background refresh indicator (subtle, non-blocking)
+  const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState<boolean>(false);
 
   // Backend Health Status State
   const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
@@ -339,9 +341,17 @@ function App() {
           localStorage.setItem('hasFarm', 'true');
           setHasFarm(true);
 
-          const cropRes = await fetch(`${API_BASE}/api/v1/farms/${currentFarm.id}/crops`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
+          // ✅ FAST SIGN-IN: dismiss loading gate immediately once we know farms exist.
+          // Dashboard shows from localStorage cache while fresh data loads in background.
+          setIsAuthInitialLoading(false);
+
+          // Background: fetch crops + all farm crops in parallel (non-blocking)
+          setIsBackgroundRefreshing(true);
+          const [cropRes] = await Promise.all([
+            fetch(`${API_BASE}/api/v1/farms/${currentFarm.id}/crops`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            }),
+          ]);
           if (cropRes.ok) {
             const cropData = await cropRes.json();
             setCrops(cropData);
@@ -374,7 +384,10 @@ function App() {
           setAllCrops([]);
           setSelectedFarm(null);
           setSelectedCrop(null);
+          setIsAuthInitialLoading(false);
         }
+      } else {
+        setIsAuthInitialLoading(false);
       }
     } catch (e) {
       console.warn("Offline fetch fallback for farms/crops", e);
@@ -385,8 +398,9 @@ function App() {
       setAllCrops([mockCrop]);
       setSelectedFarm(mockFarm);
       setSelectedCrop(mockCrop);
-    } finally {
       setIsAuthInitialLoading(false);
+    } finally {
+      setIsBackgroundRefreshing(false);
     }
   };
 
@@ -529,21 +543,18 @@ function App() {
     setLoadingWeather(false);
   };
 
-  // Fetch Advisories and Alerts
+  // Fetch Advisories and Alerts — parallel fetch for speed
   const fetchAdvisoriesAndAlerts = async () => {
     try {
-      const advRes = await fetch(`${API_BASE}/api/v1/advisories`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const [advRes, alertRes] = await Promise.all([
+        fetch(`${API_BASE}/api/v1/advisories`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API_BASE}/api/v1/alerts`, { headers: { 'Authorization': `Bearer ${token}` } }),
+      ]);
       if (advRes.ok) {
         const data = await advRes.json();
         setAdvisories(data);
         try { localStorage.setItem('kr_cached_advisories', JSON.stringify(data)); } catch {}
       }
-      
-      const alertRes = await fetch(`${API_BASE}/api/v1/alerts`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
       if (alertRes.ok) {
         const data = await alertRes.json();
         setAlerts(data);
@@ -5398,11 +5409,11 @@ function App() {
             {token && (
               <button
                 onClick={forceSyncAll}
-                disabled={isSyncing}
+                disabled={isSyncing || isBackgroundRefreshing}
                 title={lastSyncTime ? `Last synced ${lastSyncTime} · Click to refresh` : 'Sync all data'}
-                className={`p-1.5 sm:p-2.5 rounded-xl bg-earth-50 text-slate-500 hover:bg-earth-100 hover:text-stable transition-all flex items-center justify-center ${isSyncing ? 'opacity-60 cursor-not-allowed' : ''}`}
+                className={`p-1.5 sm:p-2.5 rounded-xl bg-earth-50 text-slate-500 hover:bg-earth-100 hover:text-stable transition-all flex items-center justify-center ${(isSyncing || isBackgroundRefreshing) ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
-                <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
+                <RefreshCw size={16} className={(isSyncing || isBackgroundRefreshing) ? 'animate-spin' : ''} />
               </button>
             )}
 
