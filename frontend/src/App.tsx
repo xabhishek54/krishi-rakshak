@@ -1444,7 +1444,7 @@ function App() {
                     ⛅ <T lang={language}>Weather Ready</T>
                   </span>
                   <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-                    💰 <T lang={language}>Mandi Price</T>: ₹{mandiPrices[0]?.modal_price || '2,290'}/q
+                    💰 <T lang={language}>Mandi Price</T>: ₹{formatInteger(mandiPrices[0]?.sticker_price ?? mandiPrices[0]?.modal_price ?? mandiPrices[0]?.net_return ?? 2620, language)}/q
                   </span>
                   <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-stable-light text-stable-dark border border-stable/20">
                     ⚡ {advisories.filter(a => !completedAdvisoryIds.includes(a.id)).length} <T lang={language}>Actions Pending</T>
@@ -1457,7 +1457,27 @@ function App() {
                   const activeCount = advisories.filter(a => !completedAdvisoryIds.includes(a.id)).length;
                   const weatherText = (weather?.observation?.rainfall ?? 0) > 10 ? "heavy rain expected today" : "weather is clear for fieldwork";
                   const riskText = distressData?.score >= 50 ? "some risk factors require attention" : "your farms are in healthy condition overall";
-                  const mandiNote = mandiPrices.length > 0 ? `Mandi rate for ${selectedCrop ? selectedCrop.crop_type : 'crop'} is ₹${mandiPrices[0].modal_price}/q.` : "Mandi prices are stable today.";
+                  
+                  const topMandi = mandiPrices[0];
+                  const topPrice = topMandi ? (topMandi.sticker_price ?? topMandi.modal_price ?? topMandi.net_return ?? topMandi.price ?? 2620) : 2620;
+                  const cropName = selectedCrop ? capitalize(selectedCrop.crop_type) : 'Tomato';
+                  const mandiName = topMandi?.mandi_name || 'Lasalgaon APMC';
+
+                  let mandiNote = `Mandi rate for ${cropName} is ₹${formatInteger(topPrice, language)}/q at ${mandiName}.`;
+
+                  if (priceHistoryData && priceHistoryData.length >= 2) {
+                    const pLatest = priceHistoryData[0]?.modal_price ?? priceHistoryData[0]?.price ?? topPrice;
+                    const pPrev = priceHistoryData[Math.min(6, priceHistoryData.length - 1)]?.modal_price ?? priceHistoryData[Math.min(6, priceHistoryData.length - 1)]?.price;
+                    if (pLatest && pPrev && pPrev > 0) {
+                      const diff = pLatest - pPrev;
+                      const pct = ((diff / pPrev) * 100).toFixed(1);
+                      if (diff > 10) {
+                        mandiNote = `${cropName} rates increased by ₹${Math.round(diff)}/q (+${pct}%) to ₹${formatInteger(pLatest, language)}/q at ${mandiName}.`;
+                      } else if (diff < -10) {
+                        mandiNote = `${cropName} rates dropped by ₹${Math.abs(Math.round(diff))}/q (${pct}%) to ₹${formatInteger(pLatest, language)}/q at ${mandiName}.`;
+                      }
+                    }
+                  }
                   
                   const summaryStr = activeCount === 0
                     ? `🎉 All tasks completed for today! ${capitalize(riskText)}, and ${weatherText}. ${mandiNote}`
