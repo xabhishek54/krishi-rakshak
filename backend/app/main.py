@@ -80,7 +80,8 @@ def startup_event():
             except Exception as e:
                 print("Scheme seeding failed:", e)
             try:
-                from seed_demo import seed_farmer_data, DEMO_PHONE
+                from seed_demo import seed_farmer_data, seed_officer_data, DEMO_PHONE
+                seed_officer_data(db)
                 farmer = db.query(models.Farmer).filter(models.Farmer.phone.in_([DEMO_PHONE, "9876543210"])).first()
                 if not farmer or db.query(models.Farm).filter(models.Farm.farmer_id == farmer.id).count() < 5:
                     print("[startup] Auto-seeding rich demo farmer environment...")
