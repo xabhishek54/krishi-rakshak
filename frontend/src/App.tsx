@@ -1444,20 +1444,7 @@ function App() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
-                    distressData?.score >= 50 ? 'bg-high-light text-high-dark border-high/20' :
-                    distressData?.score >= 30 ? 'bg-watch-light text-watch-dark border-watch/20' :
-                    'bg-emerald-50 text-emerald-800 border-emerald-200'
-                  }`}>
-                    {distressData?.score >= 50 ? <T lang={language}>🔴 High Risk</T> : distressData?.score >= 30 ? <T lang={language}>🟡 Moderate Watch</T> : <T lang={language}>🟢 Healthy & Stable</T>}
-                  </span>
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-sky-50 text-sky-800 border border-sky-200">
-                    ⛅ <T lang={language}>Weather Ready</T>
-                  </span>
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-                    💰 <T lang={language}>Mandi Price</T>: ₹{formatInteger(mandiPrices[0]?.sticker_price ?? mandiPrices[0]?.modal_price ?? mandiPrices[0]?.net_return ?? 2620, language)}/q
-                  </span>
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-stable-light text-stable-dark border border-stable/20">
+                  <span className="text-xs font-bold px-3 py-1 rounded-full bg-stable-light text-stable-dark border border-stable/20">
                     ⚡ {advisories.filter(a => !completedAdvisoryIds.includes(a.id)).length} <T lang={language}>Actions Pending</T>
                   </span>
                 </div>
