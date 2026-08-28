@@ -78,7 +78,7 @@ export async function speakText(
   const utterance = new SpeechSynthesisUtterance(translated);
   utterance.lang = locale;
   if (voice) utterance.voice = voice;
-  utterance.rate = 1.3;  // Fast, natural farmer-friendly pacing
+  utterance.rate = 0.92; // Slightly relaxed, clear & articulate pacing for farmers
   utterance.pitch = 1.0;
 
   utterance.onerror = (e) => {

@@ -214,6 +214,11 @@ function App() {
   // Force-sync button loading state
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
+  // Authentication & Registration Loading states
+  const [isAuthenticating, setIsAuthenticating] = useState<boolean>(false);
+  const [isRegisteringSubmit, setIsRegisteringSubmit] = useState<boolean>(false);
+  const [isAuthInitialLoading, setIsAuthInitialLoading] = useState<boolean>(false);
+
   // Backend Health Status State
   const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
   const [backendPingTime, setBackendPingTime] = useState<number | null>(null);
@@ -380,6 +385,8 @@ function App() {
       setAllCrops([mockCrop]);
       setSelectedFarm(mockFarm);
       setSelectedCrop(mockCrop);
+    } finally {
+      setIsAuthInitialLoading(false);
     }
   };
 
@@ -1105,6 +1112,7 @@ function App() {
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loginPhone && loginPassword) {
+      setIsAuthenticating(true);
       const endpoint = authRoleToggle === 'officer' 
         ? `${API_BASE}/api/v1/auth/officer/login`
         : `${API_BASE}/api/v1/auth/login`;
@@ -1122,6 +1130,7 @@ function App() {
           const data = await res.json();
           setUserRole(authRoleToggle);
           localStorage.setItem('krishi_auth_role', authRoleToggle);
+          setIsAuthInitialLoading(true);
           setToken(data.access_token);
         } else {
           const errorData = await res.json();
@@ -1130,6 +1139,8 @@ function App() {
       } catch (err) {
         console.error(err);
         toast.error('Connection error', 'Cannot reach server. Please check backend is running.');
+      } finally {
+        setIsAuthenticating(false);
       }
     }
   };
@@ -1137,9 +1148,11 @@ function App() {
   // Register
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsRegisteringSubmit(true);
     if (authRoleToggle === 'officer') {
       if (!officerRegName || !officerRegPhone || !officerRegPassword || !officerRegDesignation || !officerRegDistrict) {
         toast.warning('Incomplete', 'Please fill all required Agro Officer fields.');
+        setIsRegisteringSubmit(false);
         return;
       }
       try {
@@ -1171,6 +1184,7 @@ function App() {
             const loginData = await loginRes.json();
             setUserRole('officer');
             localStorage.setItem('krishi_auth_role', 'officer');
+            setIsAuthInitialLoading(true);
             setToken(loginData.access_token);
           } else {
             toast.warning('Registered!', 'Auto-login failed. Please log in manually.');
@@ -1182,6 +1196,8 @@ function App() {
       } catch (err) {
         console.error(err);
         toast.error('Connection error', 'Cannot reach server during Agro Officer registration.');
+      } finally {
+        setIsRegisteringSubmit(false);
       }
       return;
     }
@@ -1213,6 +1229,7 @@ function App() {
             const loginData = await loginRes.json();
             setUserRole('farmer');
             localStorage.setItem('krishi_auth_role', 'farmer');
+            setIsAuthInitialLoading(true);
             setToken(loginData.access_token);
           } else {
             toast.warning('Registered!', 'Auto-login failed. Please log in manually.');
@@ -1224,7 +1241,11 @@ function App() {
       } catch (err) {
         console.error(err);
         toast.error('Connection error', 'Cannot reach server during registration.');
+      } finally {
+        setIsRegisteringSubmit(false);
       }
+    } else {
+      setIsRegisteringSubmit(false);
     }
   };
 
@@ -4376,11 +4397,18 @@ function App() {
               </div>
               <button
                 type="submit"
-                className={`w-full text-white py-3.5 rounded-2xl text-sm font-bold shadow-sm transition-colors flex items-center justify-center gap-1.5 ${
+                disabled={isAuthenticating}
+                className={`w-full text-white py-3.5 rounded-2xl text-sm font-bold shadow-sm transition-colors flex items-center justify-center gap-2 ${
+                  isAuthenticating ? 'opacity-70 cursor-not-allowed' : ''
+                } ${
                   authRoleToggle === 'officer' ? 'bg-indigo-950 hover:bg-indigo-900' : 'bg-stable hover:bg-stable-dark'
                 }`}
               >
-                <Lock size={16} /> Authenticate {authRoleToggle === 'officer' ? 'Officer Account' : 'Farmer Account'}
+                {isAuthenticating ? (
+                  <><span className="animate-spin text-base">⏳</span> Authenticating...</>
+                ) : (
+                  <><Lock size={16} /> Authenticate {authRoleToggle === 'officer' ? 'Officer Account' : 'Farmer Account'}</>
+                )}
               </button>
 
               {/* Demo Account Quick Fill */}
@@ -4516,9 +4544,16 @@ function App() {
               </div>
               <button
                 type="submit"
-                className="w-full bg-indigo-950 text-white py-3 rounded-2xl text-sm font-bold shadow-sm hover:bg-indigo-900 transition-colors"
+                disabled={isRegisteringSubmit}
+                className={`w-full bg-indigo-950 text-white py-3 rounded-2xl text-sm font-bold shadow-sm hover:bg-indigo-900 transition-colors flex items-center justify-center gap-2 ${
+                  isRegisteringSubmit ? 'opacity-70 cursor-not-allowed' : ''
+                }`}
               >
-                Register Officer Account
+                {isRegisteringSubmit ? (
+                  <><span className="animate-spin text-base">⏳</span> Creating Account...</>
+                ) : (
+                  'Register Officer Account'
+                )}
               </button>
             </form>
           ) : (
@@ -4558,9 +4593,16 @@ function App() {
               </div>
               <button
                 type="submit"
-                className="w-full bg-stable text-white py-3.5 rounded-2xl text-sm font-bold shadow-sm hover:bg-stable-dark transition-colors"
+                disabled={isRegisteringSubmit}
+                className={`w-full bg-stable text-white py-3.5 rounded-2xl text-sm font-bold shadow-sm hover:bg-stable-dark transition-colors flex items-center justify-center gap-2 ${
+                  isRegisteringSubmit ? 'opacity-70 cursor-not-allowed' : ''
+                }`}
               >
-                Register & Verify
+                {isRegisteringSubmit ? (
+                  <><span className="animate-spin text-base">⏳</span> Creating Account...</>
+                ) : (
+                  'Register & Verify'
+                )}
               </button>
             </form>
           )}
@@ -5147,6 +5189,26 @@ function App() {
     );
   }
 
+  // 1. Initial Authentication Splash / Loader while checking farms & profile
+  if (token && isAuthInitialLoading) {
+    return (
+      <div className="h-screen w-screen bg-earth-50 flex flex-col items-center justify-center p-6 text-center z-[300]">
+        <div className="bg-white p-8 rounded-3xl border border-earth-200 shadow-2xl max-w-sm w-full space-y-4 flex flex-col items-center animate-fade-in">
+          <div className="w-14 h-14 rounded-2xl bg-stable/10 text-stable flex items-center justify-center animate-bounce">
+            <Sprout size={32} />
+          </div>
+          <div>
+            <h3 className="text-lg font-black text-slate-900 my-0">Syncing KrishiRakshak...</h3>
+            <p className="text-xs text-slate-500 font-semibold mt-1">Loading your farm profile, advisories & market data</p>
+          </div>
+          <div className="w-full bg-earth-100 h-2 rounded-full overflow-hidden">
+            <div className="bg-stable h-full w-2/3 animate-pulse rounded-full" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Onboarding wizard layout if farm setup is missing
   if (token && !hasFarm) {
     const handleOnboardComplete = (location: string, _cropType: string) => {
@@ -5234,10 +5296,9 @@ function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 p-4 md:p-8 max-w-5xl mx-auto w-full pb-24 md:pb-8 overflow-y-auto h-screen relative">
-        {/* Global Top Bar */}
-        <header className="flex justify-between items-center mb-6 pb-4 border-b border-earth-200">
-          <div className="md:hidden">
-            <h1 className="text-lg font-black text-stable tracking-tight my-0">KrishiRakshak</h1>
+        <header className="w-full max-w-full overflow-hidden flex justify-between items-center mb-6 pb-4 border-b border-earth-200 gap-1.5 sm:gap-4">
+          <div className="md:hidden flex-shrink min-w-0">
+            <h1 className="text-sm font-black text-stable tracking-tight my-0 truncate" title="KrishiRakshak">KrishiRakshak</h1>
           </div>
           <div className="hidden md:block">
             {/* Breadcrumb or current tab name */}
@@ -5246,14 +5307,14 @@ function App() {
             </span>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
             {/* Language Selector in Header */}
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value as any)}
-              className="text-xs font-bold px-3 py-1.5 rounded-xl border border-earth-200 bg-white text-slate-600 focus:outline-none"
+              className="text-[11px] sm:text-xs font-bold px-2 sm:px-3 py-1.5 rounded-xl border border-earth-200 bg-white text-slate-600 focus:outline-none max-w-[85px] sm:max-w-none text-ellipsis overflow-hidden"
             >
-              {Object.entries({ english: '🇬🇧 English', hindi: '🇮🇳 Hindi', marathi: '🇮🇳 Marathi', bengali: '🇮🇳 Bengali', odia: '🇮🇳 Odia' }).map(([key, name]) => (
+              {Object.entries({ english: '🇬🇧 EN', hindi: '🇮🇳 HI', marathi: '🇮🇳 MR', bengali: '🇮🇳 BN', odia: '🇮🇳 OR' }).map(([key, name]) => (
                 <option key={key} value={key}>{name}</option>
               ))}
             </select>
@@ -5264,9 +5325,9 @@ function App() {
                 onClick={forceSyncAll}
                 disabled={isSyncing}
                 title={lastSyncTime ? `Last synced ${lastSyncTime} · Click to refresh` : 'Sync all data'}
-                className={`p-2.5 rounded-xl bg-earth-50 text-slate-500 hover:bg-earth-100 hover:text-stable transition-all flex items-center justify-center ${isSyncing ? 'opacity-60 cursor-not-allowed' : ''}`}
+                className={`p-1.5 sm:p-2.5 rounded-xl bg-earth-50 text-slate-500 hover:bg-earth-100 hover:text-stable transition-all flex items-center justify-center ${isSyncing ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
-                <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
+                <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
               </button>
             )}
 
@@ -5274,12 +5335,12 @@ function App() {
             <div className="relative">
               <button
                 onClick={() => setShowNotificationPanel(!showNotificationPanel)}
-                className="relative p-2.5 rounded-xl bg-earth-50 text-slate-600 hover:bg-earth-100 hover:text-stable transition-all flex items-center justify-center"
+                className="relative p-1.5 sm:p-2.5 rounded-xl bg-earth-50 text-slate-600 hover:bg-earth-100 hover:text-stable transition-all flex items-center justify-center"
                 title="View Alerts"
               >
-                <Bell size={20} />
+                <Bell size={16} />
                 {alerts.length > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-high text-white text-[10px] font-black flex items-center justify-center border-2 border-white animate-bounce">
+                  <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-high text-white text-[9px] font-black flex items-center justify-center border-2 border-white animate-bounce">
                     {alerts.length}
                   </span>
                 )}
@@ -5287,7 +5348,7 @@ function App() {
 
               {/* Notification Panel */}
               {showNotificationPanel && (
-                <div className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-2xl border border-earth-200 p-4 z-50 space-y-3">
+                <div className="absolute right-0 mt-3 w-72 sm:w-80 bg-white rounded-2xl shadow-2xl border border-earth-200 p-4 z-50 space-y-3">
                   <div className="flex justify-between items-center">
                     <h4 className="font-bold text-slate-800 text-sm my-0">Active Risk Alerts</h4>
                     <span className="text-[10px] font-bold text-slate-400">{alerts.length} alerts</span>
@@ -5311,17 +5372,18 @@ function App() {
                 </div>
               )}
             </div>
+
             {/* Profile Button in Header */}
             <button
               onClick={() => setActiveTab('profile')}
-              className={`p-2.5 rounded-xl transition-all flex items-center justify-center ${
+              className={`p-1.5 sm:p-2.5 rounded-xl transition-all flex items-center justify-center ${
                 activeTab === 'profile'
                   ? 'bg-stable text-white shadow-xs'
                   : 'bg-earth-50 text-slate-600 hover:bg-earth-100 hover:text-stable'
               }`}
               title="Farmer Profile & Settings"
             >
-              <User size={20} />
+              <User size={16} />
             </button>
           </div>
         </header>
