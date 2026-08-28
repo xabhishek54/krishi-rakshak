@@ -92,11 +92,11 @@ def startup_event():
 
     threading.Thread(target=_bg_init, daemon=True).start()
 
-# Enable CORS
+# Enable CORS (compatible with browser wildcard origin policy)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
