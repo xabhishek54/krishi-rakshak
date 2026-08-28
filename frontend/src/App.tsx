@@ -311,7 +311,7 @@ function App() {
     setGoogleTranslateLanguage(language);
   }, [language]);
   const [showNotificationPanel, setShowNotificationPanel] = useState<boolean>(false);
-  const t = translations[language];
+  const t = translations[language] || translations['english'] || ({} as any);
   const nativeDigits = useNativeDigits(language);
 
   // Toast notifications
@@ -2509,13 +2509,68 @@ function App() {
       case 'support': {
         const currentFarm = selectedFarm || farms[0] || { name: 'Main Farm', district: 'Nashik', state: 'Maharashtra', area: 1.0, soil_type: 'loam', irrigation: 'drip' };
 
-        const activeSchemesSource = translatedSchemes.length > 0 ? translatedSchemes : schemes;
+        const fallbackItems = [
+          {
+            id: 101, name: 'PM Fasal Bima Yojana (PMFBY)', category: 'scheme',
+            support_type: 'Crop Loss Compensation Insurance',
+            benefit_summary: 'Comprehensive risk coverage for standing crops against natural calamities, severe drought, and unseasonal rainfall.',
+            why_recommended: 'Essential protection for your standing crop against yield loss & climate risk.',
+            is_recommended: true, verification_url: 'https://pmfby.gov.in'
+          },
+          {
+            id: 102, name: 'PM Kisan Samman Nidhi (PM-KISAN)', category: 'scheme',
+            support_type: 'Direct Income Support (₹6,000/yr)',
+            benefit_summary: 'Direct income support of ₹6,000 per year paid in three equal installments of ₹2,000 directly into farmer bank accounts.',
+            why_recommended: 'Guaranteed annual financial support for agricultural input purchases.',
+            is_recommended: true, verification_url: 'https://pmkisan.gov.in'
+          },
+          {
+            id: 103, name: 'PM Krishi Sinchayee Yojana (PMKSY)', category: 'scheme',
+            support_type: 'Micro-Irrigation Drip Subsidy (55-80%)',
+            benefit_summary: 'Up to 55% to 80% subsidy for installing drip and sprinkler micro-irrigation systems in crop fields.',
+            why_recommended: 'High water conservation efficiency & lower electricity expenses.',
+            is_recommended: false, verification_url: 'https://pmksy.gov.in'
+          },
+          {
+            id: 201, name: 'Kisan Credit Card (KCC) Crop Loan', category: 'loan',
+            support_type: 'Subsidized Working Capital Loan @ 4%',
+            benefit_summary: 'Concessional crop credit up to ₹3 Lakh at 4% effective interest rate with 3% prompt repayment incentive.',
+            why_recommended: 'Cheapest working capital financing for seeds, fertilizers, and field labor expenses.',
+            is_recommended: true, verification_url: 'https://www.nabard.org'
+          },
+          {
+            id: 202, name: 'NABARD Agri-Infrastructure Credit', category: 'loan',
+            support_type: 'Post-Harvest Infrastructure Loan (3% Subvention)',
+            benefit_summary: 'Interest subvention of 3% per annum for loans up to ₹2 Crore for setting up cold storages, polyhouses & sorting sheds.',
+            why_recommended: 'Ideal for building on-farm storage to prevent distress selling of produce.',
+            is_recommended: false, verification_url: 'https://www.nabard.org'
+          },
+          {
+            id: 203, name: 'MUDRA Agricultural Machinery Finance', category: 'loan',
+            support_type: 'Collateral-Free Equipment Loan',
+            benefit_summary: 'Collateral-free loans up to ₹10 Lakh for purchasing tractors, solar pumps, tillers, and spraying equipment.',
+            why_recommended: 'No mortgage collateral required for farm mechanization & tools.',
+            is_recommended: false, verification_url: 'https://www.mudra.org.in'
+          }
+        ];
 
-        // Filter schemes vs loans dynamically
-        const governmentSchemes = activeSchemesSource.filter((s: any) => s.category !== 'loan');
-        const agriLoans = activeSchemesSource.filter((s: any) => s.category === 'loan');
+        const rawList = translatedSchemes.length > 0 ? translatedSchemes : (schemes.length > 0 ? schemes : fallbackItems);
+        
+        // Dynamic helper to identify loans vs schemes
+        const isLoanItem = (s: any) => {
+          const cat = (s.category || '').toLowerCase();
+          const type = (s.support_type || '').toLowerCase();
+          const name = (s.name || '').toLowerCase();
+          return cat === 'loan' || type.includes('loan') || type.includes('credit') || name.includes('kcc') || name.includes('loan') || name.includes('credit');
+        };
 
-        const activeItems = supportSubTab === 'schemes' ? governmentSchemes : agriLoans;
+        const governmentSchemes = rawList.filter((s: any) => !isLoanItem(s));
+        const agriLoans = rawList.filter((s: any) => isLoanItem(s));
+
+        const activeItems = supportSubTab === 'schemes' 
+          ? (governmentSchemes.length > 0 ? governmentSchemes : fallbackItems.filter(s => s.category === 'scheme'))
+          : (agriLoans.length > 0 ? agriLoans : fallbackItems.filter(s => s.category === 'loan'));
+
         const recommendedItems = activeItems.filter((s: any) => s.is_recommended);
         const otherItems = activeItems.filter((s: any) => !s.is_recommended);
 
