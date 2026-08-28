@@ -1471,8 +1471,9 @@ function App() {
                   
                   const topMandi = mandiPrices[0];
                   const topPrice = topMandi ? (topMandi.sticker_price ?? topMandi.modal_price ?? topMandi.net_return ?? topMandi.price ?? 2620) : 2620;
-                  const cropName = selectedCrop ? capitalize(selectedCrop.crop_type) : 'Tomato';
-                  const mandiName = topMandi?.mandi_name || 'Lasalgaon APMC';
+                  const currentDistrict = selectedFarm?.district || farms[0]?.district || (farmer?.location_id ? farmer.location_id.split('_')[0] : 'Local');
+                  const cropName = selectedCrop ? capitalize(selectedCrop.crop_type) : (crops[0] ? capitalize(crops[0].crop_type) : 'crop');
+                  const mandiName = topMandi?.mandi_name || `${currentDistrict} APMC`;
 
                   let mandiNote = `Mandi rate for ${cropName} is ₹${formatInteger(topPrice, language)}/q at ${mandiName}.`;
 
