@@ -2541,6 +2541,7 @@ function App() {
         const currentFarm = selectedFarm || farms[0] || { name: 'Main Farm', district: 'Nashik', state: 'Maharashtra', area: 1.0, soil_type: 'loam', irrigation: 'drip' };
 
         const fallbackItems = [
+          // ── GOVERNMENT SCHEMES (10) ──
           {
             id: 101, name: 'PM Fasal Bima Yojana (PMFBY)', category: 'scheme',
             support_type: 'Crop Loss Compensation Insurance',
@@ -2560,8 +2561,59 @@ function App() {
             support_type: 'Micro-Irrigation Drip Subsidy (55-80%)',
             benefit_summary: 'Up to 55% to 80% subsidy for installing drip and sprinkler micro-irrigation systems in crop fields.',
             why_recommended: 'High water conservation efficiency & lower electricity expenses.',
-            is_recommended: false, verification_url: 'https://pmksy.gov.in'
+            is_recommended: true, verification_url: 'https://pmksy.gov.in'
           },
+          {
+            id: 104, name: 'Soil Health Card Scheme (SHC)', category: 'scheme',
+            support_type: 'Free Soil Testing & Advisory',
+            benefit_summary: 'Free soil testing every 2 years with crop-specific fertilizer and micronutrient guidance to boost soil fertility.',
+            why_recommended: 'Saves 10-15% on chemical fertilizer costs while maximizing crop yields.',
+            is_recommended: false, verification_url: 'https://soilhealth.dac.gov.in'
+          },
+          {
+            id: 105, name: 'National Horticulture Mission (NHM)', category: 'scheme',
+            support_type: 'Polyhouse & Shade Net Capital Subsidy (50%)',
+            benefit_summary: '50% capital subsidy for polyhouse construction, shade net houses, and high-value vegetable seed cultivation.',
+            why_recommended: 'Protects fruits and vegetables from pests & extreme sun heat.',
+            is_recommended: false, verification_url: 'https://nhm.nic.in'
+          },
+          {
+            id: 106, name: 'Sub-Mission on Agricultural Mechanization (SMAM)', category: 'scheme',
+            support_type: 'Farm Machinery Subsidy (40-50%)',
+            benefit_summary: '40% to 50% subsidy for purchasing tractors, power tillers, rotavators, and laser land levelers.',
+            why_recommended: 'Significantly reduces labor cost & field preparation time.',
+            is_recommended: false, verification_url: 'https://agrimachinery.nic.in'
+          },
+          {
+            id: 107, name: 'Paramparagat Krishi Vikas Yojana (PKVY)', category: 'scheme',
+            support_type: 'Organic Farming Financial Support (₹31,000/ha)',
+            benefit_summary: 'Financial assistance of ₹31,000 per hectare for organic inputs, bio-fertilizers, and organic certification.',
+            why_recommended: 'Higher market premium for certified chemical-free organic produce.',
+            is_recommended: false, verification_url: 'https://pgsindia-ncof.gov.in'
+          },
+          {
+            id: 108, name: 'National Agriculture Market (e-NAM)', category: 'scheme',
+            support_type: 'Online Inter-Mandi Direct Trading Platform',
+            benefit_summary: 'Pan-India electronic trading portal connecting APMC mandis to get competitive online buyer bids.',
+            why_recommended: 'Eliminates middleman commission and guarantees transparent digital weighing & payout.',
+            is_recommended: false, verification_url: 'https://enam.gov.in'
+          },
+          {
+            id: 109, name: 'Price Stabilization Fund (PSF)', category: 'scheme',
+            support_type: 'Market Price Crash Government Procurement',
+            benefit_summary: 'Government market intervention to procure perishable crops (tomato, onion, potato) during severe price crashes.',
+            why_recommended: 'Prevents distress sale losses during market supply gluts.',
+            is_recommended: false, verification_url: 'https://consumeraffairs.nic.in'
+          },
+          {
+            id: 110, name: 'Maharashtra Shetkari Sanman Nidhi', category: 'scheme',
+            support_type: 'State Supplemental Transfer (₹6,000/yr)',
+            benefit_summary: 'State income top-up of ₹6,000 per year for registered farmers in Maharashtra.',
+            why_recommended: 'Combines with PM-KISAN to give ₹12,000 total direct annual income.',
+            is_recommended: false, verification_url: 'https://mahadbt.maharashtra.gov.in'
+          },
+
+          // ── AGRICULTURAL LOANS & CREDIT OPTIONS (10) ──
           {
             id: 201, name: 'Kisan Credit Card (KCC) Crop Loan', category: 'loan',
             support_type: 'Subsidized Working Capital Loan @ 4%',
@@ -2570,37 +2622,97 @@ function App() {
             is_recommended: true, verification_url: 'https://www.nabard.org'
           },
           {
-            id: 202, name: 'NABARD Agri-Infrastructure Credit', category: 'loan',
-            support_type: 'Post-Harvest Infrastructure Loan (3% Subvention)',
-            benefit_summary: 'Interest subvention of 3% per annum for loans up to ₹2 Crore for setting up cold storages, polyhouses & sorting sheds.',
-            why_recommended: 'Ideal for building on-farm storage to prevent distress selling of produce.',
+            id: 202, name: 'Agriculture Infrastructure Fund (AIF) Credit', category: 'loan',
+            support_type: '3% Interest Subvention (Loans up to ₹2 Crore)',
+            benefit_summary: '3% annual interest subvention on bank loans for building cold storages, warehouses, sorting lines, and solar pumps.',
+            why_recommended: 'Ideal for building on-farm storage to prevent post-harvest spoilage & distress sales.',
+            is_recommended: true, verification_url: 'https://agriinfra.dac.gov.in'
+          },
+          {
+            id: 203, name: 'NABARD Farm Mechanization Credit Line', category: 'loan',
+            support_type: 'Long-Term Farm Machinery Investment Loan',
+            benefit_summary: 'Low-interest long-term credit for acquiring tractors, harvesters, drone sprayers, and irrigation equipment.',
+            why_recommended: 'Flexible 5-7 year repayment schedule aligned with crop harvest cycles.',
             is_recommended: false, verification_url: 'https://www.nabard.org'
           },
           {
-            id: 203, name: 'MUDRA Agricultural Machinery Finance', category: 'loan',
-            support_type: 'Collateral-Free Equipment Loan',
-            benefit_summary: 'Collateral-free loans up to ₹10 Lakh for purchasing tractors, solar pumps, tillers, and spraying equipment.',
-            why_recommended: 'No mortgage collateral required for farm mechanization & tools.',
+            id: 204, name: 'MUDRA Allied Agriculture Micro-Credit', category: 'loan',
+            support_type: 'Collateral-Free Micro Loan (Up to ₹10 Lakh)',
+            benefit_summary: 'Collateral-free micro loans up to ₹10 Lakh at concessional rates for dairy, poultry, fisheries, and apiculture.',
+            why_recommended: 'No property mortgage collateral required for agri-allied income generation.',
             is_recommended: false, verification_url: 'https://www.mudra.org.in'
+          },
+          {
+            id: 205, name: 'PM Micro Food Processing Enterprises (PM-FME) Credit', category: 'loan',
+            support_type: '35% Credit-Linked Capital Subsidy Loan',
+            benefit_summary: 'Provides 35% credit-linked capital subsidy up to ₹10 Lakh for setting up small food processing & dehydration units.',
+            why_recommended: 'Value addition for raw farm produce to sell processed goods at higher margins.',
+            is_recommended: false, verification_url: 'https://pmfme.mofpi.gov.in'
+          },
+          {
+            id: 206, name: 'KCC Livestock & Animal Husbandry Credit Line', category: 'loan',
+            support_type: 'Subsidized Livestock Credit @ 4%',
+            benefit_summary: 'Revolving working capital credit up to ₹2 Lakh for cattle feed, veterinary care, and milk production expenses.',
+            why_recommended: 'Ensures steady cashflow for daily dairy and livestock operations.',
+            is_recommended: false, verification_url: 'https://dahd.nic.in'
+          },
+          {
+            id: 207, name: 'Warehouse Receipt Pledge Loan (NWR Finance)', category: 'loan',
+            support_type: '70-80% Credit Against Stored Produce Receipts',
+            benefit_summary: 'Instant loan up to 75% of produce value deposited in accredited warehouses, allowing farmers to wait for better market prices.',
+            why_recommended: 'Provides immediate cash for next crop season without forced distress selling.',
+            is_recommended: false, verification_url: 'https://wdra.gov.in'
+          },
+          {
+            id: 208, name: 'Solar Agriculture Pump Credit (PM-KUSUM)', category: 'loan',
+            support_type: 'Subsidized Solar Pump Loan (90% Total Subsidy)',
+            benefit_summary: 'Financing for off-grid solar irrigation pumps with 60% government subsidy + 30% bank loan financing.',
+            why_recommended: 'Eliminates diesel fuel costs and provides reliable daytime irrigation power.',
+            is_recommended: false, verification_url: 'https://pmkusum.mnre.gov.in'
+          },
+          {
+            id: 209, name: 'PACS Short-Term Seasonal Agri-Credit', category: 'loan',
+            support_type: 'Zero-Interest Seed & Fertilizer Credit',
+            benefit_summary: 'Short-term seasonal input credit disbursed in-kind (certified seeds, fertilizers, pesticides) via local cooperative societies.',
+            why_recommended: 'Zero interest input access directly at village cooperative level.',
+            is_recommended: false, verification_url: 'https://cooperation.gov.in'
+          },
+          {
+            id: 210, name: 'Agri-Clinic & Agri-Business Center (ACABC) Loan', category: 'loan',
+            support_type: 'Capital Subsidy Loan (36-44%) for Agri-Ventures',
+            benefit_summary: 'Composite loans up to ₹20 Lakh with 36-44% capital subsidy for establishing custom hiring centers and soil testing labs.',
+            why_recommended: 'Empowers entrepreneurial farmers to launch commercial agri-services.',
+            is_recommended: false, verification_url: 'https://www.acabcmis.gov.in'
           }
         ];
 
-        const rawList = translatedSchemes.length > 0 ? translatedSchemes : (schemes.length > 0 ? schemes : fallbackItems);
-        
+        // Combine fallback list with backend data (server data takes precedence if name matches)
+        const itemMap = new Map();
+        fallbackItems.forEach(item => itemMap.set(item.name.toLowerCase().trim(), item));
+
+        const serverSource = translatedSchemes.length > 0 ? translatedSchemes : schemes;
+        serverSource.forEach((item: any) => {
+          if (item && item.name) {
+            const key = item.name.toLowerCase().trim();
+            const existing = itemMap.get(key) || {};
+            itemMap.set(key, { ...existing, ...item });
+          }
+        });
+
+        const rawList = Array.from(itemMap.values());
+
         // Dynamic helper to identify loans vs schemes
         const isLoanItem = (s: any) => {
           const cat = (s.category || '').toLowerCase();
           const type = (s.support_type || '').toLowerCase();
           const name = (s.name || '').toLowerCase();
-          return cat === 'loan' || type.includes('loan') || type.includes('credit') || name.includes('kcc') || name.includes('loan') || name.includes('credit');
+          return cat === 'loan' || type.includes('loan') || type.includes('credit') || name.includes('kcc') || name.includes('loan') || name.includes('credit') || name.includes('aif') || name.includes('mudra');
         };
 
         const governmentSchemes = rawList.filter((s: any) => !isLoanItem(s));
         const agriLoans = rawList.filter((s: any) => isLoanItem(s));
 
-        const activeItems = supportSubTab === 'schemes' 
-          ? (governmentSchemes.length > 0 ? governmentSchemes : fallbackItems.filter(s => s.category === 'scheme'))
-          : (agriLoans.length > 0 ? agriLoans : fallbackItems.filter(s => s.category === 'loan'));
+        const activeItems = supportSubTab === 'schemes' ? governmentSchemes : agriLoans;
 
         const recommendedItems = activeItems.filter((s: any) => s.is_recommended);
         const otherItems = activeItems.filter((s: any) => !s.is_recommended);
