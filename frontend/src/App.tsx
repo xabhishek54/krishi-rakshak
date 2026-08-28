@@ -201,6 +201,31 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   // Force-sync button loading state
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
+  // Backend Health Status State
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
+  const [backendPingTime, setBackendPingTime] = useState<number | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const checkHealth = async () => {
+      const start = Date.now();
+      try {
+        const res = await fetch(`${API_BASE}/`);
+        if (res.ok && isMounted) {
+          setBackendPingTime(Date.now() - start);
+          setBackendStatus('connected');
+        } else if (isMounted) {
+          setBackendStatus('disconnected');
+        }
+      } catch {
+        if (isMounted) setBackendStatus('disconnected');
+      }
+    };
+    checkHealth();
+    const interval = setInterval(checkHealth, 10000);
+    return () => { isMounted = false; clearInterval(interval); };
+  }, []);
+
   // Obligation Overlay Modal States
   const [showAddObligationModal, setShowAddObligationModal] = useState<boolean>(false);
   const [newObligationAmount, setNewObligationAmount] = useState<string>('30000');
@@ -4261,6 +4286,29 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
             >
               Register Account
             </button>
+          </div>
+
+          {/* Live Backend Connection Indicator */}
+          <div className={`p-3 rounded-2xl mb-4 border flex items-center justify-between transition-all ${
+            backendStatus === 'connected' 
+              ? 'bg-emerald-50/90 border-emerald-200 text-emerald-900 shadow-xs' 
+              : backendStatus === 'checking'
+              ? 'bg-amber-50/90 border-amber-200 text-amber-900 shadow-xs'
+              : 'bg-rose-50/90 border-rose-200 text-rose-900 shadow-xs'
+          }`}>
+            <div className="flex items-center gap-2 text-xs font-bold">
+              <span className={`w-2.5 h-2.5 rounded-full ${
+                backendStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : backendStatus === 'checking' ? 'bg-amber-500 animate-ping' : 'bg-rose-500'
+              }`} />
+              <span>
+                {backendStatus === 'connected' && `Backend Live (${backendPingTime}ms)`}
+                {backendStatus === 'checking' && 'Connecting to Backend...'}
+                {backendStatus === 'disconnected' && 'Backend Offline / Waking Up'}
+              </span>
+            </div>
+            <span className="text-[10px] font-mono opacity-75 truncate max-w-[150px]" title={API_BASE}>
+              {API_BASE.replace('https://', '')}
+            </span>
           </div>
 
           {!isRegistering ? (
