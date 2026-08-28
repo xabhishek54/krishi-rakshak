@@ -94,17 +94,25 @@ function App() {
   const [translatedAdvisories, setTranslatedAdvisories] = useState<any[]>([]);
   const [translatedAlerts, setTranslatedAlerts] = useState<any[]>([]);
   const [translatedSchemes, setTranslatedSchemes] = useState<any[]>([]);
-  const [weather, setWeather] = useState<any>(null);
+  const [weather, setWeather] = useState<any>(() => {
+    try { const c = localStorage.getItem('kr_cached_weather'); return c ? JSON.parse(c) : null; } catch { return null; }
+  });
   const [loadingWeather, setLoadingWeather] = useState<boolean>(false);
-  const [advisories, setAdvisories] = useState<any[]>([]);
-  const [alerts, setAlerts] = useState<any[]>([]);
-const [mandiPrices, setMandiPrices] = useState<any[]>([]);
-    const [priceHistoryData, setPriceHistoryData] = useState<any[]>([]);
-    const [priceCrashStatus, setPriceCrashStatus] = useState<any>(null);
-    const [selectedMandiId, setSelectedMandiId] = useState<number | null>(null);
-    const [cashFlow, setCashFlow] = useState<any>(null);
-    const [distressData, setDistressData] = useState<any>(null);
-    const [schemes, setSchemes] = useState<any[]>([]);
+  const [advisories, setAdvisories] = useState<any[]>(() => {
+    try { const c = localStorage.getItem('kr_cached_advisories'); return c ? JSON.parse(c) : []; } catch { return []; }
+  });
+  const [alerts, setAlerts] = useState<any[]>(() => {
+    try { const c = localStorage.getItem('kr_cached_alerts'); return c ? JSON.parse(c) : []; } catch { return []; }
+  });
+  const [mandiPrices, setMandiPrices] = useState<any[]>([]);
+  const [priceHistoryData, setPriceHistoryData] = useState<any[]>([]);
+  const [priceCrashStatus, setPriceCrashStatus] = useState<any>(null);
+  const [selectedMandiId, setSelectedMandiId] = useState<number | null>(null);
+  const [cashFlow, setCashFlow] = useState<any>(null);
+  const [distressData, setDistressData] = useState<any>(null);
+  const [schemes, setSchemes] = useState<any[]>(() => {
+    try { const c = localStorage.getItem('kr_cached_schemes'); return c ? JSON.parse(c) : []; } catch { return []; }
+  });
   // My Crop View Grouping state ('crop' | 'farm')
   const [cropViewGroup, setCropViewGroup] = useState<'crop' | 'farm'>('crop');
   const [expandedCropGroups, setExpandedCropGroups] = useState<Record<string, boolean>>({});
@@ -235,11 +243,21 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   );
 
   // Multiple Farms and Crops States
-  const [farms, setFarms] = useState<any[]>([]);
-  const [crops, setCrops] = useState<any[]>([]);         // crops for selected farm
-  const [allCrops, setAllCrops] = useState<any[]>([]);   // ALL crops across ALL farms
-  const [selectedFarm, setSelectedFarm] = useState<any>(null);
-  const [selectedCrop, setSelectedCrop] = useState<any>(null);
+  const [farms, setFarms] = useState<any[]>(() => {
+    try { const c = localStorage.getItem('kr_cached_farms'); return c ? JSON.parse(c) : []; } catch { return []; }
+  });
+  const [crops, setCrops] = useState<any[]>(() => {
+    try { const c = localStorage.getItem('kr_cached_crops'); return c ? JSON.parse(c) : []; } catch { return []; }
+  });
+  const [allCrops, setAllCrops] = useState<any[]>(() => {
+    try { const c = localStorage.getItem('kr_cached_allCrops'); return c ? JSON.parse(c) : []; } catch { return []; }
+  });
+  const [selectedFarm, setSelectedFarm] = useState<any>(() => {
+    try { const c = localStorage.getItem('kr_cached_farms'); const arr = c ? JSON.parse(c) : []; return arr[0] || null; } catch { return null; }
+  });
+  const [selectedCrop, setSelectedCrop] = useState<any>(() => {
+    try { const c = localStorage.getItem('kr_cached_crops'); const arr = c ? JSON.parse(c) : []; return arr[0] || null; } catch { return null; }
+  });
 
   // Modals overlays
   const [showAddFarmModal, setShowAddFarmModal] = useState<boolean>(false);
@@ -302,6 +320,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
       if (farmRes.ok) {
         const farmData = await farmRes.json();
         setFarms(farmData);
+        try { localStorage.setItem('kr_cached_farms', JSON.stringify(farmData)); } catch {}
 
         if (farmData.length > 0) {
           const currentFarm = selectedFarm ? farmData.find((f: any) => f.id === selectedFarm.id) || farmData[0] : farmData[0];
@@ -316,6 +335,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           if (cropRes.ok) {
             const cropData = await cropRes.json();
             setCrops(cropData);
+            try { localStorage.setItem('kr_cached_crops', JSON.stringify(cropData)); } catch {}
             if (cropData.length > 0 && !selectedCrop) {
               setSelectedCrop(cropData[0]);
             }
@@ -337,6 +357,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
             } catch {}
           }));
           setAllCrops(allCropResults);
+          try { localStorage.setItem('kr_cached_allCrops', JSON.stringify(allCropResults)); } catch {}
         } else {
           setFarms([]);
           setCrops([]);
@@ -446,6 +467,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
         const data = await res.json();
         if (data.observation) {
           setWeather(data);
+          try { localStorage.setItem('kr_cached_weather', JSON.stringify(data)); } catch {}
           setLoadingWeather(false);
           return;
         }
@@ -453,7 +475,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
       throw new Error("No cached weather");
     } catch {
       // Offline/Error Fallback Mock Data
-      setWeather({
+      const fallbackWeather = {
         location_id: validLocId,
         observation: {
           rainfall: 8.0,
@@ -466,7 +488,9 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           { date: new Date(Date.now() + 172800000).toISOString().split('T')[0], rainfall_forecast: 5.0, temperature: 28.0, rain_probability: 30.0 }
         ],
         generated_at: new Date().toISOString()
-      });
+      };
+      setWeather(fallbackWeather);
+      try { localStorage.setItem('kr_cached_weather', JSON.stringify(fallbackWeather)); } catch {}
     }
     setLoadingWeather(false);
   };
@@ -502,6 +526,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
       if (advRes.ok) {
         const data = await advRes.json();
         setAdvisories(data);
+        try { localStorage.setItem('kr_cached_advisories', JSON.stringify(data)); } catch {}
       }
       
       const alertRes = await fetch(`${API_BASE}/api/v1/alerts`, {
@@ -510,6 +535,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
       if (alertRes.ok) {
         const data = await alertRes.json();
         setAlerts(data);
+        try { localStorage.setItem('kr_cached_alerts', JSON.stringify(data)); } catch {}
       }
     } catch {
       // Fallback mocks if offline
@@ -1287,7 +1313,6 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     }
     let cancelled = false;
     (async () => {
-      const { translateText } = await import('./translate');
       const out = await Promise.all(advisories.map(async (adv: any) => ({
         ...adv,
         recommendation: await translateText(adv.recommendation || '', language),
@@ -1306,7 +1331,6 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
     }
     let cancelled = false;
     (async () => {
-      const { translateText } = await import('./translate');
       const out = await Promise.all(alerts.map(async (al: any) => ({
         ...al,
         reason: await translateText(al.reason || '', language),
@@ -5432,7 +5456,6 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
           {voiceState === 'idle' && voiceAnswerText && (
             <button
               onClick={async () => {
-                const { translateText } = await import('./translate');
                 const tr = await translateText(voiceAnswerText, language);
                 speakText(tr, language);
               }}
@@ -5507,7 +5530,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                     setVoiceAnswer(ans);
                     setVoiceLoading(false);
                     // Speak the answer in farmer's language
-                    const translated = await import('./translate').then(m => m.translateText(ans, language));
+                    const translated = await translateText(ans, language);
                     speakText(translated, language);
                   }
                 }}
@@ -5571,7 +5594,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                 });
                 setVoiceAnswer(ans);
                 setVoiceLoading(false);
-                const translated = await import('./translate').then(m => m.translateText(ans, language));
+                const translated = await translateText(ans, language);
                 speakText(translated, language);
               }}
               className="w-full py-3 bg-stable text-white rounded-xl font-bold text-sm hover:bg-stable-dark disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
@@ -5590,7 +5613,7 @@ const [mandiPrices, setMandiPrices] = useState<any[]>([]);
                   <p className="text-[10px] font-bold text-stable-dark uppercase tracking-widest">Farm Advisor Response</p>
                   <button
                     onClick={async () => {
-                      const translated = await import('./translate').then(m => m.translateText(voiceAnswer, language));
+                      const translated = await translateText(voiceAnswer, language);
                       speakText(translated, language);
                     }}
                     className="text-xs text-stable font-semibold flex items-center gap-1 hover:underline"
