@@ -118,7 +118,7 @@ export function buildVoiceText(opts: {
   allCrops?: any[];
   cashFlow?: any[];
 }): string {
-  const { activeTab, advisories, distressData, mandiPrices, schemes, selectedCrop, language, allCrops = [], cashFlow = [] } = opts;
+  const { activeTab, advisories, distressData, mandiPrices, schemes, selectedCrop, language, farms = [], allCrops = [], cashFlow = [] } = opts;
   const lang = (language || 'english').toLowerCase();
 
   switch (activeTab) {
@@ -154,12 +154,39 @@ export function buildVoiceText(opts: {
     }
 
     case 'market': {
-      const best = mandiPrices[0] || { mandi_name: 'Pimpalgaon', net_return: 2290 };
-      if (lang === 'hindi') return `बाज़ार जानकारी। सर्वोत्तम मंडी ${best.mandi_name || 'पिंपलगांव'} है, जहाँ शुद्ध आय ₹${best.net_return || 2290} प्रति क्विंटल है।`;
-      if (lang === 'marathi') return `बाजार माहिती. सर्वोत्तम बाजार ${best.mandi_name || 'पिंपळगाव'} आहे, जिथे निव्वळ उत्पन्न ₹${best.net_return || 2290} प्रति क्विंटल आहे.`;
-      if (lang === 'bengali') return `বাজার তথ্য। সেরা মান্ডি ${best.mandi_name || 'পিম্পলগাঁও'}, যেখানে নিট আয় ₹${best.net_return || 2290} প্রতি কুইন্টাল।`;
-      if (lang === 'odia') return `ବଜାର ତଥ୍ୟ। ସର୍ବୋତ୍ତମ ମଣ୍ଡି ${best.mandi_name || 'ପିମ୍ପଲଗାଁଓ'}, ଯେଉଁଠାରେ ଶୁଦ୍ଧ ଆୟ ₹${best.net_return || 2290} ପ୍ରତି କ୍ୱିଣ୍ଟାଲ।`;
-      return `Market Intelligence. Best selling option is ${best.mandi_name || 'Pimpalgaon'} mandi, yielding net return of ${best.net_return || 2290} rupees per quintal.`;
+      const best = mandiPrices[0];
+      const cropName = selectedCrop?.crop_type ? (selectedCrop.crop_type.charAt(0).toUpperCase() + selectedCrop.crop_type.slice(1)) : 'Tomato';
+      const farm = farms?.[0];
+      const farmName = farm?.name || 'Main Farm';
+      const districtName = farm?.district || 'Nashik';
+      
+      if (!best) {
+        return `Market Intelligence for ${cropName}. Checking nearest APMC mandis for optimal pricing.`;
+      }
+
+      const bestNet = Math.round(best.net_return || ((best.sticker_price || 2620) - (best.transport_cost || 190) - (best.other_fees || 50)));
+      const secondBest = mandiPrices[1];
+      const secondNet = secondBest ? Math.round(secondBest.net_return || ((secondBest.sticker_price || 2500) - (secondBest.transport_cost || 200) - (secondBest.other_fees || 50))) : 0;
+      const diff = (secondNet > 0 && bestNet > secondNet) ? (bestNet - secondNet) : 0;
+
+      const advantagePhrase = diff > 0 
+        ? `This yields ${diff} rupees per quintal higher net profit than ${secondBest?.mandi_name || 'other mandis'}.` 
+        : '';
+
+      if (lang === 'hindi') {
+        return `आपके ${cropName} फसल के लिए, ${best.mandi_name || 'निकटतम मंडी'} सबसे अधिक ₹${bestNet} प्रति क्विंटल शुद्ध लाभ दे रही है। परिवहन और मंडी शुल्क घटाने के बाद यह सबसे लाभदायक विकल्प है। ${diff > 0 ? `इससे आपको ₹${diff} प्रति क्विंटल अधिक मुनाफा होगा।` : ''}`;
+      }
+      if (lang === 'marathi') {
+        return `आपल्या ${cropName} पिकासाठी, ${best.mandi_name || 'जवळची बाजार समिती'} सर्वात जास्त ₹${bestNet} प्रति क्विंटल निव्वळ नफा देत आहे. वाहतूक खर्च वजा करून हे सर्वात फायदेशीर आहे. ${diff > 0 ? `यामुळे तुम्हाला ₹${diff} प्रति क्विंटल जास्त नफा मिळेल.` : ''}`;
+      }
+      if (lang === 'bengali') {
+        return `আপনার ${cropName} ফসলের জন্য, ${best.mandi_name || 'নিকটস্থ মান্ডি'} সবচেয়ে বেশি ₹${bestNet} প্রতি কুইন্টাল নিট লাভ দিচ্ছে।`;
+      }
+      if (lang === 'odia') {
+        return `ଆପଣଙ୍କ ${cropName} ଫସଲ ପାଇଁ, ${best.mandi_name || 'ନିକଟସ୍ଥ ମଣ୍ଡି'} ସବୁଠାରୁ ଅଧିକ ₹${bestNet} ପ୍ରତି କ୍ୱିଣ୍ଟାଲ ଶୁଦ୍ଧ ଲାଭ ଦେଉଛି।`;
+      }
+
+      return `For your ${cropName} harvest at ${farmName} in ${districtName}, ${best.mandi_name} offers the highest net return of ${bestNet} rupees per quintal after deducting transport and fees. ${advantagePhrase} Recommended to sell during early morning bidding hours.`;
     }
 
     case 'support': {

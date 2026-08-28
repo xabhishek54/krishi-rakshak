@@ -2252,48 +2252,49 @@ function App() {
               </div>
             );
           }
-      case 'market':
+
+      case 'market': {
         return (
           <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-              <div>
-                <h2 className="text-xl font-bold my-0">Mandi Pricing &amp; Net Realization</h2>
-                <p className="text-slate-500 text-xs mt-1 mb-0">
-                  Net returns after transport &amp; handling costs
-                </p>
-              </div>
-              {allCrops.length > 1 && (
-                <select
-                  value={selectedCrop?.id || ''}
-                  onChange={(e) => {
-                    const crop = allCrops.find((c: any) => c.id === Number(e.target.value));
-                    if (crop) {
-                      setSelectedCrop(crop);
-                      const farm = farms.find((f: any) => f.id === crop.farm_id);
-                      if (farm) setSelectedFarm(farm);
-                    }
-                  }}
-                  className="text-xs border border-earth-200 rounded-lg px-3 py-2 bg-white text-slate-700 font-medium"
-                >
-                  {allCrops.map((c: any) => (
-                    <option key={c.id} value={c.id}>
-                      {c.crop_type} — {c.farm_name || `Farm ${c.farm_id}`}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-            {selectedCrop && (
-              <div className="text-xs bg-stable-light text-stable-dark font-semibold rounded-lg px-4 py-2 flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="capitalize">🌾 {selectedCrop.crop_type}</span>
-                  <span className="text-slate-400">·</span>
-                  <span>📍 Origin Farm: <strong>{selectedFarm?.name || `Farm #${selectedCrop.farm_id}`}</strong> ({selectedFarm?.district || 'Nashik'})</span>
-                  {selectedCrop.stage && <><span className="text-slate-400">·</span><span>{selectedCrop.stage}</span></>}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+                <div>
+                  <h2 className="text-xl font-bold my-0">Mandi Pricing &amp; Net Realization</h2>
+                  <p className="text-slate-500 text-xs mt-1 mb-0">
+                    Net returns after transport &amp; handling costs
+                  </p>
                 </div>
-                <span className="text-[10px] text-slate-500 font-normal">Distances calculated dynamically from farm GPS</span>
+                {allCrops.length > 1 && (
+                  <select
+                    value={selectedCrop?.id || ''}
+                    onChange={(e) => {
+                      const crop = allCrops.find((c: any) => c.id === Number(e.target.value));
+                      if (crop) {
+                        setSelectedCrop(crop);
+                        const farm = farms.find((f: any) => f.id === crop.farm_id);
+                        if (farm) setSelectedFarm(farm);
+                      }
+                    }}
+                    className="text-xs border border-earth-200 rounded-lg px-3 py-2 bg-white text-slate-700 font-medium"
+                  >
+                    {allCrops.map((c: any) => (
+                      <option key={c.id} value={c.id}>
+                        {c.crop_type} — {c.farm_name || `Farm ${c.farm_id}`}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
-            )}
+              {selectedCrop && (
+                <div className="text-xs bg-stable-light text-stable-dark font-semibold rounded-lg px-4 py-2 flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="capitalize">🌾 {selectedCrop.crop_type}</span>
+                    <span className="text-slate-400">·</span>
+                    <span>📍 Origin Farm: <strong>{selectedFarm?.name || `Farm #${selectedCrop.farm_id}`}</strong> ({selectedFarm?.district || 'Nashik'})</span>
+                    {selectedCrop.stage && <><span className="text-slate-400">·</span><span>{selectedCrop.stage}</span></>}
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-normal">Distances calculated dynamically from farm GPS</span>
+                </div>
+              )}
 
             {/* Mandi comparison table */}
             <div className="overflow-x-auto">
@@ -2427,6 +2428,7 @@ function App() {
             )}
           </div>
         );
+      }
       case 'alerts':
         return (
           <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">
