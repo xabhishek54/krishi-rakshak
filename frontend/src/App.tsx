@@ -111,7 +111,12 @@ function App() {
   const [cashFlow, setCashFlow] = useState<any>(null);
   const [distressData, setDistressData] = useState<any>(null);
   const [schemes, setSchemes] = useState<any[]>(() => {
-    try { const c = localStorage.getItem('kr_cached_schemes'); return c ? JSON.parse(c) : []; } catch { return []; }
+    try { const c = localStorage.getItem('kr_cached_schemes'); if (c) return JSON.parse(c); } catch {}
+    return [
+      { id: 1, name: 'PM Fasal Bima Yojana (PMFBY)', state: 'All', support_type: 'Insurance (Crop Loss Compensation)', verification_url: 'https://pmfby.gov.in', conditions: '' },
+      { id: 2, name: 'PM Kisan Samman Nidhi (PM-KISAN)', state: 'All', support_type: 'Direct Income Support (₹6,000/year)', verification_url: 'https://pmkisan.gov.in', conditions: '' },
+      { id: 3, name: 'Kisan Credit Card (KCC)', state: 'All', support_type: 'Credit Access (Short-term Crop Loan)', verification_url: 'https://www.nabard.org', conditions: '' },
+    ];
   });
   // My Crop View Grouping state ('crop' | 'farm')
   const [cropViewGroup, setCropViewGroup] = useState<'crop' | 'farm'>('crop');
@@ -825,7 +830,11 @@ function App() {
         })
       ]);
       if (distressRes.ok) setDistressData(await distressRes.json());
-      if (schemesRes.ok) setSchemes(await schemesRes.json());
+      if (schemesRes.ok) {
+        const sData = await schemesRes.json();
+        setSchemes(sData);
+        try { localStorage.setItem('kr_cached_schemes', JSON.stringify(sData)); } catch {}
+      }
     } catch {
       // Fallback mocks
       setDistressData({
@@ -833,20 +842,24 @@ function App() {
         weather_component: 35.0, yield_component: 40.0,
         market_component: 55.0, financial_component: 45.0, urgency_component: 35.0
       });
-      setSchemes([
+      const fallbackSchemes = [
         { id: 1, name: 'PM Fasal Bima Yojana (PMFBY)', state: 'All', support_type: 'Insurance (Crop Loss Compensation)', verification_url: 'https://pmfby.gov.in', conditions: '' },
         { id: 2, name: 'PM Kisan Samman Nidhi (PM-KISAN)', state: 'All', support_type: 'Direct Income Support (₹6,000/year)', verification_url: 'https://pmkisan.gov.in', conditions: '' },
         { id: 3, name: 'Kisan Credit Card (KCC)', state: 'All', support_type: 'Credit Access (Short-term Crop Loan)', verification_url: 'https://www.nabard.org', conditions: '' },
-      ]);
+      ];
+      setSchemes(fallbackSchemes);
+      try { localStorage.setItem('kr_cached_schemes', JSON.stringify(fallbackSchemes)); } catch {}
     }
   };
 
   useEffect(() => {
     if (userRole === 'officer' || localStorage.getItem('krishi_auth_role') === 'officer') return;
+    if (token) {
+      fetchDistressAndSchemes();
+    }
     if (token && selectedCrop) {
       fetchMandiPrices();
       fetchProjections();
-      fetchDistressAndSchemes();
     }
   }, [token, userRole, selectedCrop]);
 
