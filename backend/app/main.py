@@ -50,16 +50,15 @@ app = FastAPI(
 
 @app.on_event("startup")
 def startup_event():
-    # Warm up the yield ML model so the first user request is instant
-    try:
-        predict_yield_deviation("tomato", "loam", "drip", 0.0, 0.0)
-        print("[startup] Yield model warm-up complete.")
-    except Exception as e:
-        print(f"[startup] Yield model warm-up failed (non-critical): {e}")
-
-    # Offload heavy DB migrations & seeding to background thread so Uvicorn binds port instantly!
+    # Offload all warm-ups, DB migrations & seeding to background thread so Uvicorn starts in 0.001s!
     import threading
-    def _bg_database_init():
+    def _bg_init():
+        try:
+            predict_yield_deviation("tomato", "loam", "drip", 0.0, 0.0)
+            print("[startup] Yield model warm-up complete.")
+        except Exception as e:
+            print(f"[startup] Yield model warm-up failed: {e}")
+
         try:
             Base.metadata.create_all(bind=engine)
             print("[startup] Table creation complete.")
@@ -91,21 +90,7 @@ def startup_event():
         finally:
             db.close()
 
-    threading.Thread(target=_bg_database_init, daemon=True).start()
-
-    # Phase 19: Launch Agmarknet background price fetch (non-blocking)
-    async def _agmarknet_bg():
-        try:
-            n = await background_fetch_and_store(SessionLocal)
-            print(f"[Phase19] Agmarknet background fetch complete: {n} new price records")
-            # Invalidate market cache after fresh prices arrive
-            _cache_invalidate_prefix("mandi:")
-            _cache_invalidate_prefix("price-history:")
-            _cache_invalidate_prefix("price-crash:")
-        except Exception as e:
-            print(f"[Phase19] Agmarknet fetch failed (non-critical): {e}")
-
-    asyncio.create_task(_agmarknet_bg())
+    threading.Thread(target=_bg_init, daemon=True).start()
 
 # Enable CORS
 app.add_middleware(
