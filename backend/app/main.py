@@ -42,12 +42,6 @@ def _cache_invalidate_prefix(prefix: str):
     for k in to_del:
         del _cache[k]
 
-# Create database tables safely
-try:
-    Base.metadata.create_all(bind=engine)
-except Exception as e:
-    print(f"[Database] Warning: Could not create tables on startup: {e}")
-
 app = FastAPI(
     title="KrishiRakshak API",
     description="Early-warning, risk-intelligence, and intervention system backend API.",
@@ -66,6 +60,12 @@ def startup_event():
     # Offload heavy DB migrations & seeding to background thread so Uvicorn binds port instantly!
     import threading
     def _bg_database_init():
+        try:
+            Base.metadata.create_all(bind=engine)
+            print("[startup] Table creation complete.")
+        except Exception as e:
+            print("[Database] Warning: Could not create tables on startup:", e)
+
         db = SessionLocal()
         try:
             try:
