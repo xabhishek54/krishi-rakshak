@@ -48,40 +48,62 @@ def _resolve_piper_model(language: str, explicit_model: str | None = None) -> st
     return str(Path(PIPER_DATA_DIR) / f"{model_name}.onnx")
 
 
-def synthesize_text_to_wav(text: str, language: str = "english") -> str:
+def synthesize_text_to_wav(text: str, language: str = "english") -> tuple[str, str]:
+    """
+    Synthesize text to audio file.
+    Returns (file_path, media_type).
+    1. Uses Piper TTS CLI if PIPER_BINARY and model exist.
+    2. Falls back to gTTS (Google Text-to-Speech) for high-quality regional voice (Hindi, Marathi, Bengali, Odia, English).
+    """
     if not text or not text.strip():
         raise ValueError("Text is empty")
 
+    cleaned_text = text.strip()
+
+    # 1. Try Piper TTS if CLI and model are configured
     model_path = _resolve_piper_model(language)
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(
-            f"Piper model not found at {model_path}. Install a model and set PIPER_MODEL_PATH or PIPER_DATA_DIR."
-        )
+    if PIPER_BINARY and os.path.exists(model_path):
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                output_path = tmp.name
 
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        output_path = tmp.name
+            cmd = [
+                PIPER_BINARY,
+                "--model", model_path,
+                "--output_file", output_path,
+            ]
+            subprocess.run(
+                cmd,
+                input=cleaned_text,
+                text=True,
+                capture_output=True,
+                check=True,
+                timeout=15,
+            )
+            return output_path, "audio/wav"
+        except Exception as e:
+            print(f"[voice] Piper TTS execution warning: {e}. Falling back to gTTS.")
 
-    cmd = [
-        PIPER_BINARY,
-        "--model", model_path,
-        "--output_file", output_path,
-        "--voice", os.getenv("PIPER_VOICE", "en_US-lessac-medium"),
-    ]
+    # 2. High-Quality Regional Fallback via gTTS
+    lang_map = {
+        "english": "en",
+        "hindi": "hi",
+        "marathi": "mr",
+        "bengali": "bn",
+        "odia": "or",
+    }
+    target_lang = lang_map.get(language.lower(), "en")
 
     try:
-        subprocess.run(
-            cmd,
-            input=text,
-            text=True,
-            capture_output=True,
-            check=True,
-        )
-        return output_path
-    except FileNotFoundError as exc:
-        raise RuntimeError("Piper CLI not installed. Install Piper TTS and set PIPER_BINARY.") from exc
-    except subprocess.CalledProcessError as exc:
-        stderr = exc.stderr or ""
-        raise RuntimeError(f"Piper TTS failed: {stderr.strip() or str(exc)}") from exc
+        from gtts import gTTS
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+            output_path = tmp.name
+
+        tts = gTTS(text=cleaned_text, lang=target_lang, slow=False)
+        tts.save(output_path)
+        return output_path, "audio/mp3"
+    except Exception as exc:
+        raise RuntimeError(f"Voice synthesis failed for language '{language}': {exc}") from exc
 
 
 def transcribe_wav_file(file_path: str) -> str:

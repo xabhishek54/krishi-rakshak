@@ -23,8 +23,9 @@ def speak_text(payload: dict):
         raise HTTPException(status_code=400, detail="text is required")
 
     try:
-        wav_path = synthesize_text_to_wav(text, language)
-        return FileResponse(wav_path, media_type="audio/wav", filename="speech.wav")
+        audio_path, media_type = synthesize_text_to_wav(text, language)
+        filename = "speech.mp3" if media_type == "audio/mp3" else "speech.wav"
+        return FileResponse(audio_path, media_type=media_type, filename=filename)
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

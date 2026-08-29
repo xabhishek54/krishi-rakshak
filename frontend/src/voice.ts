@@ -13,13 +13,26 @@
 
 import { translateText } from './translate';
 
+const DEFAULT_VOICE_API_BASE = 'http://localhost:8000';
+let activeAudio: HTMLAudioElement | null = null;
+
+export function getVoiceApiBase(): string {
+  const base = import.meta.env.VITE_API_BASE_URL || DEFAULT_VOICE_API_BASE;
+  return String(base).replace(/\/$/, '');
+}
+
+export function hasWebSpeechSupport(): boolean {
+  if (typeof window === 'undefined') return false;
+  const speech = (window as any).speechSynthesis;
+  return !!(speech && typeof speech.speak === 'function' && typeof (window as any).SpeechSynthesisUtterance !== 'undefined');
+}
+
 // ─── Gemini Configuration ───────────────────────────────────────────────────
-// Model: gemini-3.1-flash-lite (user calls it "Gemini 3.5 Flash Lite")
-// Confirmed via: GET /v1beta/models → displayName: "Gemini 3.1 Flash Lite"
-// Text-in, text-out only (no audio/image output)
-export const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || 'AQ.Ab8RN6J_1kwgFChbLdh03PsSEJV3x4L2AYKAMv03Ydpt2nsExQ';
+export const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 export const GEMINI_MODEL   = 'gemini-3.1-flash-lite';
-export const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+export const GEMINI_ENDPOINT = GEMINI_API_KEY
+  ? `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`
+  : '';
 // ────────────────────────────────────────────────────────────────────────────
 
 // BCP-47 locale map for Web Speech API voice matching
@@ -105,40 +118,98 @@ export function isCropMarketReady(stage?: string | null): boolean {
   return false;
 }
 
-/** Speak text in the given language. Returns a cancel function. */
+/** Speak text in the given language using Backend Piper/gTTS with browser fallback. */
 export async function speakText(
   text: string,
   language: string,
   onError?: (msg: string) => void
 ): Promise<() => void> {
-  // Stop any existing playback
-  speechSynthesis.cancel();
+  stopSpeech();
 
-  if (!text.trim()) return () => {};
+  if (!text || !text.trim()) return () => {};
 
-  // Translate to target language
-  const translated = language === 'english' ? text : await translateText(text, language);
+  const cleaned = text.replace(/\s+/g, ' ').trim();
 
-  const voices = await loadVoices();
+  // 1. Try Backend Voice API (/api/v1/voice/speak) -> Piper / gTTS audio
+  const backendUrl = `${getVoiceApiBase()}/api/v1/voice/speak`;
+  try {
+    const response = await fetch(backendUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: cleaned, language }),
+    });
+
+    if (response.ok) {
+      const blob = await response.blob();
+      const audio = new Audio(URL.createObjectURL(blob));
+      activeAudio = audio;
+      audio.onended = () => { activeAudio = null; };
+      audio.onerror = () => { activeAudio = null; };
+      audio.play();
+
+      return () => {
+        if (activeAudio) {
+          activeAudio.pause();
+          activeAudio.currentTime = 0;
+          activeAudio = null;
+        }
+      };
+    }
+  } catch {
+    // Fall through to browser Speech Synthesis / Fallback Audio Stream if backend unavailable
+  }
+
+  // 2. Browser Native Web Speech API Fallback
+  const translated = language === 'english' ? cleaned : await translateText(cleaned, language);
+
+  const langCodeMap: Record<string, string> = {
+    english: 'en', hindi: 'hi', marathi: 'mr', bengali: 'bn', odia: 'or',
+  };
   const locale = LOCALE_MAP[language] || 'en-IN';
-  const voice = pickVoice(voices, locale);
+  const langCode = langCodeMap[language] || 'en';
 
-  const utterance = new SpeechSynthesisUtterance(translated.replace(/\s+/g, ' ').trim());
-  utterance.lang = locale;
-  if (voice) utterance.voice = voice;
-  utterance.rate = 1.08;
-  utterance.pitch = 1.15;
-  utterance.volume = 1;
+  if (hasWebSpeechSupport()) {
+    try {
+      const voices = await loadVoices();
+      const voice = pickVoice(voices, locale);
 
-  utterance.onerror = (e) => {
-    if (onError) onError(`Voice error: ${e.error}`);
-  };
+      const utterance = new SpeechSynthesisUtterance(translated);
+      utterance.lang = locale;
+      if (voice) utterance.voice = voice;
+      utterance.rate = 0.95;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
 
-  speechSynthesis.speak(utterance);
+      window.speechSynthesis.speak(utterance);
+      return () => { stopSpeech(); };
+    } catch {
+      // Fall through to Audio Stream
+    }
+  }
 
-  return () => {
-    speechSynthesis.cancel();
-  };
+  // 3. Direct Audio Stream Fallback
+  try {
+    const encoded = encodeURIComponent(translated.slice(0, 200));
+    const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=${langCode}&client=tw-ob`;
+    const audio = new Audio(audioUrl);
+    activeAudio = audio;
+    audio.onended = () => { activeAudio = null; };
+    audio.onerror = () => { activeAudio = null; };
+    audio.play().catch((err) => {
+      if (onError) onError(`Audio playback blocked: ${err.message}`);
+    });
+
+    return () => {
+      if (activeAudio) {
+        activeAudio.pause();
+        activeAudio.currentTime = 0;
+        activeAudio = null;
+      }
+    };
+  } catch (err: any) {
+    if (onError) onError(`Audio error: ${err.message}`);
+    return () => {};
+  }
 }
 
 /** Stop any current speech */
