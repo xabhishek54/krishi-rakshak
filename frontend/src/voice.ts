@@ -129,6 +129,9 @@ export async function speakText(
   if (!text || !text.trim()) return () => {};
 
   const cleaned = text.replace(/\s+/g, ' ').trim();
+  const translated = (language === 'english' || /[\u0900-\u097F\u0980-\u09FF\u0B00-\u0B7F]/.test(cleaned))
+    ? cleaned
+    : await translateText(cleaned, language);
 
   // 1. Try Backend Voice API (/api/v1/voice/speak) -> Piper / gTTS audio
   const backendUrl = `${getVoiceApiBase()}/api/v1/voice/speak`;
@@ -136,7 +139,7 @@ export async function speakText(
     const response = await fetch(backendUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: cleaned, language }),
+      body: JSON.stringify({ text: translated, language }),
     });
 
     if (response.ok) {
@@ -160,8 +163,6 @@ export async function speakText(
   }
 
   // 2. Browser Native Web Speech API Fallback
-  const translated = language === 'english' ? cleaned : await translateText(cleaned, language);
-
   const langCodeMap: Record<string, string> = {
     english: 'en', hindi: 'hi', marathi: 'mr', bengali: 'bn', odia: 'or',
   };
@@ -214,11 +215,20 @@ export async function speakText(
 
 /** Stop any current speech */
 export function stopSpeech(): void {
-  speechSynthesis.cancel();
+  if (activeAudio) {
+    activeAudio.pause();
+    activeAudio.currentTime = 0;
+    activeAudio = null;
+  }
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
 }
 
 export function isSpeaking(): boolean {
-  return speechSynthesis.speaking;
+  if (typeof window === 'undefined') return !!(activeAudio && !activeAudio.paused);
+  const isSpeech = 'speechSynthesis' in window && window.speechSynthesis.speaking;
+  return isSpeech || !!(activeAudio && !activeAudio.paused);
 }
 
 /**
@@ -245,43 +255,28 @@ export function buildVoiceText(opts: {
   switch (activeTab) {
     case 'home': {
       const activeCount = advisories.filter(a => !!a && !!a.recommendation).length;
-      const weatherText = (weatherData?.observation?.rainfall ?? 0) > 10 ? 'heavy rain expected today' : 'weather is clear for fieldwork';
-      const riskText = distressData?.score >= 50 ? 'some risk factors require attention' : 'your farms are in healthy condition overall';
+      const isRain = (weatherData?.observation?.rainfall ?? 0) > 10;
 
       const topMandi = mandiPrices[0];
       const topPrice = topMandi ? (topMandi.sticker_price ?? topMandi.modal_price ?? topMandi.net_return ?? topMandi.price ?? 2620) : 2620;
       const currentDistrict = farms[0]?.district || 'Local';
-      const cropName = selectedCrop?.crop_type ? selectedCrop.crop_type.charAt(0).toUpperCase() + selectedCrop.crop_type.slice(1) : 'Crop';
+      const cropName = selectedCrop?.crop_type ? (selectedCrop.crop_type.charAt(0).toUpperCase() + selectedCrop.crop_type.slice(1)) : 'Crop';
       const mandiName = topMandi?.mandi_name || `${currentDistrict} APMC`;
 
-      const mandiNote = `Mandi rate for ${cropName} is ₹${topPrice}/q at ${mandiName}.`;
-
-      let summaryText = activeCount === 0
-        ? `All tasks completed for today! ${riskText}, and ${weatherText}. ${mandiNote}`
-        : `Overall, ${riskText}. ${weatherText}. ${mandiNote} You have ${activeCount} pending action item${activeCount > 1 ? 's' : ''} recommended for today below.`;
-
       if (lang === 'hindi') {
-        summaryText = activeCount === 0
-          ? `आज के सभी कार्य पूर्ण हैं! ${riskText}, और ${weatherText}. ${mandiNote}`
-          : `कुल मिलाकर, ${riskText}. ${weatherText}. ${mandiNote} आपके पास आज के लिए ${activeCount} लंबित कार्रवाई${activeCount > 1 ? 'याँ' : ''} हैं।`;
+        return `आज का कृषि सारांश। आपके खेत की स्थिति स्वस्थ और सुरक्षित है। ${isRain ? 'आज भारी बारिश की संभावना है' : 'मौसम कृषि कार्य के लिए अनुकूल है'}। ${cropName} का मंडी भाव ₹${topPrice} प्रति क्विंटल है। आपके पास आज ${activeCount} कार्य लंबित हैं।`;
       }
       if (lang === 'marathi') {
-        summaryText = activeCount === 0
-          ? `आजचे सर्व काम पूर्ण झाले! ${riskText}, आणि ${weatherText}. ${mandiNote}`
-          : `एकंदरीत, ${riskText}. ${weatherText}. ${mandiNote} आपल्याकडे आजसाठी ${activeCount} प्रलंबित कार्य${activeCount > 1 ? 'े' : ''} आहेत.`;
+        return `आजचा शेती सारांश. आपल्या शेताची परिस्थिती निरोगी आणि सुरक्षित आहे. ${isRain ? 'आज जोरदार पावसाची शक्यता आहे' : 'हवामान शेतकामासाठी अनुकूल आहे'}. ${cropName} चा बाजारभाव ₹${topPrice} प्रति क्विंटल आहे. आपल्याकडे आज ${activeCount} कामे प्रलंबित आहेत.`;
       }
       if (lang === 'bengali') {
-        summaryText = activeCount === 0
-          ? `আজকের সব কাজ শেষ! ${riskText}, এবং ${weatherText}. ${mandiNote}`
-          : `সামগ্রিকভাবে, ${riskText}. ${weatherText}. ${mandiNote} আপনার ${activeCount}টি অমীমাংসিত কাজ বাকি আছে।`;
+        return `আজকের খামার সারাংশ। আপনার খামারের অবস্থা ভালো ও সুরক্ষিত। ${isRain ? 'আজ ভারী বৃষ্টির সম্ভাবনা রয়েছে' : 'আবহাওয়া কাজের জন্য অনুকূল'}। ${cropName}-এর মান্ডি দর ₹${topPrice} প্রতি কুইন্টাল। আপনার ${activeCount}টি কাজ বাকী আছে।`;
       }
       if (lang === 'odia') {
-        summaryText = activeCount === 0
-          ? `ଆଜିର ସବୁ କାର୍ଯ୍ୟ ସମାପ୍ତ! ${riskText}, ଏବଂ ${weatherText}. ${mandiNote}`
-          : `ସମ୍ମୁଖୀନରେ, ${riskText}. ${weatherText}. ${mandiNote} ଆପଣଙ୍କର ଆଜି ପାଇଁ ${activeCount}ଟି ବାକି କାର୍ଯ୍ୟ ଅଛି।`;
+        return `ଆଜିର କୃଷି ସାରାଂଶ। ଆପଣଙ୍କ ଜମି ସ୍ଥିତି ସୁସ୍ଥ ଓ ନିରାପଦ। ${isRain ? 'ଆଜି ପ୍ରବଳ ବର୍ଷାର ସମ୍ଭାବନା ଅଛି' : 'ପାଣିପାଗ କାମ ପାଇଁ ଅନୁକୂଳ'}। ${cropName} ର ମଣ୍ଡି ଦର ₹${topPrice} ପ୍ରତି କ୍ୱିଣ୍ଟାଲ। ଆପଣଙ୍କର ${activeCount}ଟି କାର୍ଯ୍ୟ ବାକି ଅଛି।`;
       }
 
-      return summaryText;
+      return `Today's farm summary. Your farms are in a healthy, stable condition. ${isRain ? 'Heavy rain is expected today' : 'Weather is clear for fieldwork'}. Mandi rate for ${cropName} is ${topPrice} rupees per quintal at ${mandiName}. You have ${activeCount} pending action item${activeCount > 1 ? 's' : ''} recommended for today.`;
     }
 
     case 'yield':
