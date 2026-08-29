@@ -1301,7 +1301,105 @@ function App() {
   const handleVoicePlayback = async () => {
     if (isVoicePlaying) { stopSpeech(); setIsVoicePlaying(false); return; }
     setIsVoicePlaying(true);
-    const text = buildVoiceText({ activeTab, advisories, distressData, mandiPrices, schemes, selectedCrop, language, weatherData: weather, farms, allCrops, cashFlow, marketSuggestions });
+
+    let cropEvalSummaryText = '';
+    if (activeTab === 'yield' || activeTab === 'crop') {
+      const currentFarm = selectedFarm || farms[0] || { id: 1, name: 'Main Farm', district: 'Nashik', soil_type: 'loam', irrigation: 'drip', area: 1.0 };
+      const currentSoil = (yieldSoil || currentFarm.soil_type || 'loam').toLowerCase();
+      const currentIrrigation = (yieldIrrigation || currentFarm.irrigation || currentFarm.irrigation_type || 'drip').toLowerCase();
+      const currentArea = yieldArea > 0 ? yieldArea : (currentFarm.area || currentFarm.farm_area || 1.0);
+      const registeredCropObj = allCrops.find(c => c.farm_id === currentFarm.id) || allCrops[0];
+      const cropKey = (yieldCrop || registeredCropObj?.crop_type || 'tomato').toLowerCase();
+
+      const CROP_DEFAULTS: Record<string, { baseYield: number; costPerAcre: number; msp: number }> = {
+        tomato: { baseYield: 120, costPerAcre: 18000, msp: 800 },
+        onion:  { baseYield: 80,  costPerAcre: 16000, msp: 600 },
+        wheat:  { baseYield: 20,  costPerAcre: 12000, msp: 2275 },
+        grapes: { baseYield: 90,  costPerAcre: 45000, msp: 3500 },
+        rice:   { baseYield: 22,  costPerAcre: 14000, msp: 2183 },
+      };
+      const soilMatrix: Record<string, Record<string, number>> = {
+        tomato: { loam: 100, black: 90, clay: 75, sandy: 65, red: 75 },
+        onion:  { loam: 100, black: 85, clay: 65, sandy: 85, red: 75 },
+        wheat:  { black: 100, loam: 95, clay: 85, sandy: 60, red: 75 },
+        grapes: { loam: 100, black: 95, clay: 70, sandy: 75, red: 80 },
+        rice:   { clay: 100, loam: 80, black: 85, sandy: 40, red: 70 },
+      };
+      const irrigMatrix: Record<string, Record<string, number>> = {
+        tomato: { drip: 98, sprinkler: 85, flood: 70, none: 50 },
+        onion:  { drip: 95, sprinkler: 90, flood: 75, none: 55 },
+        wheat:  { sprinkler: 98, drip: 90, flood: 85, none: 60 },
+        grapes: { drip: 100, sprinkler: 70, flood: 50, none: 40 },
+        rice:   { flood: 98, sprinkler: 75, drip: 80, none: 50 },
+      };
+      const def = CROP_DEFAULTS[cropKey] || CROP_DEFAULTS.tomato;
+      const soilScore = soilMatrix[cropKey]?.[currentSoil] || 75;
+      const irrigScore = irrigMatrix[cropKey]?.[currentIrrigation] || 70;
+      const mandiPrice = mandiPrices.find(p => p.commodity?.toLowerCase().includes(cropKey.slice(0, 4)))?.modal_price || def.msp;
+      const yieldPerAcre = Math.round(def.baseYield * (irrigScore / 85) * (soilScore / 85));
+      const grossRev = yieldPerAcre * mandiPrice;
+      const netProfit = grossRev - def.costPerAcre;
+
+      const rawFarmName = currentFarm.name || currentFarm.district || 'Main Farm';
+      const farmName = (rawFarmName === 'Main Farm')
+        ? (language === 'hindi' ? 'मुख्य खेत' : language === 'marathi' ? 'मुख्य शेत' : language === 'bengali' ? 'প্রধান খামার' : language === 'odia' ? 'ମୁଖ୍ୟ ଜମି' : 'Main Farm')
+        : rawFarmName;
+      const soilLabel = translateSoil(language, currentSoil);
+      const irrigLabel = translateIrrigation(language, currentIrrigation);
+      const cropLabel = translateCrop(language, cropKey);
+      const profitFormatted = formatInteger(netProfit * currentArea, language);
+
+      if (language === 'hindi') {
+        cropEvalSummaryText = `${cropLabel} अनुकूलता एवं खेत सारांश। ${farmName} (${soilLabel} मिट्टी, ${irrigLabel} सिंचाई) के लिए, ${cropLabel} उगाने पर प्रति एकड़ लगभग ${yieldPerAcre} क्विंटल उपज मिलती है। ${currentArea} एकड़ में अनुमानित शुद्ध लाभ ₹${profitFormatted} है। मंडी भाव: ₹${mandiPrice} प्रति क्विंटल।`;
+      } else if (language === 'marathi') {
+        cropEvalSummaryText = `${cropLabel} सुसंगतता आणि शेत सारांश. ${farmName} (${soilLabel} माती, ${irrigLabel} सिंचन) साठी, ${cropLabel} उगवल्यास प्रति एकर सुमारे ${yieldPerAcre} क्विंटल उत्पन्न मिळते. ${currentArea} एकरामध्ये अपेक्षित निव्वळ नफा ₹${profitFormatted} आहे. बाजारभाव: ₹${mandiPrice} प्रति क्विंटल.`;
+      } else if (language === 'bengali') {
+        cropEvalSummaryText = `${cropLabel} উপযুক্ততা ও খামার সারাংশ। ${farmName} (${soilLabel} মাটি, ${irrigLabel} সেচ)-এর জন্য, ${cropLabel} চাষ করলে একর প্রতি প্রায় ${yieldPerAcre} কুইন্টাল ফলন পাওয়া যায়। ${currentArea} একরে প্রত্যাশিত নিট লাভ ₹${profitFormatted}। মান্ডি দর: ₹${mandiPrice} প্রতি কুইন্টাল।`;
+      } else if (language === 'odia') {
+        cropEvalSummaryText = `${farmName} (${soilLabel} ମାଟି, ${irrigLabel} ଜଳସେଚନ) ପାଇଁ, ${cropLabel} ଫସଲ ଚାଷ କଲେ ଏକର ପ୍ରତି ପ୍ରାୟ ${yieldPerAcre} କ୍ୱିଣ୍ଟାଲ ଅମଳ ମିଳେ। ${currentArea} ଏକରରେ ଆଶାକରାଯାଉଥିବା ଶୁଦ୍ଧ ଲାଭ ₹${profitFormatted}। ମଣ୍ଡି ଦର: ₹${mandiPrice} ପ୍ରତି କ୍ୱିଣ୍ଟାଲ।`;
+      } else {
+        cropEvalSummaryText = `${cropKey.charAt(0).toUpperCase() + cropKey.slice(1)} Suitability & Farm Summary. For ${farmName} (${soilLabel} Soil, ${irrigLabel} Irrigation), growing ${cropLabel} yields ~${yieldPerAcre} quintals per acre with expected net profit of ₹${profitFormatted} across ${currentArea} acres. Mandi price: ₹${mandiPrice} per quintal.`;
+      }
+    }
+
+    let financialSummaryText = '';
+    if (activeTab === 'financial') {
+      const totalObligations = cashFlow?.obligations?.reduce((s: number, o: any) => s + (o.amount || 0), 0) || 0;
+      const cropRevenues = allCrops.map((cr: any) => {
+        const matchFarm = farms.find((f: any) => f.id === cr.farm_id);
+        const area = matchFarm?.area || 1;
+        const CROP_YIELD: Record<string, number> = { tomato:80, wheat:20, rice:22, onion:70, potato:90, soybean:12, maize:25, cotton:10, sugarcane:350, mustard:10 };
+        const COST: Record<string, number> = { tomato:18000, wheat:12000, rice:14000, onion:16000, potato:15000, soybean:8000, maize:9000, cotton:20000, sugarcane:22000, mustard:7000 };
+        const MSP: Record<string, number> = { tomato:800, wheat:2275, rice:2183, onion:600, potato:500, soybean:4600, maize:1870, cotton:6620, sugarcane:315, mustard:5650 };
+        const ct = cr.crop_type?.toLowerCase() || 'wheat';
+        const baseQ = (CROP_YIELD[ct] || 20) * area;
+        const pricePerQ = MSP[ct] || 2000;
+        const revenue = Math.round(baseQ * pricePerQ);
+        const cost = Math.round((COST[ct] || 12000) * area);
+        return { revenue, cost };
+      });
+
+      const totalRevenue = cropRevenues.reduce((s: number, c: any) => s + c.revenue, 0);
+      const totalCost = cropRevenues.reduce((s: number, c: any) => s + c.cost, 0);
+      const netMoneyLeft = totalRevenue - totalCost - totalObligations;
+
+      const netSurplusFormatted = formatInteger(Math.abs(netMoneyLeft), language);
+      const obligationsFormatted = formatInteger(totalObligations, language);
+
+      if (language === 'hindi') {
+        financialSummaryText = `खेत वित्तीय स्वास्थ्य सारांश। ${netMoneyLeft >= 0 ? `आपके खेत को फसल व्यय के बाद ₹${netSurplusFormatted} का शुद्ध लाभ हो रहा है।` : `आपका खेत इस सीजन में ₹${netSurplusFormatted} की हानि में है।`} ${totalObligations > 0 ? `आपके पास ₹${obligationsFormatted} का बकाया ऋण भुगतान है।` : `खुशी की बात है कि आपका खेत पूरी तरह ऋण-मुक्त है।`} ${allCrops.length >= 2 ? `आपकी ${allCrops.length} फसलों की विविधता जोखिम कम करने में मदद करती है।` : `एक ही फसल लगाने से बाजार का जोखिम बढ़ता है।`}`;
+      } else if (language === 'marathi') {
+        financialSummaryText = `शेत पैसे आरोग्य सारांश. ${netMoneyLeft >= 0 ? `आपल्या शेताला पीक खर्चानंतर ₹${netSurplusFormatted} चा निव्वळ नफा होत आहे.` : `आपले शेत या हंगामात ₹${netSurplusFormatted} तोट्यात आहे.`} ${totalObligations > 0 ? `आपल्यावर ₹${obligationsFormatted} चे देय कर्ज आहे.` : `आनंदाची गोष्ट म्हणजे आपले शेत पूर्णपणे कर्जमुक्त आहे.`} ${allCrops.length >= 2 ? `आपली ${allCrops.length} पिकांची विविधता जोखीम कमी करण्यास मदत करते.` : `एकच पीक घेतल्यास बाजारातील जोखीम वाढते.`}`;
+      } else if (language === 'bengali') {
+        financialSummaryText = `খামার আর্থিক স্বাস্থ্য সারাংশ। ${netMoneyLeft >= 0 ? `আপনার খামার খরচ বাদে ₹${netSurplusFormatted} নিট লাভে রয়েছে।` : `আপনার খামার এই মৌসুমে ₹${netSurplusFormatted} লোকসানে রয়েছে।`} ${totalObligations > 0 ? `আপনার ₹${obligationsFormatted} প্রদেয় ঋণ রয়েছে।` : `সুসংবাদ হলো আপনার খামার সম্পূর্ণ ঋণমুক্ত।`}`;
+      } else if (language === 'odia') {
+        financialSummaryText = `ଜମି ଆର୍ଥିକ ସ୍ୱାସ୍ଥ୍ୟ ସାରାଂଶ। ${netMoneyLeft >= 0 ? `ଆପଣଙ୍କ ଜମି ଖର୍ଚ୍ଚ କାଟିବା ପରେ ₹${netSurplusFormatted} ନିଟ ଲାଭରେ ଅଛି।` : `ଆପଣଙ୍କ ଜମି ଏହି ଋତୁରେ ₹${netSurplusFormatted} କ୍ଷତିରେ ଚାଲୁଛି।`} ${totalObligations > 0 ? `ଆପଣଙ୍କର ₹${obligationsFormatted} ଦେୟ ଋଣ ଅଛି।` : `ଆପଣଙ୍କ ଜମି ସମ୍ପୂର୍ଣ୍ଣ ଋଣମୁକ୍ତ।`}`;
+      } else {
+        financialSummaryText = `Farm Money Health Summary. ${netMoneyLeft >= 0 ? `Your farm is earning a healthy surplus of ₹${netSurplusFormatted} after cultivation costs.` : `Your farm operates at a net loss of ₹${netSurplusFormatted} this season.`} ${totalObligations > 0 ? `You have ₹${obligationsFormatted} in upcoming payment obligations.` : `Encouragingly, your farm is debt free with zero payment obligations.`} ${allCrops.length >= 2 ? `Your multi-crop portfolio of ${allCrops.length} crops helps spread risk.` : `Planting a single crop increases market risk.`}`;
+      }
+    }
+
+    const text = buildVoiceText({ activeTab, advisories, distressData, mandiPrices, schemes, selectedCrop, language, weatherData: weather, farms, allCrops, cashFlow, marketSuggestions, cropEvalSummaryText, financialSummaryText });
     try {
       await speakText(text, language, (err) => { setIsVoicePlaying(false); toast.error('Voice error', err); });
       const checkDone = setInterval(() => {
@@ -2296,8 +2394,8 @@ function App() {
             <div className="bg-gradient-to-r from-emerald-50 via-white to-amber-50 p-5 rounded-2xl border border-emerald-200 shadow-sm text-left">
               <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
                 <div>
-                  <h2 className="text-base sm:text-lg font-extrabold text-slate-900 my-0">Where should I sell each crop?</h2>
-                  <p className="text-[11px] text-slate-600 mt-0.5 my-0">Live net-return recommendation by crop and farm.</p>
+                  <h2 className="text-base sm:text-lg font-extrabold text-slate-900 my-0"><T lang={language}>Where should I sell each crop?</T></h2>
+                  <p className="text-[11px] text-slate-600 mt-0.5 my-0"><T lang={language}>Live net-return recommendation by crop and farm.</T></p>
                 </div>
                 {loadingMarketSuggestions && <RefreshCw size={18} className="text-stable animate-spin" />}
               </div>
@@ -2306,9 +2404,9 @@ function App() {
                   {marketSuggestions.map((item: any) => (
                     <div key={item.crop.id} className="px-3.5 py-2.5 flex items-center justify-between gap-3 text-xs sm:text-sm">
                       <p className="text-slate-800 my-0 min-w-0 truncate">
-                        <strong className="capitalize">{item.crop.crop_type}</strong>
-                        <span className="text-slate-500"> from {item.farm?.name || item.farm?.district || 'Farm'}</span>
-                        <span className="text-slate-500">: sell at </span>
+                        <strong className="capitalize">{translateCrop(language, item.crop.crop_type)}</strong>
+                        <span className="text-slate-500"> <T lang={language}>from</T> {item.farm?.name || item.farm?.district || 'Farm'}</span>
+                        <span className="text-slate-500">: <T lang={language}>sell at</T> </span>
                         <strong className="text-emerald-800">{item.mandi.mandi_name}</strong>
                       </p>
                       <span className="text-emerald-800 font-black whitespace-nowrap">{formatCurrency(item.mandi.net_return, language, nativeDigits)} / q</span>
@@ -2316,16 +2414,16 @@ function App() {
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-500 my-0">{loadingMarketSuggestions ? 'Checking which crops are ready to sell...' : 'No crop is ready to sell yet. Once a crop reaches maturity, the best mandi will appear here.'}</p>
+                <p className="text-xs text-slate-500 my-0"><T lang={language}>{loadingMarketSuggestions ? 'Checking which crops are ready to sell...' : 'No crop is ready to sell yet. Once a crop reaches maturity, the best mandi will appear here.'}</T></p>
               )}
             </div>
 
           <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
                 <div>
-                  <h2 className="text-xl font-bold my-0">Mandi Pricing &amp; Net Realization</h2>
+                  <h2 className="text-xl font-bold my-0"><T lang={language}>Mandi Pricing & Net Realization</T></h2>
                   <p className="text-slate-500 text-xs mt-1 mb-0">
-                    Net returns after transport &amp; handling costs
+                    <T lang={language}>Net returns after transport & handling costs</T>
                   </p>
                 </div>
                 {allCrops.length > 1 && (
@@ -2352,12 +2450,12 @@ function App() {
               {selectedCrop && (
                 <div className="text-xs bg-stable-light text-stable-dark font-semibold rounded-lg px-4 py-2 flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="capitalize">🌾 {selectedCrop.crop_type}</span>
+                    <span className="capitalize">🌾 {translateCrop(language, selectedCrop.crop_type)}</span>
                     <span className="text-slate-400">·</span>
-                    <span>📍 Origin Farm: <strong>{selectedFarm?.name || `Farm #${selectedCrop.farm_id}`}</strong> ({selectedFarm?.district || 'Nashik'})</span>
+                    <span>📍 <T lang={language}>Origin Farm:</T> <strong>{selectedFarm?.name || `Farm #${selectedCrop.farm_id}`}</strong> ({selectedFarm?.district || 'Nashik'})</span>
                     {selectedCrop.stage && <><span className="text-slate-400">·</span><span>{selectedCrop.stage}</span></>}
                   </div>
-                  <span className="text-[10px] text-slate-500 font-normal">Distances calculated dynamically from farm GPS</span>
+                  <span className="text-[10px] text-slate-500 font-normal"><T lang={language}>Distances calculated dynamically from farm GPS</T></span>
                 </div>
               )}
 
@@ -2394,7 +2492,7 @@ function App() {
                   ) : (
                     <tr>
                       <td colSpan={6} className="px-4 py-8 text-center text-slate-400 text-xs">
-                        No mandi comparison data available. Register crop above to evaluate APMCs.
+                        <T lang={language}>No mandi comparison data available. Register crop above to evaluate APMCs.</T>
                       </td>
                     </tr>
                   )}
@@ -2409,7 +2507,7 @@ function App() {
                   onClick={() => setShowAllMandis(!showAllMandis)}
                   className="px-5 py-2.5 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 cursor-pointer shadow-2xs"
                 >
-                  {showAllMandis ? 'Show Top 5 Local Mandis' : `View More Mandis (+${mandiPrices.length - 5} More)`}
+                  <T lang={language}>{showAllMandis ? 'Show Top 5 Local Mandis' : `View More Mandis (+${mandiPrices.length - 5} More)`}</T>
                 </button>
               </div>
             )}
@@ -5522,13 +5620,13 @@ function App() {
             onClick={() => setActiveTab('yield')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'yield' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
           >
-            <Sprout size={18} /> Crop Advisor
+            <Sprout size={18} /> <T lang={language}>Crop Advisor</T>
           </button>
           <button 
             onClick={() => setActiveTab('financial')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'financial' ? 'bg-stable text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}
           >
-            <PiggyBank size={18} /> Financial Health
+            <PiggyBank size={18} /> <T lang={language}>Financial Health</T>
           </button>
           <button 
             onClick={() => setActiveTab('support')}
@@ -5550,7 +5648,7 @@ function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 p-4 md:p-8 max-w-5xl mx-auto w-full pb-24 md:pb-8 overflow-y-auto h-screen relative">
-        <header className="w-full max-w-full overflow-hidden flex justify-between items-center mb-6 pb-4 border-b border-earth-200 gap-1.5 sm:gap-4">
+        <header className="w-full max-w-full relative z-30 flex justify-between items-center mb-6 pb-4 border-b border-earth-200 gap-1.5 sm:gap-4">
           <div className="md:hidden flex-shrink min-w-0">
             <h1 className="text-sm font-black text-stable tracking-tight my-0 truncate" title="KrishiRakshak">KrishiRakshak</h1>
           </div>
@@ -5602,28 +5700,34 @@ function App() {
 
               {/* Notification Panel */}
               {showNotificationPanel && (
-                <div className="absolute right-0 mt-3 w-72 sm:w-80 bg-white rounded-2xl shadow-2xl border border-earth-200 p-4 z-50 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <h4 className="font-bold text-slate-800 text-sm my-0">Active Risk Alerts</h4>
-                    <span className="text-[10px] font-bold text-slate-400">{alerts.length} alerts</span>
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowNotificationPanel(false)} />
+                  <div className="absolute right-0 mt-3 w-72 sm:w-80 bg-white rounded-2xl shadow-2xl border border-earth-200 p-4 z-50 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <h4 className="font-bold text-slate-800 text-sm my-0"><T lang={language}>Active Risk Alerts</T></h4>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-slate-400">{alerts.length} <T lang={language}>alerts</T></span>
+                        <button onClick={() => setShowNotificationPanel(false)} className="text-slate-400 hover:text-slate-600 text-xs font-bold px-1">✕</button>
+                      </div>
+                    </div>
+                    <div className="max-h-60 overflow-y-auto space-y-2">
+                      {alerts.length > 0 ? (
+                        alerts.map((a: any) => (
+                          <div key={a.id} className={`p-3 rounded-xl border text-xs ${
+                            a.severity === 'Critical' ? 'bg-high-light border-high/20 text-high' : 'bg-elevated-light border-elevated/20 text-elevated'
+                          }`}>
+                            <p className="font-bold my-0 flex items-center gap-1">
+                              {a.severity === 'Critical' ? '🚨' : '⚠️'} {a.severity}
+                            </p>
+                            <p className="mt-1 mb-0 leading-relaxed font-semibold text-slate-700">{a.reason}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-slate-400 text-center py-4"><T lang={language}>No active risk alerts today.</T></p>
+                      )}
+                    </div>
                   </div>
-                  <div className="max-h-60 overflow-y-auto space-y-2">
-                    {alerts.length > 0 ? (
-                      alerts.map((a: any) => (
-                        <div key={a.id} className={`p-3 rounded-xl border text-xs ${
-                          a.severity === 'Critical' ? 'bg-high-light border-high/20 text-high' : 'bg-elevated-light border-elevated/20 text-elevated'
-                        }`}>
-                          <p className="font-bold my-0 flex items-center gap-1">
-                            {a.severity === 'Critical' ? '🚨' : '⚠️'} {a.severity}
-                          </p>
-                          <p className="mt-1 mb-0 leading-relaxed font-semibold text-slate-700">{a.reason}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-xs text-slate-400 text-center py-4">No active risk alerts today.</p>
-                    )}
-                  </div>
-                </div>
+                </>
               )}
             </div>
 
@@ -5651,37 +5755,37 @@ function App() {
           onClick={() => setActiveTab('home')}
           className={`flex flex-col items-center text-[10px] font-bold ${activeTab === 'home' ? 'text-stable' : 'text-slate-400'}`}
         >
-          <HomeIcon size={20} /> <span className="mt-1">Home</span>
+          <HomeIcon size={20} /> <span className="mt-1"><T lang={language}>Home</T></span>
         </button>
         <button 
           onClick={() => setActiveTab('crop')}
           className={`flex flex-col items-center text-[10px] font-bold ${activeTab === 'crop' ? 'text-stable' : 'text-slate-400'}`}
         >
-          <Sprout size={20} /> <span className="mt-1">Crop</span>
+          <Sprout size={20} /> <span className="mt-1"><T lang={language}>Crop</T></span>
         </button>
         <button 
           onClick={() => setActiveTab('market')}
           className={`flex flex-col items-center text-[10px] font-bold ${activeTab === 'market' ? 'text-stable' : 'text-slate-400'}`}
         >
-          <ShoppingCart size={20} /> <span className="mt-1">Market</span>
+          <ShoppingCart size={20} /> <span className="mt-1"><T lang={language}>Market</T></span>
         </button>
          <button 
           onClick={() => setActiveTab('yield')}
           className={`flex flex-col items-center text-[10px] font-bold ${activeTab === 'yield' ? 'text-stable' : 'text-slate-400'}`}
         >
-          <Sprout size={20} /> <span className="mt-1">Advisor</span>
+          <Sprout size={20} /> <span className="mt-1"><T lang={language}>Advisor</T></span>
         </button>
         <button 
           onClick={() => setActiveTab('financial')}
           className={`flex flex-col items-center text-[10px] font-bold ${activeTab === 'financial' ? 'text-stable' : 'text-slate-400'}`}
         >
-          <PiggyBank size={20} /> <span className="mt-1">Finance</span>
+          <PiggyBank size={20} /> <span className="mt-1"><T lang={language}>Finance</T></span>
         </button>
         <button 
           onClick={() => setActiveTab('support')}
           className={`flex flex-col items-center text-[10px] font-bold ${activeTab === 'support' ? 'text-stable' : 'text-slate-400'}`}
         >
-          <HelpCircle size={20} /> <span className="mt-1">Support</span>
+          <HelpCircle size={20} /> <span className="mt-1"><T lang={language}>Support</T></span>
         </button>
       </nav>
 

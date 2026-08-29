@@ -129,7 +129,8 @@ export async function speakText(
   if (!text || !text.trim()) return () => {};
 
   const cleaned = text.replace(/\s+/g, ' ').trim();
-  const translated = (language === 'english' || /[\u0900-\u097F\u0980-\u09FF\u0B00-\u0B7F]/.test(cleaned))
+  const isNativeScript = /[\u0900-\u097F\u0980-\u09FF\u0B00-\u0B7F]/.test(cleaned);
+  const translated = (language === 'english' || isNativeScript)
     ? cleaned
     : await translateText(cleaned, language);
 
@@ -145,10 +146,15 @@ export async function speakText(
     if (response.ok) {
       const blob = await response.blob();
       const audio = new Audio(URL.createObjectURL(blob));
+      audio.playbackRate = 1.18; // 1.18x speed for faster, natural human-like cadence
       activeAudio = audio;
       audio.onended = () => { activeAudio = null; };
       audio.onerror = () => { activeAudio = null; };
-      audio.play();
+      audio.play().catch((err) => {
+        if (err.name !== 'AbortError' && onError) {
+          onError(`Audio playback error: ${err.message}`);
+        }
+      });
 
       return () => {
         if (activeAudio) {
@@ -177,7 +183,7 @@ export async function speakText(
       const utterance = new SpeechSynthesisUtterance(translated);
       utterance.lang = locale;
       if (voice) utterance.voice = voice;
-      utterance.rate = 0.95;
+      utterance.rate = 1.15; // 1.15x speed for crisp, natural speech
       utterance.pitch = 1.0;
       utterance.volume = 1.0;
 
@@ -193,6 +199,7 @@ export async function speakText(
     const encoded = encodeURIComponent(translated.slice(0, 200));
     const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=${langCode}&client=tw-ob`;
     const audio = new Audio(audioUrl);
+    audio.playbackRate = 1.18; // 1.18x speed for faster, natural cadence
     activeAudio = audio;
     audio.onended = () => { activeAudio = null; };
     audio.onerror = () => { activeAudio = null; };
@@ -248,8 +255,10 @@ export function buildVoiceText(opts: {
   allCrops?: any[];
   cashFlow?: any[];
   marketSuggestions?: any[];
+  cropEvalSummaryText?: string;
+  financialSummaryText?: string;
 }): string {
-  const { activeTab, advisories, distressData, mandiPrices, schemes, selectedCrop, language, weatherData, farms = [], allCrops = [], cashFlow = [], marketSuggestions = [] } = opts;
+  const { activeTab, advisories, distressData, mandiPrices, schemes, selectedCrop, language, weatherData, farms = [], allCrops = [], cashFlow = [], marketSuggestions = [], cropEvalSummaryText, financialSummaryText } = opts;
   const lang = (language || 'english').toLowerCase();
 
   switch (activeTab) {
@@ -281,12 +290,18 @@ export function buildVoiceText(opts: {
 
     case 'yield':
     case 'crop': {
-      const cropName = selectedCrop?.crop_type || 'Tomato';
-      if (lang === 'hindi') return `फसल सलाहकार ${cropName} के लिए सक्रिय है। फसल अनुकूलता 94 प्रतिशत है। ड्रिप सिंचाई की सलाह दी जाती है।`;
-      if (lang === 'marathi') return `पीक सल्लागार ${cropName} साठी सक्रिय आहे. पीक सुसंगतता 94 टक्के आहे. ठिबक सिंचनाची शिफारस केली जाते.`;
-      if (lang === 'bengali') return `ফসল উপদেষ্টা ${cropName} এর জন্য সক্রিয়। ফসলের মিল ৯৪ শতাংশ। ড্রিপ সেচের সুপারিশ করা হচ্ছে।`;
-      if (lang === 'odia') return `ଫସଲ ପରାମର୍ଶଦାତା ${cropName} ପାଇଁ ସକ୍ରିୟ। ଫସଲ ମେଳ ୯୪ ପ୍ରତିଶତ। ଡ୍ରିପ ସିଞ୍ଚନ ସୁପାରିଶ କରାଯାଉଛି।`;
-      return `Crop Advisor active for ${cropName}. Crop match score is 94 percent. Recommended practice is drip irrigation.`;
+      const cropName = selectedCrop?.crop_type ? (selectedCrop.crop_type.charAt(0).toUpperCase() + selectedCrop.crop_type.slice(1)) : 'Crop';
+
+      if (cropEvalSummaryText) {
+        return cropEvalSummaryText;
+      }
+
+      const farmName = farms[0]?.name || farms[0]?.district || 'Main Farm';
+      const soil = farms[0]?.soil_type || 'loam';
+      const irrig = farms[0]?.irrigation || 'drip';
+      const area = farms[0]?.area || 2.5;
+
+      return `${cropName} Suitability & Farm Summary. For ${farmName} with ${soil} soil and ${irrig} irrigation, growing ${cropName} yields about 25 quintals per acre across ${area} acres. Recommended practice is drip irrigation.`;
     }
 
     case 'market': {
@@ -299,9 +314,9 @@ export function buildVoiceText(opts: {
           const farmName = item.farm?.name || item.farm?.district || 'farm';
           const mandiName = item.mandi?.mandi_name || 'nearest mandi';
           const netReturn = Math.round(item.mandi?.net_return || 0);
-          return `${cropName} from ${farmName} is best at ${mandiName} with about ${netReturn} rupees per quintal.`;
+          return `${cropName} from ${farmName} is best sold at ${mandiName} for about ${netReturn} rupees per quintal.`;
         }).join(' ');
-        return `Best selling options now: ${summary}`;
+        return `Where should I sell each crop? Live recommendation: ${summary}`;
       }
 
       const best = mandiPrices[0];
@@ -311,7 +326,7 @@ export function buildVoiceText(opts: {
       const districtName = farm?.district || 'Nashik';
 
       if (selectedCrop && !isCropMarketReady(selectedCrop.stage)) {
-        return `No crop is ready to sell right now. Focus on crop care and wait for maturity before marketing.`;
+        return `Where should I sell each crop? No crop is ready to sell right now. Focus on crop care and wait for maturity before marketing.`;
       }
 
       if (!best) {
@@ -319,57 +334,28 @@ export function buildVoiceText(opts: {
       }
 
       const bestNet = Math.round(best.net_return || ((best.sticker_price || 2620) - (best.transport_cost || 190) - (best.other_fees || 50)));
-      const secondBest = mandiPrices[1];
-      const secondNet = secondBest ? Math.round(secondBest.net_return || ((secondBest.sticker_price || 2500) - (secondBest.transport_cost || 200) - (secondBest.other_fees || 50))) : 0;
-      const diff = (secondNet > 0 && bestNet > secondNet) ? (bestNet - secondNet) : 0;
 
-      const advantagePhrase = diff > 0 
-        ? `This yields ${diff} rupees per quintal higher net profit than ${secondBest?.mandi_name || 'other mandis'}.` 
-        : '';
-
-      if (lang === 'hindi') {
-        return `आपके ${cropName} फसल के लिए, ${best.mandi_name || 'निकटतम मंडी'} सबसे अधिक ₹${bestNet} प्रति क्विंटल शुद्ध लाभ दे रही है। परिवहन और मंडी शुल्क घटाने के बाद यह सबसे लाभदायक विकल्प है। ${diff > 0 ? `इससे आपको ₹${diff} प्रति क्विंटल अधिक मुनाफा होगा।` : ''}`;
-      }
-      if (lang === 'marathi') {
-        return `आपल्या ${cropName} पिकासाठी, ${best.mandi_name || 'जवळची बाजार समिती'} सर्वात जास्त ₹${bestNet} प्रति क्विंटल निव्वळ नफा देत आहे. वाहतूक खर्च वजा करून हे सर्वात फायदेशीर आहे. ${diff > 0 ? `यामुळे तुम्हाला ₹${diff} प्रति क्विंटल जास्त नफा मिळेल.` : ''}`;
-      }
-      if (lang === 'bengali') {
-        return `আপনার ${cropName} ফসলের জন্য, ${best.mandi_name || 'নিকটস্থ মান্ডি'} সবচেয়ে বেশি ₹${bestNet} প্রতি কুইন্টাল নিট লাভ দিচ্ছে।`;
-      }
-      if (lang === 'odia') {
-        return `ଆପଣଙ୍କ ${cropName} ଫସଲ ପାଇଁ, ${best.mandi_name || 'ନିକଟସ୍ଥ ମଣ୍ଡି'} ସବୁଠାରୁ ଅଧିକ ₹${bestNet} ପ୍ରତି କ୍ୱିଣ୍ଟାଲ ଶୁଦ୍ଧ ଲାଭ ଦେଉଛି।`;
-      }
-
-      return `For your ${cropName} harvest at ${farmName} in ${districtName}, ${best.mandi_name} offers the highest net return of ${bestNet} rupees per quintal after deducting transport and fees. ${advantagePhrase}`;
+      return `Where should I sell each crop? For your ${cropName} harvest at ${farmName} in ${districtName}, ${best.mandi_name} offers the highest net return of ${bestNet} rupees per quintal after transport and fees.`;
     }
 
-    case 'support': {
-      const recSchemes = schemes.filter((s: any) => s.is_recommended && s.category !== 'loan').length;
-      const recLoans = schemes.filter((s: any) => s.is_recommended && s.category === 'loan').length;
-      if (lang === 'hindi') return `सरकारी सहायता मंच। आपके लिए ${recSchemes} सरकारी योजनाएं और ${recLoans} कृषि ऋण विकल्प उपलब्ध हैं।`;
-      if (lang === 'marathi') return `सरकारी मदत व्यासपीठ. आपल्यासाठी ${recSchemes} सरकारी योजना आणि ${recLoans} कृषी कर्ज पर्याय उपलब्ध आहेत.`;
-      if (lang === 'bengali') return `সরকারি সহায়তা প্ল্যাটফর্ম। আপনার জন্য ${recSchemes}টি সরকারি প্রকল্প এবং ${recLoans}টি কৃষি ঋণ বিকল্প উপলব্ধ।`;
-      if (lang === 'odia') return `ସରକାରୀ ସହାୟତା ପ୍ଲାଟଫର୍ମ। ଆପଣଙ୍କ ପାଇଁ ${recSchemes}ଟି ସରକାରୀ ଯୋଜନା ଓ ${recLoans}ଟି କୃଷି ଋଣ ବିକଳ୍ପ ଉପଲବ୍ଧ।`;
-      return `Government Support Platform. You have ${recSchemes} matched government schemes and ${recLoans} subsidized credit loan options.`;
-    }
-
-    case 'alerts':
-    case 'risk-detail':
     case 'financial': {
+      if (financialSummaryText) {
+        return financialSummaryText;
+      }
       const totalRev = allCrops.reduce((acc: number, c: any) => acc + ((c.expected_yield_quintals || 25) * (c.target_mandi_price || 2200)), 0);
       const totalCost = allCrops.reduce((acc: number, c: any) => acc + (c.production_cost || 12000), 0);
       const netLeft = totalRev - totalCost;
-      const totalDebt = cashFlow.reduce((acc: number, o: any) => acc + (o.amount || 0), 0);
-      const distressScore = distressData?.score ?? 35;
+      const obligationsArr = Array.isArray(cashFlow) ? cashFlow : ((cashFlow as any)?.obligations || []);
+      const totalDebt = obligationsArr.reduce((acc: number, o: any) => acc + (o?.amount || 0), 0);
 
-      const parts: string[] = [];
+      const parts: string[] = [`Farm Money Health Summary.`];
       if (netLeft > 100000) parts.push(`Your farm is performing strongly with an excellent profit surplus of ${Math.abs(netLeft)} rupees.`);
       else if (netLeft > 0) parts.push(`Your farm is earning a healthy income surplus of ${Math.abs(netLeft)} rupees above costs.`);
       else if (netLeft === 0) parts.push(`Your harvest income currently breaks even with cultivation expenses.`);
       else parts.push(`Your farm operates at a net loss of ${Math.abs(netLeft)} rupees this season.`);
 
       if (totalDebt > 0) {
-        if (netLeft > 0 && totalDebt > netLeft) parts.push(`However, upcoming payments due of ${totalDebt} rupees exceed your profit surplus.`);
+        if (netLeft > 0 && totalDebt > netLeft) parts.push(`Upcoming payments due of ${totalDebt} rupees exceed your profit surplus.`);
         else parts.push(`You have ${totalDebt} rupees in upcoming payments due.`);
       } else {
         parts.push(`Your farm is debt free with zero upcoming payment obligations.`);
@@ -377,8 +363,6 @@ export function buildVoiceText(opts: {
 
       if (allCrops.length === 1) parts.push(`Planting a single crop increases market risk.`);
       else if (allCrops.length >= 2) parts.push(`Your multi-crop portfolio of ${allCrops.length} crops helps spread market risk.`);
-
-      if (distressScore > 60) parts.push(`Regional distress risk is elevated at ${distressScore} percent.`);
 
       return parts.join(' ');
     }
