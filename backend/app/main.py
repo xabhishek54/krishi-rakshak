@@ -17,6 +17,7 @@ from app.schemes import seed_scheme_data, fetch_and_sync_external_schemes
 from app.credit import evaluate_credit_assessment
 from app.migrations import run_migrations
 from app.agmarknet import background_fetch_and_store  # Phase 19
+from app.voice_routes import router as voice_router
 import asyncio
 
 # ---------------------------------------------------------------------------
@@ -47,6 +48,8 @@ app = FastAPI(
     description="Early-warning, risk-intelligence, and intervention system backend API.",
     version="1.0.0"
 )
+
+app.include_router(voice_router)
 
 @app.on_event("startup")
 def startup_event():
