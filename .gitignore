@@ -2,6 +2,9 @@
 *.md
 !README.md
 
+# Local project history archive (kept only for personal tracking)
+.project_history/
+
 # Python
 __pycache__/
 *.py[cod]

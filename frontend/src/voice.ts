@@ -46,15 +46,63 @@ function loadVoices(): Promise<SpeechSynthesisVoice[]> {
   });
 }
 
-/** Pick the best voice for a locale */
-function pickVoice(voices: SpeechSynthesisVoice[], locale: string): SpeechSynthesisVoice | null {
-  const lang = locale.split('-')[0];
-  return (
-    voices.find(v => v.lang === locale) ||
-    voices.find(v => v.lang.startsWith(lang)) ||
-    voices.find(v => v.lang.startsWith('en')) ||
-    null
-  );
+/** Pick the same assistant-like voice consistently for a locale */
+export function pickVoice(voices: SpeechSynthesisVoice[], locale: string): SpeechSynthesisVoice | null {
+  const normalizedLocale = locale.toLowerCase();
+  const lang = normalizedLocale.split('-')[0];
+
+  const sorted = [...voices].sort((a, b) => {
+    const aScore = Number(a.default) + Number(a.localService) * 2;
+    const bScore = Number(b.default) + Number(b.localService) * 2;
+    if (bScore !== aScore) return bScore - aScore;
+    return a.name.localeCompare(b.name);
+  });
+
+  const exact = sorted.find(v => v.lang.toLowerCase() === normalizedLocale);
+  if (exact) return exact;
+
+  const sameLanguage = sorted.find(v => v.lang.toLowerCase().startsWith(lang));
+  if (sameLanguage) return sameLanguage;
+
+  const englishFallback = sorted.find(v => v.lang.toLowerCase().startsWith('en'));
+  if (englishFallback) return englishFallback;
+
+  return sorted[0] || null;
+}
+
+/** Determine whether a crop is in a sell-ready phase. */
+export function isCropMarketReady(stage?: string | null): boolean {
+  if (!stage) return false;
+
+  const normalized = stage.toLowerCase().replace(/[_-]+/g, ' ').trim();
+  if (!normalized) return false;
+
+  const readyPatterns = [
+    'maturity',
+    'mature',
+    'harvest',
+    'ready to sell',
+    'sale ready',
+    'bulb development & maturity',
+    'bulb development',
+  ];
+
+  const notReadyPatterns = [
+    'vegetative',
+    'flowering',
+    'seedling',
+    'tillering',
+    'jointing',
+    'crown root initiation',
+    'bulb initiation',
+    'yield formation',
+    'milking',
+    'fruit development',
+  ];
+
+  if (readyPatterns.some((pattern) => normalized.includes(pattern))) return true;
+  if (notReadyPatterns.some((pattern) => normalized.includes(pattern))) return false;
+  return false;
 }
 
 /** Speak text in the given language. Returns a cancel function. */
@@ -75,11 +123,12 @@ export async function speakText(
   const locale = LOCALE_MAP[language] || 'en-IN';
   const voice = pickVoice(voices, locale);
 
-  const utterance = new SpeechSynthesisUtterance(translated);
+  const utterance = new SpeechSynthesisUtterance(translated.replace(/\s+/g, ' ').trim());
   utterance.lang = locale;
   if (voice) utterance.voice = voice;
-  utterance.rate = 0.92; // Slightly relaxed, clear & articulate pacing for farmers
-  utterance.pitch = 1.0;
+  utterance.rate = 1.08;
+  utterance.pitch = 1.15;
+  utterance.volume = 1;
 
   utterance.onerror = (e) => {
     if (onError) onError(`Voice error: ${e.error}`);
@@ -117,30 +166,51 @@ export function buildVoiceText(opts: {
   farms?: any[];
   allCrops?: any[];
   cashFlow?: any[];
+  marketSuggestions?: any[];
 }): string {
-  const { activeTab, advisories, distressData, mandiPrices, schemes, selectedCrop, language, farms = [], allCrops = [], cashFlow = [] } = opts;
+  const { activeTab, advisories, distressData, mandiPrices, schemes, selectedCrop, language, weatherData, farms = [], allCrops = [], cashFlow = [], marketSuggestions = [] } = opts;
   const lang = (language || 'english').toLowerCase();
 
   switch (activeTab) {
     case 'home': {
-      const topAdvisory = advisories.length > 0 ? advisories[0].recommendation : '';
-      const mandiPrice = mandiPrices.length > 0 ? mandiPrices[0].modal_price : 2290;
-      const activeCount = advisories.length;
+      const activeCount = advisories.filter(a => !!a && !!a.recommendation).length;
+      const weatherText = (weatherData?.observation?.rainfall ?? 0) > 10 ? 'heavy rain expected today' : 'weather is clear for fieldwork';
+      const riskText = distressData?.score >= 50 ? 'some risk factors require attention' : 'your farms are in healthy condition overall';
+
+      const topMandi = mandiPrices[0];
+      const topPrice = topMandi ? (topMandi.sticker_price ?? topMandi.modal_price ?? topMandi.net_return ?? topMandi.price ?? 2620) : 2620;
+      const currentDistrict = farms[0]?.district || 'Local';
+      const cropName = selectedCrop?.crop_type ? selectedCrop.crop_type.charAt(0).toUpperCase() + selectedCrop.crop_type.slice(1) : 'Crop';
+      const mandiName = topMandi?.mandi_name || `${currentDistrict} APMC`;
+
+      const mandiNote = `Mandi rate for ${cropName} is ₹${topPrice}/q at ${mandiName}.`;
+
+      let summaryText = activeCount === 0
+        ? `All tasks completed for today! ${riskText}, and ${weatherText}. ${mandiNote}`
+        : `Overall, ${riskText}. ${weatherText}. ${mandiNote} You have ${activeCount} pending action item${activeCount > 1 ? 's' : ''} recommended for today below.`;
 
       if (lang === 'hindi') {
-        return `आज का कृषि सारांश। आपके खेत की स्थिति सामान्य है। आज का मंडी भाव ₹${mandiPrice} प्रति क्विंटल है। आपके पास ${activeCount} कार्य लंबित हैं। मुख्य सलाह: ${topAdvisory || 'खेत में नमी बनाए रखें'}`;
+        summaryText = activeCount === 0
+          ? `आज के सभी कार्य पूर्ण हैं! ${riskText}, और ${weatherText}. ${mandiNote}`
+          : `कुल मिलाकर, ${riskText}. ${weatherText}. ${mandiNote} आपके पास आज के लिए ${activeCount} लंबित कार्रवाई${activeCount > 1 ? 'याँ' : ''} हैं।`;
       }
       if (lang === 'marathi') {
-        return `आजचा शेती सारांश. आपल्या शेताची परिस्थिती सामान्य आहे. आजचा बाजारभाव ₹${mandiPrice} प्रति क्विंटल आहे. आपल्याकडे ${activeCount} कामे प्रलंबित आहेत. मुख्य सल्ला: ${topAdvisory || 'शेतातील ओलावा तपासा'}`;
+        summaryText = activeCount === 0
+          ? `आजचे सर्व काम पूर्ण झाले! ${riskText}, आणि ${weatherText}. ${mandiNote}`
+          : `एकंदरीत, ${riskText}. ${weatherText}. ${mandiNote} आपल्याकडे आजसाठी ${activeCount} प्रलंबित कार्य${activeCount > 1 ? 'े' : ''} आहेत.`;
       }
       if (lang === 'bengali') {
-        return `আজকের খামার সারাংশ। আপনার খামারের অবস্থা স্বাভাবিক। আজকের মান্ডি দর ₹${mandiPrice} প্রতি কুইন্টাল। আপনার ${activeCount}টি কাজ বাকী আছে। মূল পরামর্শ: ${topAdvisory || 'মাটির আর্দ্রতা পরীক্ষা করুন'}`;
+        summaryText = activeCount === 0
+          ? `আজকের সব কাজ শেষ! ${riskText}, এবং ${weatherText}. ${mandiNote}`
+          : `সামগ্রিকভাবে, ${riskText}. ${weatherText}. ${mandiNote} আপনার ${activeCount}টি অমীমাংসিত কাজ বাকি আছে।`;
       }
       if (lang === 'odia') {
-        return `ଆଜିର କୃଷି ସାରାଂଶ। ଆପଣଙ୍କ ଜମି ସ୍ଥିତି ସ୍ୱାଭାବିକ ଅଛି। ଆଜିର ମଣ୍ଡି ଦର ₹${mandiPrice} ପ୍ରତି କ୍ୱିଣ୍ଟାଲ। ଆପଣଙ୍କର ${activeCount}ଟି କାର୍ଯ୍ୟ ବାକି ଅଛି। ମୁଖ୍ୟ ପରାମର୍ଶ: ${topAdvisory || 'ଜମିର ଓଦାପଣ ଯାଞ୍ଚ କରନ୍ତୁ'}`;
+        summaryText = activeCount === 0
+          ? `ଆଜିର ସବୁ କାର୍ଯ୍ୟ ସମାପ୍ତ! ${riskText}, ଏବଂ ${weatherText}. ${mandiNote}`
+          : `ସମ୍ମୁଖୀନରେ, ${riskText}. ${weatherText}. ${mandiNote} ଆପଣଙ୍କର ଆଜି ପାଇଁ ${activeCount}ଟି ବାକି କାର୍ଯ୍ୟ ଅଛି।`;
       }
 
-      return `Today's farm summary. Your farm conditions are stable. Mandi price is ₹${mandiPrice} per quintal. You have ${activeCount} pending action items. Top action today: ${topAdvisory || 'Keep monitoring field soil moisture.'}`;
+      return summaryText;
     }
 
     case 'yield':
@@ -154,12 +224,30 @@ export function buildVoiceText(opts: {
     }
 
     case 'market': {
+      const sellReadySuggestions = (marketSuggestions || []).filter((item: any) => isCropMarketReady(item?.crop?.stage));
+
+      if (sellReadySuggestions.length > 0) {
+        const top = sellReadySuggestions.slice(0, 2);
+        const summary = top.map((item: any) => {
+          const cropName = item.crop?.crop_type || 'crop';
+          const farmName = item.farm?.name || item.farm?.district || 'farm';
+          const mandiName = item.mandi?.mandi_name || 'nearest mandi';
+          const netReturn = Math.round(item.mandi?.net_return || 0);
+          return `${cropName} from ${farmName} is best at ${mandiName} with about ${netReturn} rupees per quintal.`;
+        }).join(' ');
+        return `Best selling options now: ${summary}`;
+      }
+
       const best = mandiPrices[0];
       const cropName = selectedCrop?.crop_type ? (selectedCrop.crop_type.charAt(0).toUpperCase() + selectedCrop.crop_type.slice(1)) : 'Tomato';
       const farm = farms?.[0];
       const farmName = farm?.name || 'Main Farm';
       const districtName = farm?.district || 'Nashik';
-      
+
+      if (selectedCrop && !isCropMarketReady(selectedCrop.stage)) {
+        return `No crop is ready to sell right now. Focus on crop care and wait for maturity before marketing.`;
+      }
+
       if (!best) {
         return `Market Intelligence for ${cropName}. Checking nearest APMC mandis for optimal pricing.`;
       }
@@ -186,7 +274,7 @@ export function buildVoiceText(opts: {
         return `ଆପଣଙ୍କ ${cropName} ଫସଲ ପାଇଁ, ${best.mandi_name || 'ନିକଟସ୍ଥ ମଣ୍ଡି'} ସବୁଠାରୁ ଅଧିକ ₹${bestNet} ପ୍ରତି କ୍ୱିଣ୍ଟାଲ ଶୁଦ୍ଧ ଲାଭ ଦେଉଛି।`;
       }
 
-      return `For your ${cropName} harvest at ${farmName} in ${districtName}, ${best.mandi_name} offers the highest net return of ${bestNet} rupees per quintal after deducting transport and fees. ${advantagePhrase} Recommended to sell during early morning bidding hours.`;
+      return `For your ${cropName} harvest at ${farmName} in ${districtName}, ${best.mandi_name} offers the highest net return of ${bestNet} rupees per quintal after deducting transport and fees. ${advantagePhrase}`;
     }
 
     case 'support': {

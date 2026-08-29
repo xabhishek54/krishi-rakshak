@@ -16,7 +16,7 @@ import {
 } from './i18n';
 import { ToastContainer, useToast } from './Toast';
 import { getStateList, getDistrictsForState, getDistrictCoords } from './india_locations';
-import { speakText, stopSpeech, buildVoiceText, askGemini } from './voice';
+import { speakText, stopSpeech, buildVoiceText, askGemini, isCropMarketReady } from './voice';
 import T from './Translated';
 import { translateText, setGoogleTranslateLanguage } from './translate';
 
@@ -105,6 +105,8 @@ function App() {
     try { const c = localStorage.getItem('kr_cached_alerts'); return c ? JSON.parse(c) : []; } catch { return []; }
   });
   const [mandiPrices, setMandiPrices] = useState<any[]>([]);
+  const [marketSuggestions, setMarketSuggestions] = useState<any[]>([]);
+  const [loadingMarketSuggestions, setLoadingMarketSuggestions] = useState<boolean>(false);
   const [priceHistoryData, setPriceHistoryData] = useState<any[]>([]);
   const [priceCrashStatus, setPriceCrashStatus] = useState<any>(null);
   const [selectedMandiId, setSelectedMandiId] = useState<number | null>(null);
@@ -292,7 +294,6 @@ function App() {
   const [newCropSowingDate, setNewCropSowingDate] = useState<string>(
     new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
-  const [newCropImageUrl, setNewCropImageUrl] = useState<string>('');
 
   // Form states for login/register
   const [isRegistering, setIsRegistering] = useState<boolean>(false);
@@ -745,6 +746,42 @@ function App() {
       await fetchPriceCrash(1);
     }
   };
+
+  const fetchMarketSuggestions = async () => {
+    if (!token || allCrops.length === 0) {
+      setMarketSuggestions([]);
+      return;
+    }
+
+    setLoadingMarketSuggestions(true);
+    try {
+      const suggestions = await Promise.all(allCrops.map(async (crop: any) => {
+        const farm = farms.find((item: any) => item.id === crop.farm_id);
+        if (!crop?.stage || !isCropMarketReady(crop.stage)) return null;
+
+        const params = new URLSearchParams({ crop: crop.crop_type });
+        if (crop.farm_id) params.set('farm_id', String(crop.farm_id));
+        const response = await fetch(`${API_BASE}/api/v1/mandis/compare?${params}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) return null;
+        const mandis = await response.json();
+        const best = [...mandis].sort((a, b) => (b.net_return || 0) - (a.net_return || 0))[0];
+        return best ? { crop, farm, mandi: best } : null;
+      }));
+      setMarketSuggestions(suggestions.filter(Boolean).slice(0, 3));
+    } catch {
+      setMarketSuggestions([]);
+    } finally {
+      setLoadingMarketSuggestions(false);
+    }
+  };
+
+  useEffect(() => {
+    if (token && allCrops.length > 0 && farms.length > 0) {
+      fetchMarketSuggestions();
+    }
+  }, [token, allCrops, farms]);
 
   const fetchPriceHistory = async (overrideMandiId?: number) => {
     const targetMandiId = overrideMandiId || selectedMandiId;
@@ -1264,7 +1301,7 @@ function App() {
   const handleVoicePlayback = async () => {
     if (isVoicePlaying) { stopSpeech(); setIsVoicePlaying(false); return; }
     setIsVoicePlaying(true);
-    const text = buildVoiceText({ activeTab, advisories, distressData, mandiPrices, schemes, selectedCrop, language, weatherData: weather, farms, allCrops, cashFlow });
+    const text = buildVoiceText({ activeTab, advisories, distressData, mandiPrices, schemes, selectedCrop, language, weatherData: weather, farms, allCrops, cashFlow, marketSuggestions });
     try {
       await speakText(text, language, (err) => { setIsVoicePlaying(false); toast.error('Voice error', err); });
       const checkDone = setInterval(() => {
@@ -2255,6 +2292,34 @@ function App() {
 
       case 'market': {
         return (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-r from-emerald-50 via-white to-amber-50 p-5 rounded-2xl border border-emerald-200 shadow-sm text-left">
+              <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+                <div>
+                  <h2 className="text-base sm:text-lg font-extrabold text-slate-900 my-0">Where should I sell each crop?</h2>
+                  <p className="text-[11px] text-slate-600 mt-0.5 my-0">Live net-return recommendation by crop and farm.</p>
+                </div>
+                {loadingMarketSuggestions && <RefreshCw size={18} className="text-stable animate-spin" />}
+              </div>
+              {marketSuggestions.length > 0 ? (
+                <div className="bg-white rounded-xl border border-emerald-200 divide-y divide-slate-100 overflow-hidden">
+                  {marketSuggestions.map((item: any) => (
+                    <div key={item.crop.id} className="px-3.5 py-2.5 flex items-center justify-between gap-3 text-xs sm:text-sm">
+                      <p className="text-slate-800 my-0 min-w-0 truncate">
+                        <strong className="capitalize">{item.crop.crop_type}</strong>
+                        <span className="text-slate-500"> from {item.farm?.name || item.farm?.district || 'Farm'}</span>
+                        <span className="text-slate-500">: sell at </span>
+                        <strong className="text-emerald-800">{item.mandi.mandi_name}</strong>
+                      </p>
+                      <span className="text-emerald-800 font-black whitespace-nowrap">{formatCurrency(item.mandi.net_return, language, nativeDigits)} / q</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 my-0">{loadingMarketSuggestions ? 'Checking which crops are ready to sell...' : 'No crop is ready to sell yet. Once a crop reaches maturity, the best mandi will appear here.'}</p>
+              )}
+            </div>
+
           <div className="bg-white p-6 rounded-2xl border border-earth-200 shadow-sm space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
                 <div>
@@ -2426,6 +2491,7 @@ function App() {
                 })()}
               </div>
             )}
+          </div>
           </div>
         );
       }
@@ -6188,17 +6254,6 @@ function App() {
                   <option value="tomato">🍅 {translateCrop(language, 'tomato')}</option>
                   <option value="wheat">🌾 {translateCrop(language, 'wheat')}</option>
                   <option value="onion">🧅 {translateCrop(language, 'onion')}</option>
-                  <option value="rice">🌾 {translateCrop(language, 'rice')}</option>
-                  <option value="sugarcane">🎋 {translateCrop(language, 'sugarcane')}</option>
-                  <option value="cotton">🌿 {translateCrop(language, 'cotton')}</option>
-                  <option value="maize">🌽 {translateCrop(language, 'maize')}</option>
-                  <option value="soybean">🫘 {translateCrop(language, 'soybean')}</option>
-                  <option value="groundnut">🥜 {translateCrop(language, 'groundnut')}</option>
-                  <option value="potato">🥔 {translateCrop(language, 'potato')}</option>
-                  <option value="chilli">🌶 {translateCrop(language, 'chilli')}</option>
-                  <option value="grapes">🍇 {translateCrop(language, 'grapes')}</option>
-                  <option value="banana">🍌 {translateCrop(language, 'banana')}</option>
-                  <option value="mango">🥭 {translateCrop(language, 'mango')}</option>
                 </select>
               </div>
 
@@ -6217,14 +6272,6 @@ function App() {
                   className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl" />
               </div>
 
-              {/* Image URL */}
-              <div>
-                <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Crop Image URL (Optional)</label>
-                <input type="url" value={newCropImageUrl} onChange={(e) => setNewCropImageUrl(e.target.value)}
-                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl font-mono"
-                  placeholder="https://example.com/mycrop.jpg" />
-                <p className="text-[10px] text-slate-400 mt-1">Leave empty to auto-assign a stock photo based on crop type.</p>
-              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
@@ -6245,7 +6292,6 @@ function App() {
                         crop_type: newCropType,
                         variety: newCropVariety,
                         sowing_date: newCropSowingDate,
-                        image_url: newCropImageUrl || null
                       })
                     });
                     if (res.ok) {

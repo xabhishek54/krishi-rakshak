@@ -17,6 +17,7 @@ import {
   formatFarmSummary,
   useNativeDigits,
 } from './i18n';
+import { buildVoiceText, isCropMarketReady } from './voice';
 
 describe('number & currency formatting', () => {
   it('formats integers with Indian grouping using Latin digits', () => {
@@ -97,6 +98,59 @@ describe('composed human strings', () => {
 
   it('formats farm summary counts', () => {
     expect(formatFarmSummary(2, 3, 'english', false)).toBe('2 crops across 3 farms');
+  });
+});
+
+describe('sell-ready crop filtering', () => {
+  it('keeps only crops that are near harvest or ready to sell', () => {
+    expect(isCropMarketReady('Vegetative')).toBe(false);
+    expect(isCropMarketReady('Flowering')).toBe(false);
+    expect(isCropMarketReady('Fruit Development')).toBe(false);
+    expect(isCropMarketReady('Maturity')).toBe(true);
+    expect(isCropMarketReady('Bulb Development & Maturity')).toBe(true);
+  });
+
+  it('uses concise natural market speech without numbered list spam', () => {
+    const text = buildVoiceText({
+      activeTab: 'market',
+      advisories: [],
+      distressData: { score: 30 },
+      mandiPrices: [],
+      schemes: [],
+      selectedCrop: { crop_type: 'tomato' },
+      language: 'english',
+      marketSuggestions: [
+        { crop: { crop_type: 'tomato', id: 1, stage: 'Maturity' }, farm: { name: 'North Farm' }, mandi: { mandi_name: 'Lasalgaon APMC', net_return: 2450 } },
+        { crop: { crop_type: 'onion', id: 2, stage: 'Vegetative Growth' }, farm: { name: 'Main Farm' }, mandi: { mandi_name: 'Nashik APMC', net_return: 2100 } }
+      ]
+    });
+
+    expect(text).toContain('Best selling options now');
+    expect(text).toContain('Lasalgaon APMC');
+    expect(text).not.toContain('Recommendation 1');
+    expect(text).not.toContain('Recommendation 2');
+  });
+
+  it('reads the actual home summary wording instead of a generic script', () => {
+    const text = buildVoiceText({
+      activeTab: 'home',
+      advisories: [{ id: 1, recommendation: 'Check soil moisture' }, { id: 2, recommendation: 'Inspect pest pressure' }],
+      distressData: { score: 30 },
+      mandiPrices: [{ modal_price: 2200, mandi_name: 'Nashik APMC' }],
+      schemes: [],
+      selectedCrop: { crop_type: 'tomato' },
+      language: 'english',
+      weatherData: { observation: { rainfall: 5 } },
+      farms: [{ district: 'Nashik' }],
+      allCrops: [],
+      cashFlow: [],
+      marketSuggestions: []
+    });
+
+    expect(text).toContain('Overall');
+    expect(text).toContain('Mandi rate for Tomato');
+    expect(text).toContain('pending action items');
+    expect(text).not.toContain('Top action today');
   });
 });
 
