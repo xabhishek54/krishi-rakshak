@@ -1184,8 +1184,23 @@ def get_distress_score(
     if cached is not None:
         return cached
     distress = calculate_distress_risk(db, current_farmer)
-    _cache_set(cache_key, distress, ttl_seconds=60)  # 60-second TTL
-    return distress
+    # Eagerly read all attributes while the session is still open to avoid
+    # DetachedInstanceError when FastAPI serialises the response after the
+    # session closes (common on Render / PostgreSQL connection pool).
+    result = {
+        "id": distress.id,
+        "farmer_id": distress.farmer_id,
+        "score": distress.score,
+        "weather_component": distress.weather_component,
+        "market_component": distress.market_component,
+        "yield_component": distress.yield_component,
+        "financial_component": distress.financial_component,
+        "urgency_component": distress.urgency_component,
+        "risk_level": distress.risk_level,
+        "created_at": distress.created_at,
+    }
+    _cache_set(cache_key, result, ttl_seconds=60)  # 60-second TTL
+    return result
 
 @app.post("/api/v1/farmers/me/recommendations/generate", response_model=List[schemas.RecommendationResponse])
 def generate_recommendations(
