@@ -171,6 +171,14 @@ const DICTIONARY: Record<string, Record<string, string>> = {
   "net realization": { hindi: "शुद्ध आय", marathi: "निव्वळ प्राप्ती", bengali: "নিট প্রাপ্তি", odia: "ଶୁଦ୍ଧ ଆୟ" },
   "transport cost": { hindi: "परिवहन लागत", marathi: "वाहतूक खर्च", bengali: "পরিবহন খরচ", odia: "ପରିବହନ ଖର୍ଚ୍ଚ" },
   "market fee": { hindi: "मंडी शुल्क", marathi: "बाजार शुल्क", bengali: "বাজার ফি", odia: "ବଜାର ଶୁଳ୍କ" },
+  "harvest readiness & market recommendations": { hindi: "फसल पकने की स्थिति एवं बाज़ार सिफारिशें", marathi: "पिक पक्वता आणि बाजार शिफारसी", bengali: "ফসল কাটার প্রস্তুতি ও বাজার সুপারিশ", odia: "ଫସଲ ଅମଳ ସ୍ଥିତି ଓ ବଜାର ସୁପାରିଶ" },
+  "ready to sell now": { hindi: "बेचने के लिए तैयार", marathi: "विकण्यासाठी तयार", bengali: "বিক্রি করার জন্য প্রস্তুত", odia: "ବିକ୍ରି ପାଇଁ ପ୍ରସ୍ତୁତ" },
+  "growing stage": { hindi: "वृद्धि चरण (विकास जारी)", marathi: "वाढीचा टप्पा", bengali: "বৃদ্ধির পর্যায়", odia: "ବୃଦ୍ଧି ପର୍ଯ୍ୟାୟ" },
+  "ready for sale only": { hindi: "केवल बिक्री योग्य फसलें", marathi: "फक्त विक्रीयोग्य पिके", bengali: "শুধুমাত্র বিক্রির উপযোগী ফসল", odia: "କେବଳ ବିକ୍ରି ଉପଯୋଗୀ ଫସଲ" },
+  "all registered crops": { hindi: "सभी पंजीकृत फसलें", marathi: "सर्व नोंदणीकृत पिके", bengali: "সমস্ত নিবন্ধিত ফসল", odia: "ସମସ୍ତ ପଞ୍ଜୀକୃତ ଫସଲ" },
+  "compare mandis": { hindi: "मंडी तुलना करें", marathi: "बाजार तुलना करा", bengali: "মান্ডি তুলনা করুন", odia: "ମଣ୍ଡି ତୁଳନା କରନ୍ତୁ" },
+  "harvest maturity reached. peak net returns available at local mandis.": { hindi: "फसल पूरी तरह पक चुकी है। स्थानीय मंडियों में सर्वाधिक शुद्ध लाभ उपलब्ध है।", marathi: "पिक पूर्णपणे परिपक्व झाले आहे. स्थानिक बाजारात सर्वाधिक नफा उपलब्ध आहे.", bengali: "ফসল পরিপক্ক হয়েছে। স্থানীয় মান্ডিতে সর্বোচ্চ নিট লাভ পাওয়া যাচ্ছে।", odia: "ଫସଲ ସମ୍ପୂର୍ଣ୍ଣ ପାଚିଯାଇଛି। ସ୍ଥାନୀୟ ମଣ୍ଡିରେ ସର୍ବାଧିକ ଶୁଦ୍ଧ ଲାଭ ଉପଲବ୍ଧ।" },
+  "currently in growth stage. estimated harvest maturity in ~2-3 weeks.": { hindi: "वर्तमान में वृद्धि चरण में है। लगभग 2-3 सप्ताह में फसल कटाई के लिए तैयार होगी।", marathi: "सध्या वाढीच्या टप्प्यात आहे. सुमारे 2-3 आठवड्यात काढणीसाठी तयार होईल.", bengali: "বর্তমানে বৃদ্ধির পর্যায়ে রয়েছে। আনুমানিক ২-৩ সপ্তাহে কাটার উপযোগী হবে।", odia: "ବର୍ତ୍ତମାନ ବୃଦ୍ଧି ପର୍ଯ୍ୟାୟରେ ଅଛି। ପ୍ରାୟ ୨-୩ ସପ୍ତାହ ମଧ୍ୟରେ ଅମଳ ପାଇଁ ପ୍ରସ୍ତୁତ ହେବ।" },
   "sell now": { hindi: "अभी बेचें", marathi: "आत्ता विका", bengali: "এখনই বিক্রি করুন", odia: "ଏବେ ବିକ୍ରି କରନ୍ତୁ" },
   "hold": { hindi: "प्रतीक्षा करें", marathi: "थांबा", bengali: "অপেক্ষা করুন", odia: "ଅପେକ୍ଷା କରନ୍ତୁ" },
 
@@ -213,7 +221,20 @@ const DICTIONARY: Record<string, Record<string, string>> = {
   "loan amount": { hindi: "ऋण राशि", marathi: "कर्जाची रक्कम", bengali: "ঋণের পরিমাণ", odia: "ଋଣ ରାଶି" },
   "interest rate": { hindi: "ब्याज दर", marathi: "व्याज दर", bengali: "সুদের হার", odia: "ସୁଧ ହାର" },
 
-  // ── Common UI ────────────────────────────────────────────────
+  // ── Risk Alerts & Severity ────────────────────────────────────
+  "active risk alerts": { hindi: "सक्रिय जोखिम चेतावनियाँ", marathi: "सक्रिय जोखीम इशारे", bengali: "সক্রিয় ঝুঁকি সতর্কতা", odia: "ସକ୍ରିୟ ସଙ୍କଟ ଚେତାବନୀ" },
+  "no active risk alerts today.": { hindi: "आज कोई सक्रिय जोखिम चेतावनी नहीं है।", marathi: "आज कोणताही सक्रिय जोखीम इशारा नाही.", bengali: "আজ কোনো সক্রিয় ঝুঁকি সতর্কতা নেই।", odia: "ଆଜି କୌଣସି ସକ୍ରିୟ ସଙ୍କଟ ଚେତାବନୀ ନାହିଁ।" },
+  "critical": { hindi: "गंभीर", marathi: "गंभीर", bengali: "গুরুতর", odia: "ଗୁରୁତର" },
+  "elevated": { hindi: "उन्नत", marathi: "उन्नत", bengali: "উন্নত", odia: "ଉଚ୍ଚ" },
+  "watch": { hindi: "सतर्क", marathi: "सावध", bengali: "সতর্ক", odia: "ସତର୍କ" },
+  "high risk": { hindi: "उच्च जोखिम", marathi: "उच्च जोखीम", bengali: "উচ্চ ঝুঁকি", odia: "ଅଧିକ ଆଶଙ୍କା" },
+  "alerts": { hindi: "चेतावनी", marathi: "इशारे", bengali: "সতর্কতা", odia: "ସତର୍କତା" },
+  "flash flood & severe waterlogging alert — flash flood warning issued for local district. ensure deep drainage trenches around tomato & onion beds immediately to prevent root rot and crop loss.": {
+    hindi: "आकस्मिक बाढ़ एवं गंभीर जलभराव चेतावनी — क्षेत्र में भारी बारिश की चेतावनी जारी। टमाटर और प्याज की क्यारियों के चारों ओर जल निकासी नाली बनाएं ताकि जड़ों के सड़ने और फसल नुकसान को रोका जा सके।",
+    marathi: "अचानक पूर आणि पाणी साचण्याची चेतावणी — परिसरात मुसळधार पावसाचा इशारा. टोमॅटो आणि कांद्याच्या पाटांभोवती पाण्याचा निचरा करणारे चर खणा जेणेकरून मूळ कुजणे आणि पिकाचे नुकसान टाळता येईल.",
+    bengali: "আকস্মিক বন্যা ও জলাবদ্ধতা সতর্কতা — এলাকায় ভারী বৃষ্টির সতর্কতা জারি। টমেটো ও পেঁয়াজ খেতের চারপাশে পানি নিষ্কাশন নালা তৈরি করুন যাতে মূল পচা ও ফসলের ক্ষতি রোধ করা যায়।",
+    odia: "ଆକସ୍ମିକ ବନ୍ୟା ଓ ଜଳବନ୍ଧୀ ସତର୍କତା — ଅଞ୍ଚଳରେ ପ୍ରବଳ ବର୍ଷାର ସତର୍କତା। ଟମାଟୋ ଓ ପିଆଜ କିଆରୀ ଚାରିପାଖରେ ଜଳ ନିଷ୍କାସନ ନାଳ ଖୋଳନ୍ତୁ ଯାହାଫଳରେ ଚେର ସଢ଼ିବା ଓ ଫସଲ ନଷ୍ଟ ରୋକାଯାଇପାରିବ।"
+  },
   "loading": { hindi: "लोड हो रहा है...", marathi: "लोड होत आहे...", bengali: "লোড হচ্ছে...", odia: "ଲୋଡ ହେଉଛି..." },
   "no data available": { hindi: "कोई डेटा उपलब्ध नहीं", marathi: "कोणताही डेटा उपलब्ध नाही", bengali: "কোনো তথ্য নেই", odia: "କୌଣସି ତଥ୍ୟ ନାହିଁ" },
   "view details": { hindi: "विवरण देखें", marathi: "तपशील पहा", bengali: "বিস্তারিত দেখুন", odia: "ବিବরଣ ଦେଖନ୍ତୁ" },
@@ -227,14 +248,75 @@ const DICTIONARY: Record<string, Record<string, string>> = {
   "advisory": { hindi: "कृषि सलाह", marathi: "कृषी सल्ला", bengali: "কৃষি পরামর্শ", odia: "କୃଷି ପରାମର୍ଶ" },
   "alert": { hindi: "चेतावनी", marathi: "सतर्कता", bengali: "সতর্কতা", odia: "ସତର୍କତା" },
   "sign out": { hindi: "लॉग आउट", marathi: "बाहेर पडा", bengali: "সাইন আউট", odia: "ସାଇନ ଆଉଟ" },
-  "language": { hindi: "भाषा", marathi: "भाषा", bengali: "ভাষা", odia: "ଭାଷା" },
+  "language": { hindi: "भाषा", marathi: "भाषा", bengali: "भाषा", odia: "ଭାଷା" },
+  "disease": { hindi: "रोग एवं कीट सुरक्षा", marathi: "रोग आणि कीड सुरक्षा", bengali: "রোগ ও কীট সুরক্ষা", odia: "ରୋଗ ଓ କୀଟ ସୁରକ୍ଷା" },
+  "state direct transfer (₹10,000/acre/season)": { hindi: "राज्य प्रत्यक्ष हस्तांतरण (₹10,000/एकड़/सीजन)", marathi: "राज्य थेट हस्तांतरण (₹10,000/एकर/हंगाम)", bengali: "রাজ্য সরাসরি সহায়তা (₹১০,০০০/একর/মরসুম)", odia: "ରାଜ୍ୟ ସିଧାସଳଖ ସହାୟତା (₹୧୦,୦୦୦/ଏକର/ଋତୁ)" },
+  "pm micro food processing enterprises (pm-fme) credit": { hindi: "पीएम सूक्ष्म खाद्य उद्योग प्रसंस्करण (PM-FME) ऋण", marathi: "पीएम सूक्ष्म अन्न प्रक्रिया उद्योग (PM-FME) कर्ज", bengali: "পিএম মাইক্রো ফুড প্রসেসিং (PM-FME) ঋণ", odia: "ପିଏମ ମାଇକ୍ରୋ ଫୁଡ୍ ପ୍ରୋସେସିଂ (PM-FME) ଋଣ" },
+  "universal agricultural assistance available for your farm profile": { hindi: "आपके खेत प्रोफ़ाइल के लिए कृषि सहायता उपलब्ध", marathi: "आपल्या शेत प्रोफाईलसाठी कृषी मदत उपलब्ध", bengali: "আপনার খামার প্রোফাইলের জন্য সর্বজনীন কৃষি সহায়তা উপলব্ধ", odia: "ଆପଣଙ୍କ ଜମି ପ୍ରୋଫାଇଲ୍ ପାଇଁ କୃଷି ସହାୟତା ଉପଲବ୍ଧ" },
+  "mudra allied agriculture micro-credit": { hindi: "मुद्रा संबद्ध कृषि सूक्ष्म ऋण", marathi: "मुद्रा कृषी संलग्न सूक्ष्म कर्ज", bengali: "মুদ্রা কৃষি মাইক্রো ঋণ", odia: "ମୁଦ୍ରା କୃଷି ମାଇକ୍ରୋ ଋଣ" },
+  "micro-irrigation drip subsidy (55-80%)": { hindi: "सूक्ष्म सिंचाई ड्रिप सब्सिडी (55-80%)", marathi: "सूक्ष्म सिंचन ठिबक अनुदान (55-80%)", bengali: "মাইক্রো সেচ ড্রিপ ভর্তুকি (৫৫-৮০%)", odia: "ସୂକ୍ଷ୍ମ ସିଞ୍ଚନ ଡ୍ରିପ୍ ଭର୍ତୁକି (୫୫-୮୦%)" },
+  "drip irrigation prevents soil splash and reduces fungal leaf spot infection by 40%.": { hindi: "ड्रिप सिंचाई मिट्टी के छींटे को रोकती है और फंगल लीफ स्पॉट संक्रमण को 40% तक कम करती है।", marathi: "ठिबक सिंचन मातीचे उडणे रोखते आणि बुरशीजन्य पानांच्या ठिपक्यांचा संसर्ग 40% ने कमी करते.", bengali: "ড্রিপ সেচ মাটির ছেটানো রোধ করে এবং ছত্রাকজনিত পাতায় দাগের সংক্রমণ ৪০% হ্রাস করে।", odia: "ଡ୍ରିପ୍ ସିଞ୍ଚନ ମାଟି ଛିଟିକିବା ରୋକେ ଏବଂ ଛତ୍ରାକ ରୋଗ ସଂକ୍ରମଣ ୪୦% ହ୍ରାସ କରେ।" },
+  "apply calcium nitrate & boron during flowering stage to prevent blossom end rot fruit cracking.": { hindi: "ब्लॉसम एंड रोट फलों को टूटने से बचाने के लिए पुष्पन चरण में कैल्शियम नाइट्रेट और बोरॉन डालें।", marathi: "फळे तडकणे रोखण्यासाठी फुलोऱ्याच्या टप्प्यात कॅल्शियम नायट्रेट आणि बोरॉन टाका.", bengali: "ফল ফাটা রোধ করতে ফুল ফোটার পর্যায়ে ক্যালসিয়াম নাইট্রেট এবং বোরন প্রয়োগ করুন।", odia: "ଫଳ ଫାଟିବା ରୋକିବା ପାଇଁ ଫୁଲ ଆସିବା ସମୟରେ କ୍ୟାଲସିୟମ୍ ନାଇଟ୍ରେଟ୍ ଏବଂ ବୋରନ୍ ଦିଅନ୍ତୁ।" },
+  "high humidity (>78%) promotes early blight; spray copper oxychloride if lower leaves turn spotty.": { hindi: "उच्च आर्द्रता (>78%) अगेती झुलसा को बढ़ावा देती है; यदि निचली पत्तियों पर धब्बे दिखाई दें तो कॉपर ऑक्सीक्लोराइड का छिड़काव करें।", marathi: "जास्त आर्द्रता (>78%) लवकर येणाऱ्या करपा रोगास खतपाणी घालते; खालच्या पानांवर ठिपके दिसल्यास कॉपर ऑक्सिक्लोराईडची फवारणी करा.", bengali: "উচ্চ আর্দ্রতা (>৭৮%) আর্লি ব্লাইট বাড়ায়; নিচের পাতায় দাগ দেখা দিলে কপার অক্সিক্লোরাইড স্প্রে করুন।", odia: "ଅଧିକ ଆର୍ଦ୍ରତା (>୭୮%) ଅଗ୍ରିମ ଝୁଳସା ରୋଗ ବଢ଼ାଏ; ତଳ ପତ୍ରରେ ଦାଗ ଦେଖାଗଲେ କପର ଅକ୍ସିକ୍ଲୋରାଇଡ୍ ସ୍ପ୍ରେ କରନ୍ତୁ।" },
+  "stop watering 15 days before harvesting to allow proper bulb hardening and prevent field rot.": { hindi: "कंद को सख्त करने और सड़न रोकने के लिए कटाई से 15 दिन पहले सिंचाई बंद कर दें।", marathi: "कांदा घट्ट होण्यासाठी आणि सड रोखण्यासाठी काढणीच्या १५ दिवस आधी पाणी देणे थांबवा.", bengali: "পেঁয়াজ শক্ত করতে এবং পচন রোধ করতে ফসল কাটার ১৫ দিন আগে জল দেওয়া বন্ধ করুন।", odia: "ପିଆଜ ଶକ୍ତ କରିବା ଓ ପଚନ ରୋକିବା ପାଇଁ ଅମଳର ୧୫ ଦିନ ପୂର୍ବରୁ ପାଣି ଦେବା ବନ୍ଦ କରନ୍ତୁ।" },
+  "apply sulphur (20 kg/acre) along with potash to increase bulb pungency, size, and storage life.": { hindi: "कंद का तीखापन, आकार और भंडारण क्षमता बढ़ाने के लिए पोटाश के साथ सल्फर (20 किग्रा/एकड़) डालें।", marathi: "कांद्याचा आकार आणि साठवणूक क्षमता वाढवण्यासाठी पोटॅशसोबत सल्फर (२० किलो/एकर) द्या.", bengali: "পেঁয়াজের আকার ও স্থায়িত্ব বাড়াতে পটাশের সাথে সালফার (২০ কেজি/एकर) প্রয়োগ করুন।", odia: "ପିଆଜ ଆକାର ଓ ସଂରକ୍ଷଣ କ୍ଷମତା ବଢ଼ାଇବା ପାଇଁ ପଟାସ ସହିତ ସଲଫର (୨୦ କିଗ୍ରା/ଏକର) ଦିଅନ୍ତୁ।" },
+  "watch for purple blotch during humid days. keep drainage channels clear to prevent waterlogging.": { hindi: "आर्द्र दिनों में पर्पल ब्लॉच पर नज़र रखें। जलजमाव रोकने के लिए जल निकासी नालियों को साफ रखें।", marathi: "दमट दिवसांत जांभळा करपा रोगावर लक्ष ठेवा. पाणी साचू नये म्हणून निचरा नद्या स्वच्छ ठेवा.", bengali: "আর্দ্র দিনে পার্পল ব্লচ রোগের দিকে নজর রাখুন। জলজট রোধ করতে ড্রেনেজ চ্যানেল পরিষ্কার রাখুন।", odia: "ଆର୍ଦ୍ର ଦିନରେ ବାଇଗଣୀ ଝୁଳସା ରୋଗ ଉପରେ ନଜର ରଖନ୍ତୁ। ଜଳନିଷ୍କାସନ ନାଳି ପରିଷ୍କାର ରଖନ୍ତୁ।" },
+  "critical watering stage: crown root initiation (21 days) and flowering stage boost grain fill.": { hindi: "सिंचाई का महत्वपूर्ण चरण: क्राउन रूट इनिशिएशन (21 दिन) और पुष्पन चरण दानों का भराव बढ़ाते हैं।", marathi: "सिंचनाचा महत्त्वाचा टप्पा: मुकुट मूळ सुरुवात (२१ दिवस) आणि फुलोरा टप्पा दाणे भरण्यास मदत करतो.", bengali: "সেচের গুরুত্বপূর্ণ পর্যায়: ক্রাউন রুট সূচনা (২১ দিন) এবং ফুল ফোটার পর্যায় দানাপুষ্টি বাড়ায়।", odia: "ଜଳସେଚନର ଗୁରୁତ୍ୱପୂର୍ଣ୍ଣ ପର୍ଯ୍ୟାୟ: ମୂଳ ଆରମ୍ଭ (୨୧ ଦିନ) ଓ ଫୁଲ ଆସିବା ସମୟ ଦାନା ପୂର୍ଣ୍ଣ କରେ।" },
+  "split dose of nitrogen: top-dress urea before 1st & 2nd irrigation for heavy, protein-rich grains.": { hindi: "नाइट्रोजन की विभाजित खुराक: भारी और प्रोटीन युक्त दानों के लिए पहली और दूसरी सिंचाई से पहले यूरिया डालें।", marathi: "नायट्रोजनचा विभागून डोस: चांगल्या दाण्यांसाठी पहिल्या व दुसऱ्या सिंचनापूर्वी युरिया द्या.", bengali: "নাইট্রোজেনের বিভক্ত মাত্রা: পুষ্টিকর দানার জন্য ১ম ও ২য় সেচের আগে ইউরিয়া প্রয়োগ করুন।", odia: "ନାଇଟ୍ରୋଜେନ୍ ବିଭାଜିତ ମାତ୍ରା: ଉତ୍ତମ ଦାନା ପାଇଁ ୧ମ ଓ ୨ୟ ସିଞ୍ଚନ ପୂର୍ବରୁ ୟୁରିଆ ଦିଅନ୍ତୁ।" },
+  "inspect field edges for yellow/brown rust pustules during cool, misty morning weather.": { hindi: "ठंडी, कोहरे वाली सुबह के दौरान पीला/भूरा रतुआ के लक्षणों के लिए खेत के किनारों का निरीक्षण करें।", marathi: "गारठ्याच्या सकाळी पिवळा/तांबड्या तांबेरा रोगाच्या लक्षणांसाठी शेताच्या कडा तपासा.", bengali: "ঠান্ডা সকালে হলুদ/বাদামী মরিচা রোগের লক্ষণের জন্য খামারের সীমানা পরীক্ষা করুন.", odia: "ଥଣ୍ଡା ସକାଳେ ହଳଦିଆ/ବାଦାମୀ ରତୁଆ ରୋଗ ଲକ୍ଷଣ ପାଇଁ ଜମି କଡ଼ ଯାଞ୍ଚ କରନ୍ତୁ।" },
+  "precision drip irrigation is mandatory. regulate water strictly post-pruning to induce uniform buds.": { hindi: "सटीक ड्रिप सिंचाई अनिवार्य है। एक समान कलियों के लिए छंटाई के बाद पानी को सख्ती से नियंत्रित करें।", marathi: "अचूक ठिबक सिंचन अनिवार्य आहे. छाटणीनंतर पाण्याचे तंतोतंत नियोजन करा.", bengali: "সঠিক ড্রিপ সেচ আবশ্যক। কুঁড়ি ফুটানোর জন্য ছাঁটাইয়ের পর জল নিয়ন্ত্রণ করুন।", odia: "ସଠିକ୍ ଡ୍ରିପ୍ ସିଞ୍ଚନ ବାଧ୍ୟତାମୂଳକ। କାଟିବା ପରେ ପାଣି ସନ୍ତୁଳିତ ରଖନ୍ତୁ।" },
+  "apply potassium sulphate (sop) and phosphoric acid during berry development to raise °brix sugar.": { hindi: "शर्करा (°Brix) बढ़ाने के लिए फल विकास के दौरान पोटेशियम सल्फेट (SOP) और फास्फोरिक एसिड डालें।", marathi: "साखर प्रमाण (°Brix) वाढवण्यासाठी मण्यांच्या वाढीच्या काळात पोटॅशियम सल्फेट आणि फॉस्फोरिक ॲसिड द्या.", bengali: "মিষ্টতা (°Brix) বাড়াতে ফল বৃদ্ধির সময় পটাশিয়াম সালফেট এবং ফসফরিক অ্যাসিড প্রয়োগ করুন।", odia: "ମିଷ୍ଟତା (°Brix) ବଢ଼ାଇବା ପାଇଁ ଫଳ ବୃଦ୍ଧି ସମୟରେ ପୋଟାସିୟମ୍ ସଲଫେଟ୍ ଦିଅନ୍ତୁ।" },
+  "high downy mildew risk in humid/rainy weather. spray systemic fungicide prior to bloom.": { hindi: "आर्द्र/बरसाती मौसम में डाउनी मिल्ड्यू का उच्च जोखिम। फूल आने से पहले प्रणालीगत कवकनाशी का छिड़काव करें।", marathi: "दमट/पावसाळी हवामानात केवडा रोगाचा मोठा धोका. फुलोऱ्याआधी बुरशीनाशकाची फवारणी करा.", bengali: "আর্দ্র/বৃষ্টির আবহাওয়ায় ডাউনি মিলডিউ রোগের ঝুঁকি বেশি। ফুল ফোটার আগে ছত্রাকনাশক স্প্রে করুন।", odia: "ଆର୍ଥିକ ପାଣିପାଗରେ ଛତ୍ରାକ ରୋଗ ଆଶଙ୍କା ଅଧିକ। ଫୁଲ ଆସିବା ପୂର୍ବରୁ ସ୍ପ୍ରେ କରନ୍ତୁ।" },
+  "maintain 2-5 cm standing water during active tillering; drain field 10 days before harvesting.": { hindi: "सक्रिय कल्ले निकलने के दौरान 2-5 सेमी खड़ा पानी बनाए रखें; कटाई से 10 दिन पहले खेत सुखा दें।", marathi: "फुटवे येण्याच्या काळात २-५ सेमी पाणी साचवून ठेवा; काढणीच्या १० दिवस आधी शेत वाळवा.", bengali: "কুশি গজানোর সময় ২-৫ সেমি জল ধরে রাখুন; ফসল কাটার ১০ দিন আগে খামার শুকিয়ে নিন।", odia: "ଗଜା ହେବା ସମୟରେ ୨-୫ ସେମି ପାଣି ରଖନ୍ତୁ; ଅମଳର ୧୦ ଦିନ ପୂର୍ବରୁ ପାଣି ବାହାର କରନ୍ତୁ।" },
+  "apply zinc sulphate (10 kg/acre) in clay soil to prevent khaira leaf bronzing.": { hindi: "खैरा रोग से बचाव के लिए चिकनी मिट्टी में जिंक सल्फेट (10 किग्रा/एकड़) का प्रयोग करें।", marathi: "खैरा रोग रोखण्यासाठी चिकणमातीत झिंक सल्फेट (१० किलो/एकर) द्या.", bengali: "খাইরা রোগ রোধ করতে কাদা মাটিতে জিঙ্ক সালফেট (১০ কেজি/একর) প্রয়োগ করুন।", odia: "ଖୈରା ରୋଗ ରୋକିବା ପାଇଁ କାଦୁଅ ମାଟିରେ ଜିଙ୍କ ସଲଫେଟ (୧୦ କିଗ୍ରା/ଏକର) ଦିଅନ୍ତୁ।" },
+  "warm, humid conditions favor stem borer and blast. check tillers for whiteheads or dead hearts.": { hindi: "गर्म और आर्द्र स्थिति तना छेदक और झुलसा रोग के लिए अनुकूल है। मृत गोप के लिए पौधों की जांच करें।", marathi: "उष्ण व दमट हवामान खोडकिडा व करपा रोगास पोषक असते. सुकलेले अंकुर तपासा.", bengali: "উষ্ণ ও আর্দ্র আবহাওয়া কান্ড পচা ও ব্লাইট বাড়ায়। মরা ডালপালার জন্য পরীক্ষা করুন।", odia: "ଗରମ ଓ ଆର୍ଦ୍ର ପାଣିପାଗ କାଣ୍ଡ ବିନ୍ଧା ପୋକ ବଢ଼ାଏ। ସୁଖିଲା ଗଜା ଯାଞ୍ଚ କରନ୍ତୁ।" },
 };
 
-// ── Translation fetch with rate-limit awareness ──────────────────────────────
+// ── Translation fetch with backend proxy & rate-limit awareness ─────────────
 let _rateLimitedUntil = 0;
 
-async function fetchGoogleTranslate(text: string, targetCode: string): Promise<string> {
+const DEFAULT_TRANSLATE_API_BASE = 'http://localhost:8000';
+function getTranslateApiBase(): string {
+  const base = import.meta.env.VITE_API_BASE_URL || DEFAULT_TRANSLATE_API_BASE;
+  return String(base).replace(/\/$/, '');
+}
+
+async function fetchGoogleTranslate(text: string, targetCode: string, langName?: string): Promise<string> {
+  // 1. Primary: Try Backend /api/v1/translate server-side proxy (zero CORS / zero client-side rate limits)
+  try {
+    const backendUrl = `${getTranslateApiBase()}/api/v1/translate`;
+    const resp = await fetch(backendUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, language: langName || targetCode }),
+      signal: AbortSignal.timeout(4000),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.translated && data.translated !== text) {
+        return data.translated;
+      }
+    }
+  } catch {
+    // Backend offline / unreachable — fall through to client-side fallbacks
+  }
+
   if (Date.now() < _rateLimitedUntil) return text;
+
+  // 2. Secondary: Client-side MyMemory API Fallback (CORS-friendly API)
+  try {
+    const mmUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|${targetCode}`;
+    const resp = await fetch(mmUrl, { signal: AbortSignal.timeout(3000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      const res = data?.responseData?.translatedText;
+      if (res && res !== text) return res;
+    }
+  } catch {
+    // Fall through to Google GTX
+  }
+
+  // 3. Client-side Google GTX (with rate limit protection)
   try {
     const url = `${GOOGLE_TRANSLATE_BASE}?client=gtx&sl=en&tl=${targetCode}&dt=t&q=${encodeURIComponent(text)}`;
     const resp = await fetch(url, { signal: AbortSignal.timeout(3000) });
@@ -244,7 +326,6 @@ async function fetchGoogleTranslate(text: string, targetCode: string): Promise<s
     }
     if (!resp.ok) return text;
     const data = await resp.json();
-    // Response: [[["translated","original",...],...],...]
     const parts: string[] = (data[0] as Array<Array<string>>)
       .map((chunk) => chunk[0])
       .filter(Boolean);
@@ -254,29 +335,31 @@ async function fetchGoogleTranslate(text: string, targetCode: string): Promise<s
   }
 }
 
+import { localizeDigits } from './i18n';
+
 export async function translateText(text: string, lang: string): Promise<string> {
   if (lang === 'english' || !text.trim()) return text;
 
   // 1. Curated dictionary — zero network, instant
   const key = text.trim().toLowerCase();
-  if (DICTIONARY[key]?.[lang]) return DICTIONARY[key][lang];
+  if (DICTIONARY[key]?.[lang]) return localizeDigits(DICTIONARY[key][lang], lang as any);
 
   // 2. localStorage cache — zero network on repeat renders
   const cached = getCachedTranslation(lang, text);
-  if (cached) return cached;
+  if (cached) return localizeDigits(cached, lang as any);
 
-  // 3. Google Translate free endpoint (no API key, higher limits)
+  // 3. Backend Proxy / Online Translation
   const targetCode = LANG_CODES[lang];
   if (targetCode) {
-    const translated = await fetchGoogleTranslate(text, targetCode);
+    const translated = await fetchGoogleTranslate(text, targetCode, lang);
     if (translated && translated !== text) {
       setCachedTranslation(lang, text, translated);
-      return translated;
+      return localizeDigits(translated, lang as any);
     }
   }
 
-  // 4. Silent fallback — show English
-  return text;
+  // 4. Silent fallback — show English with localized digits
+  return localizeDigits(text, lang as any);
 }
 
 /**

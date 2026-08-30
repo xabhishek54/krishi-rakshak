@@ -18,6 +18,7 @@ from app.credit import evaluate_credit_assessment
 from app.migrations import run_migrations
 from app.agmarknet import background_fetch_and_store  # Phase 19
 from app.voice_routes import router as voice_router
+from app.translate_routes import router as translate_router
 import asyncio
 
 # ---------------------------------------------------------------------------
@@ -50,6 +51,7 @@ app = FastAPI(
 )
 
 app.include_router(voice_router)
+app.include_router(translate_router)
 
 @app.on_event("startup")
 def startup_event():

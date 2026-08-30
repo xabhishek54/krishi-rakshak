@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { translations } from './translations';
 import {
   formatCurrency,
+  formatNumber,
   formatInteger,
   formatPerQuintal,
   translateCrop,
@@ -16,7 +17,7 @@ import {
 } from './i18n';
 import { ToastContainer, useToast } from './Toast';
 import { getStateList, getDistrictsForState, getDistrictCoords } from './india_locations';
-import { speakText, stopSpeech, buildVoiceText, askGemini, isCropMarketReady } from './voice';
+import { speakText, speakTextAndWait, stopSpeech, buildVoiceText, askGemini, isCropMarketReady } from './voice';
 import T from './Translated';
 import { translateText, setGoogleTranslateLanguage } from './translate';
 
@@ -107,6 +108,7 @@ function App() {
   const [mandiPrices, setMandiPrices] = useState<any[]>([]);
   const [marketSuggestions, setMarketSuggestions] = useState<any[]>([]);
   const [loadingMarketSuggestions, setLoadingMarketSuggestions] = useState<boolean>(false);
+  const [marketFilterMode, setMarketFilterMode] = useState<'ready' | 'all'>('ready');
   const [priceHistoryData, setPriceHistoryData] = useState<any[]>([]);
   const [priceCrashStatus, setPriceCrashStatus] = useState<any>(null);
   const [selectedMandiId, setSelectedMandiId] = useState<number | null>(null);
@@ -294,6 +296,9 @@ function App() {
   const [newCropSowingDate, setNewCropSowingDate] = useState<string>(
     new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
+  const [newCropStage, setNewCropStage] = useState<string>('Vegetative');
+  const [newCropHarvestDate, setNewCropHarvestDate] = useState<string>('');
+  const [newCropNotes, setNewCropNotes] = useState<string>('');
 
   // Form states for login/register
   const [isRegistering, setIsRegistering] = useState<boolean>(false);
@@ -556,17 +561,29 @@ function App() {
         setAdvisories(data);
         try { localStorage.setItem('kr_cached_advisories', JSON.stringify(data)); } catch {}
       }
+      const DEMO_FLOOD_ALERT = {
+        id: 'flood_demo_alert',
+        severity: 'Critical',
+        reason: 'Flash Flood & Severe Waterlogging Alert — Flash flood warning issued for local district. Ensure deep drainage trenches around tomato & onion beds immediately to prevent root rot and crop loss.'
+      };
       if (alertRes.ok) {
         const data = await alertRes.json();
-        setAlerts(data);
-        try { localStorage.setItem('kr_cached_alerts', JSON.stringify(data)); } catch {}
+        const mergedAlerts = [DEMO_FLOOD_ALERT, ...data.filter((a: any) => (a.reason || a.message) !== DEMO_FLOOD_ALERT.reason)];
+        setAlerts(mergedAlerts);
+        try { localStorage.setItem('kr_cached_alerts', JSON.stringify(mergedAlerts)); } catch {}
       }
     } catch {
       // Fallback mocks if offline
+      const DEMO_FLOOD_ALERT = {
+        id: 'flood_demo_alert',
+        severity: 'Critical',
+        reason: 'Flash Flood & Severe Waterlogging Alert — Flash flood warning issued for local district. Ensure deep drainage trenches around tomato & onion beds immediately to prevent root rot and crop loss.'
+      };
       setAdvisories([
         { id: 1, category: 'irrigation', priority: 'high', recommendation: 'Stop Tomato Irrigation', reason: 'Heavy rainfall expected tomorrow. Skip irrigation today to prevent crop waterlogging.' }
       ]);
       setAlerts([
+        DEMO_FLOOD_ALERT,
         { id: 1, severity: 'Critical', reason: 'Late Blight Risk: Humidity has exceeded 80% for 3 consecutive days. Apply preventive fungicide.' }
       ]);
     }
@@ -1157,11 +1174,20 @@ function App() {
   };
 
   // Login
-  const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loginPhone && loginPassword) {
+  const handleLoginSubmit = async (
+    e?: React.FormEvent,
+    overridePhone?: string,
+    overridePassword?: string,
+    overrideRole?: 'farmer' | 'officer'
+  ) => {
+    if (e) e.preventDefault();
+    const phone = overridePhone || loginPhone;
+    const password = overridePassword || loginPassword;
+    const role = overrideRole || authRoleToggle;
+
+    if (phone && password) {
       setIsAuthenticating(true);
-      const endpoint = authRoleToggle === 'officer' 
+      const endpoint = role === 'officer' 
         ? `${API_BASE}/api/v1/auth/officer/login`
         : `${API_BASE}/api/v1/auth/login`;
 
@@ -1170,14 +1196,15 @@ function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
-            username: loginPhone,
-            password: loginPassword
+            username: phone,
+            password: password
           })
         });
         if (res.ok) {
           const data = await res.json();
-          setUserRole(authRoleToggle);
-          localStorage.setItem('krishi_auth_role', authRoleToggle);
+          setUserRole(role);
+          setAuthRoleToggle(role);
+          localStorage.setItem('krishi_auth_role', role);
           setIsAuthInitialLoading(true);
           setToken(data.access_token);
         } else {
@@ -1415,6 +1442,8 @@ function App() {
       stopSpeech(); setVoiceState('idle'); setIsVoicePlaying(false); return;
     }
     if (voiceState === 'thinking') return; // wait for AI
+    // If already listening, abort it
+    if (voiceState === 'listening') { stopSpeech(); setVoiceState('idle'); return; }
 
     const localeMap: Record<string, string> = {
       english: 'en-IN', hindi: 'hi-IN', marathi: 'mr-IN', bengali: 'bn-IN', odia: 'or-IN'
@@ -1438,7 +1467,11 @@ function App() {
     rec.maxAlternatives = 1;
     rec.continuous = false;
 
+    // Track whether we got a result so onend doesn't reset prematurely
+    let gotResult = false;
+
     rec.onresult = async (e: any) => {
+      gotResult = true;
       const q = e.results[0][0].transcript;
       setVoiceTranscript(q);
       setVoiceState('thinking');
@@ -1451,13 +1484,10 @@ function App() {
         setVoiceAnswerText(answer);
         setVoiceState('speaking');
 
-        // Gemini already replies in the target language — speak directly, no double-translate
-        await speakText(answer, language);
+        // speakTextAndWait resolves only after audio finishes (event-driven, no polling)
+        await speakTextAndWait(answer, language);
 
-        // Auto-reset after speech ends
-        const check = setInterval(() => {
-          if (!window.speechSynthesis.speaking) { setVoiceState('idle'); clearInterval(check); }
-        }, 300);
+        setVoiceState('idle');
       } catch {
         setVoiceState('idle');
       }
@@ -1475,8 +1505,10 @@ function App() {
       }
       setVoiceState('idle');
     };
+
     rec.onend = () => {
-      if (voiceState === 'listening') setVoiceState('idle');
+      // Only reset to idle if we never got a result (i.e. user said nothing / timed out)
+      if (!gotResult) setVoiceState('idle');
     };
 
     try { rec.start(); } catch (err) {
@@ -1588,13 +1620,11 @@ function App() {
               <p className="text-slate-800 text-sm font-medium leading-relaxed my-0">
                 {(() => {
                   const activeCount = advisories.filter(a => !completedAdvisoryIds.includes(a.id)).length;
-                  const weatherText = (weather?.observation?.rainfall ?? 0) > 10 ? "heavy rain expected today" : "weather is clear for fieldwork";
-                  const riskText = distressData?.score >= 50 ? "some risk factors require attention" : "your farms are in healthy condition overall";
-                  
                   const topMandi = mandiPrices[0];
                   const topPrice = topMandi ? (topMandi.sticker_price ?? topMandi.modal_price ?? topMandi.net_return ?? topMandi.price ?? 2620) : 2620;
                   const currentDistrict = selectedFarm?.district || farms[0]?.district || (farmer?.location_id ? farmer.location_id.split('_')[0] : 'Local');
-                  const cropName = selectedCrop ? capitalize(selectedCrop.crop_type) : (crops[0] ? capitalize(crops[0].crop_type) : 'crop');
+                  const cropKey = selectedCrop ? selectedCrop.crop_type : (crops[0] ? crops[0].crop_type : 'tomato');
+                  const cropName = capitalize(translateCrop(language, cropKey));
                   const mandiName = topMandi?.mandi_name || `${currentDistrict} APMC`;
 
                   let mandiNote = `Mandi rate for ${cropName} is ₹${formatInteger(topPrice, language)}/q at ${mandiName}.`;
@@ -1604,20 +1634,52 @@ function App() {
                     const pPrev = priceHistoryData[Math.min(6, priceHistoryData.length - 1)]?.modal_price ?? priceHistoryData[Math.min(6, priceHistoryData.length - 1)]?.price;
                     if (pLatest && pPrev && pPrev > 0) {
                       const diff = pLatest - pPrev;
-                      const pct = ((diff / pPrev) * 100).toFixed(1);
+                      const pct = formatNumber(Math.abs(Number(((diff / pPrev) * 100).toFixed(1))), language);
+                      const diffAbs = formatInteger(Math.abs(Math.round(diff)), language);
+                      const pLatestFmt = formatInteger(pLatest, language);
+
                       if (diff > 10) {
-                        mandiNote = `${cropName} rates increased by ₹${Math.round(diff)}/q (+${pct}%) to ₹${formatInteger(pLatest, language)}/q at ${mandiName}.`;
+                        if (language === 'hindi') mandiNote = `${mandiName} में ${cropName} की दरें ₹${diffAbs}/क्विंटल (+${pct}%) बढ़कर ₹${pLatestFmt}/क्विंटल हो गईं।`;
+                        else if (language === 'marathi') mandiNote = `${mandiName} मध्ये ${cropName} चे दर ₹${diffAbs}/क्विंटल (+${pct}%) वाढून ₹${pLatestFmt}/क्विंटल झाले.`;
+                        else if (language === 'bengali') mandiNote = `${mandiName}-এ ${cropName}-এর দাম ₹${diffAbs}/কুইন্টাল (+${pct}%) বেড়ে ₹${pLatestFmt}/কুইন্টাল হয়েছে।`;
+                        else if (language === 'odia') mandiNote = `${mandiName} ରେ ${cropName} ଦର ₹${diffAbs}/କ୍ୱିଣ୍ଟାଲ (+${pct}%) ବୃଦ୍ଧି ପାଇ ₹${pLatestFmt}/କ୍ୱିଣ୍ଟାଲ ହୋଇଛି।`;
+                        else mandiNote = `${cropName} rates increased by ₹${diffAbs}/q (+${pct}%) to ₹${pLatestFmt}/q at ${mandiName}.`;
                       } else if (diff < -10) {
-                        mandiNote = `${cropName} rates dropped by ₹${Math.abs(Math.round(diff))}/q (${pct}%) to ₹${formatInteger(pLatest, language)}/q at ${mandiName}.`;
+                        if (language === 'hindi') mandiNote = `${mandiName} में ${cropName} की दरें ₹${diffAbs}/क्विंटल (-${pct}%) गिरकर ₹${pLatestFmt}/क्विंटल हो गईं।`;
+                        else if (language === 'marathi') mandiNote = `${mandiName} मध्ये ${cropName} चे दर ₹${diffAbs}/क्विंटल (-${pct}%) घसरून ₹${pLatestFmt}/क्विंटल झाले.`;
+                        else if (language === 'bengali') mandiNote = `${mandiName}-এ ${cropName}-এর দাম ₹${diffAbs}/কুইন্টাল (-${pct}%) কমে ₹${pLatestFmt}/কুইন্টাল হয়েছে।`;
+                        else if (language === 'odia') mandiNote = `${mandiName} ରେ ${cropName} ଦର ₹${diffAbs}/କ୍ୱିଣ୍ଟାଲ (-${pct}%) ହ୍ରାସ ପାଇ ₹${pLatestFmt}/କ୍ୱିଣ୍ଟାଲ ହୋଇଛି।`;
+                        else mandiNote = `${cropName} rates dropped by ₹${diffAbs}/q (-${pct}%) to ₹${pLatestFmt}/q at ${mandiName}.`;
                       }
                     }
                   }
-                  
-                  const summaryStr = activeCount === 0
-                    ? `🎉 All tasks completed for today! ${capitalize(riskText)}, and ${weatherText}. ${mandiNote}`
-                    : `Overall, ${riskText}. ${capitalize(weatherText)}. ${mandiNote} You have ${activeCount} pending action item${activeCount > 1 ? 's' : ''} recommended for today below.`;
 
-                  return <T lang={language}>{summaryStr}</T>;
+                  const activeCountFmt = formatInteger(activeCount, language);
+                  
+                  if (language === 'hindi') {
+                    return activeCount === 0
+                      ? `🎉 आज के सभी कार्य पूर्ण हो गए! आपके खेत कुल मिलाकर स्वस्थ स्थिति में हैं और मौसम कार्य के लिए अनुकूल है। ${mandiNote}`
+                      : `कुल मिलाकर, आपके खेत कुल मिलाकर स्वस्थ स्थिति में हैं। मौसम कृषि कार्य के लिए अनुकूल है। ${mandiNote} आपके पास नीचे आज के लिए अनुशंसित ${activeCountFmt} लंबित कार्य हैं।`;
+                  }
+                  if (language === 'marathi') {
+                    return activeCount === 0
+                      ? `🎉 आजची सर्व कामे पूर्ण झाली! आपली शेती निरोगी स्थितीत आहे आणि हवामान शेतकामासाठी अनुकूल आहे. ${mandiNote}`
+                      : `एकंदरीत, आपली शेती निरोगी स्थितीत आहे. हवामान शेतकामासाठी अनुकूल आहे. ${mandiNote} तुमच्याकडे खाली आजसाठी शिफारस केलेली ${activeCountFmt} कामे प्रलंबित आहेत.`;
+                  }
+                  if (language === 'bengali') {
+                    return activeCount === 0
+                      ? `🎉 আজকের সমস্ত কাজ সম্পন্ন হয়েছে! আপনার খামার ভালো অবস্থায় আছে এবং আবহাওয়া অনুকূল। ${mandiNote}`
+                      : `সামগ্রিকভাবে, আপনার খামার ভালো অবস্থায় আছে। আবহাওয়া কাজের জন্য অনুকূল। ${mandiNote} আপনার নিচে আজকের জন্য প্রস্তাবিত ${activeCountFmt}টি কাজ বাকী আছে।`;
+                  }
+                  if (language === 'odia') {
+                    return activeCount === 0
+                      ? `🎉 ଆଜିର ସମସ୍ତ କାର୍ଯ୍ୟ ସମ୍ପୂର୍ଣ୍ଣ ହୋଇଛି! ଆପଣଙ୍କ ଜମି ସୁସ୍ଥ ଅଛି ଏବଂ ପାଣିପାଗ ଅନୁକୂଳ। ${mandiNote}`
+                      : `ସାମଗ୍ରିକ ଭାବେ, ଆପଣଙ୍କ ଜମି ସୁସ୍ଥ ଅଛି। ପାଣିପାଗ କାମ ପାଇଁ ଅନୁକୂଳ। ${mandiNote} ଆପଣଙ୍କର ତଳେ ଆଜି ପାଇଁ ସୁପାରିଶ ${activeCountFmt}ଟି କାର୍ଯ୍ୟ ବାକି ଅଛି।`;
+                  }
+
+                  return activeCount === 0
+                    ? `🎉 All tasks completed for today! Your farms are in healthy condition overall, and weather is clear for fieldwork. ${mandiNote}`
+                    : `Overall, your farms are in healthy condition overall. Weather is clear for fieldwork. ${mandiNote} You have ${activeCountFmt} pending action item${activeCount > 1 ? 's' : ''} recommended for today below.`;
                 })()}
               </p>
             </div>
@@ -2391,30 +2453,144 @@ function App() {
       case 'market': {
         return (
           <div className="space-y-6">
-            <div className="bg-gradient-to-r from-emerald-50 via-white to-amber-50 p-5 rounded-2xl border border-emerald-200 shadow-sm text-left">
-              <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+            {/* Market Harvest Readiness & Mandi Recommendation Section */}
+            <div className="bg-gradient-to-br from-emerald-50/90 via-white to-amber-50/80 p-5 md:p-6 rounded-2xl border border-emerald-200 shadow-sm text-left space-y-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap border-b border-emerald-100 pb-3">
                 <div>
-                  <h2 className="text-base sm:text-lg font-extrabold text-slate-900 my-0"><T lang={language}>Where should I sell each crop?</T></h2>
-                  <p className="text-[11px] text-slate-600 mt-0.5 my-0"><T lang={language}>Live net-return recommendation by crop and farm.</T></p>
+                  <h2 className="text-base sm:text-lg font-extrabold text-slate-900 my-0 flex items-center gap-2">
+                    <span>🌾</span> <T lang={language}>Harvest Readiness & Market Recommendations</T>
+                  </h2>
+                  <p className="text-[11px] text-slate-600 mt-1 my-0">
+                    <T lang={language}>Evaluates crop growth stages, harvest readiness, and dynamic mandi net returns to tell you exactly where and when to sell.</T>
+                  </p>
                 </div>
-                {loadingMarketSuggestions && <RefreshCw size={18} className="text-stable animate-spin" />}
+
+                {/* Filter Options: Ready for Sale Only vs All Registered Crops */}
+                <div className="flex items-center bg-emerald-100/70 p-1 rounded-xl gap-1 shrink-0 text-xs font-bold">
+                  <button
+                    onClick={() => setMarketFilterMode('ready')}
+                    className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                      marketFilterMode === 'ready' ? 'bg-emerald-700 text-white shadow-xs' : 'text-emerald-900 hover:bg-emerald-200/60'
+                    }`}
+                  >
+                    <span>🟢</span> <T lang={language}>Ready for Sale Only</T>
+                  </button>
+                  <button
+                    onClick={() => setMarketFilterMode('all')}
+                    className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                      marketFilterMode === 'all' ? 'bg-emerald-700 text-white shadow-xs' : 'text-emerald-900 hover:bg-emerald-200/60'
+                    }`}
+                  >
+                    <span>🌾</span> <T lang={language}>All Registered Crops</T>
+                  </button>
+                </div>
               </div>
-              {marketSuggestions.length > 0 ? (
-                <div className="bg-white rounded-xl border border-emerald-200 divide-y divide-slate-100 overflow-hidden">
-                  {marketSuggestions.map((item: any) => (
-                    <div key={item.crop.id} className="px-3.5 py-2.5 flex items-center justify-between gap-3 text-xs sm:text-sm">
-                      <p className="text-slate-800 my-0 min-w-0 truncate">
-                        <strong className="capitalize">{translateCrop(language, item.crop.crop_type)}</strong>
-                        <span className="text-slate-500"> <T lang={language}>from</T> {item.farm?.name || item.farm?.district || 'Farm'}</span>
-                        <span className="text-slate-500">: <T lang={language}>sell at</T> </span>
-                        <strong className="text-emerald-800">{item.mandi.mandi_name}</strong>
-                      </p>
-                      <span className="text-emerald-800 font-black whitespace-nowrap">{formatCurrency(item.mandi.net_return, language, nativeDigits)} / q</span>
-                    </div>
-                  ))}
+
+              {/* Crop Cards Roster */}
+              {loadingMarketSuggestions ? (
+                <div className="flex items-center gap-2 text-xs text-slate-500 py-4 justify-center">
+                  <RefreshCw size={16} className="text-emerald-600 animate-spin" />
+                  <T lang={language}>Checking which crops are ready to sell...</T>
                 </div>
               ) : (
-                <p className="text-xs text-slate-500 my-0"><T lang={language}>{loadingMarketSuggestions ? 'Checking which crops are ready to sell...' : 'No crop is ready to sell yet. Once a crop reaches maturity, the best mandi will appear here.'}</T></p>
+                (() => {
+                  const itemsToDisplay = marketFilterMode === 'ready'
+                    ? marketSuggestions
+                    : allCrops.map((c: any) => {
+                        const existing = marketSuggestions.find((ms: any) => ms.crop.id === c.id);
+                        if (existing) return existing;
+                        const farm = farms.find((f: any) => f.id === c.farm_id);
+                        return { crop: c, farm, mandi: mandiPrices[0] || { mandi_name: 'Local APMC', net_return: 2200 } };
+                      });
+
+                  if (itemsToDisplay.length === 0) {
+                    return (
+                      <div className="bg-white/80 rounded-xl p-5 border border-dashed border-emerald-300 text-center space-y-1.5">
+                        <span className="text-2xl">⏳</span>
+                        <p className="font-bold text-slate-700 text-xs my-0">
+                          <T lang={language}>No crop is ready to sell yet.</T>
+                        </p>
+                        <p className="text-[11px] text-slate-500 my-0">
+                          <T lang={language}>Your registered crops are still in growth stages. Once a crop reaches Fruit Development or Harvest, the best mandi recommendation will automatically appear here!</T>
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {itemsToDisplay.map((item: any) => {
+                        const isReady = isCropMarketReady(item.crop.stage);
+                        const cropEmoji = item.crop.crop_type === 'tomato' ? '🍅' : item.crop.crop_type === 'onion' ? '🧅' : item.crop.crop_type === 'grapes' ? '🍇' : item.crop.crop_type === 'wheat' ? '🌾' : item.crop.crop_type === 'cotton' ? '🧵' : '🌿';
+
+                        return (
+                          <div
+                            key={item.crop.id}
+                            className={`p-4 rounded-xl border transition-all text-left space-y-2.5 ${
+                              isReady ? 'bg-white border-emerald-300 shadow-xs' : 'bg-slate-50/90 border-slate-200'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xl">{cropEmoji}</span>
+                                <div>
+                                  <h4 className="font-extrabold text-slate-900 text-sm my-0 capitalize">
+                                    {translateCrop(language, item.crop.crop_type)}
+                                  </h4>
+                                  <p className="text-[10px] text-slate-500 my-0">
+                                    📍 {item.farm?.name || item.farm?.district || `Farm #${item.crop.farm_id}`} ({item.crop.area || 1} ac)
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Visual Maturity Status Badge */}
+                              <span className={`text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 ${
+                                isReady
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : 'bg-amber-100 text-amber-900 border border-amber-300'
+                              }`}>
+                                {isReady ? '🟢' : '⏳'} <T lang={language}>{isReady ? 'Ready to Sell Now' : 'Growing Stage'}</T>
+                              </span>
+                            </div>
+
+                            {/* Maturity Stage Indicator & Description */}
+                            <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 text-[11px] text-slate-600 flex items-center justify-between flex-wrap gap-1">
+                              <span><T lang={language}>Stage:</T> <strong>{translateStage(language, item.crop.stage || 'Vegetative Growth')}</strong></span>
+                              <span className="text-[10px] text-slate-500">
+                                <T lang={language}>{isReady ? 'Harvest maturity reached. Peak net returns available at local mandis.' : 'Currently in growth stage. Estimated harvest maturity in ~2-3 weeks.'}</T>
+                              </span>
+                            </div>
+
+                            {/* Mandi Recommendation Detail */}
+                            <div className="flex items-center justify-between gap-2 text-xs pt-1 border-t border-slate-100">
+                              <div>
+                                <span className="text-slate-500 font-medium">🚚 <T lang={language}>Best Mandi:</T> </span>
+                                <strong className="text-slate-900">{item.mandi?.mandi_name || 'Local APMC'}</strong>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-emerald-800 font-black text-sm">
+                                  {formatCurrency(item.mandi?.net_return || 2200, language, nativeDigits)} / q
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Action Button: Switch mandi table selection */}
+                            <button
+                              onClick={() => {
+                                setSelectedCrop(item.crop);
+                                const farm = farms.find((f: any) => f.id === item.crop.farm_id);
+                                if (farm) setSelectedFarm(farm);
+                              }}
+                              className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                            >
+                              <span>📊</span> <T lang={language}>Compare Mandis</T> →
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
               )}
             </div>
 
@@ -3676,7 +3852,7 @@ function App() {
                       currentCropEval.totalMatch >= 70 ? 'bg-amber-100 text-amber-900 border-amber-300' :
                       'bg-red-100 text-red-900 border-red-300'
                     }`}>
-                      {currentCropEval.totalMatch}% {currentCropEval.totalMatch >= 85 ? 'Excellent Match' : 'Moderate Match'}
+                      {formatInteger(currentCropEval.totalMatch, language)}% {currentCropEval.totalMatch >= 85 ? <T lang={language}>Excellent Match</T> : <T lang={language}>Moderate Match</T>}
                     </span>
                   </div>
 
@@ -3688,7 +3864,30 @@ function App() {
                   </div>
 
                   <p className="text-slate-900 text-base md:text-lg font-medium leading-relaxed my-0">
-                    <T lang={language}>{`For ${currentFarm.name || currentFarm.district || 'Main Farm'} (${translateSoil(language, currentSoil)} Soil, ${translateIrrigation(language, currentIrrigation)} Irrigation), growing ${translateCrop(language, activeCropKey)} yields ~${currentCropEval.yieldPerAcre} q/acre with expected net profit of ₹${formatInteger(currentCropEval.netProfit * currentArea, language)} across ${currentArea} acres. Mandi price: ₹${currentCropEval.mandiPrice}/q.`}</T>
+                    {(() => {
+                      const farmName = currentFarm.name || currentFarm.district || 'Main Farm';
+                      const soilName = translateSoil(language, currentSoil);
+                      const irrigName = translateIrrigation(language, currentIrrigation);
+                      const cropName = translateCrop(language, activeCropKey);
+                      const yieldVal = formatInteger(currentCropEval.yieldPerAcre, language);
+                      const areaVal = formatNumber(currentArea, language);
+                      const profitVal = formatInteger(currentCropEval.netProfit * currentArea, language);
+                      const priceVal = formatInteger(currentCropEval.mandiPrice, language);
+
+                      if (language === 'hindi') {
+                        return `${farmName} (${soilName} मिट्टी, ${irrigName} सिंचाई) के लिए, ${cropName} की खेती से ~${yieldVal} क्विंटल/एकड़ उपज और ${areaVal} एकड़ में ₹${profitVal} का अनुमानित शुद्ध लाभ मिलता है। मंडी भाव: ₹${priceVal}/क्विंटल।`;
+                      }
+                      if (language === 'marathi') {
+                        return `${farmName} (${soilName} माती, ${irrigName} सिंचन) साठी, ${cropName} पिकातून ~${yieldVal} क्विंटल/एकर उत्पादन आणि ${areaVal} एकरात ₹${profitVal} चा अपेक्षित निव्वळ नफा मिळतो. बाजारभाव: ₹${priceVal}/क्विंटल.`;
+                      }
+                      if (language === 'bengali') {
+                        return `${farmName} (${soilName} মাটি, ${irrigName} সেচ) এর জন্য, ${cropName} চাষে ~${yieldVal} কুইন্টাল/একর ফলন এবং ${areaVal} একরে ₹${profitVal} আনুমানিক নিট লাভ পাওয়া যায়। মান্ডি মূল্য: ₹${priceVal}/কুইন্টাল।`;
+                      }
+                      if (language === 'odia') {
+                        return `${farmName} (${soilName} ମାଟି, ${irrigName} ସିଞ୍ଚନ) ପାଇଁ, ${cropName} ଚାଷରୁ ~${yieldVal} କ୍ୱିଣ୍ଟାଲ/ଏକର ଅମଳ ଏବଂ ${areaVal} ଏକରରେ ₹${profitVal} ଅନୁମାନିତ ଶୁଦ୍ଧ ଲାଭ ମିଳେ। ମଣ୍ଡି ଦର: ₹${priceVal}/କ୍ୱିଣ୍ଟାଲ।`;
+                      }
+                      return `For ${farmName} (${soilName} Soil, ${irrigName} Irrigation), growing ${cropName} yields ~${yieldVal} q/acre with expected net profit of ₹${profitVal} across ${areaVal} acres. Mandi price: ₹${priceVal}/q.`;
+                    })()}
                   </p>
                 </div>
 
@@ -3700,7 +3899,7 @@ function App() {
                       <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
                         <h3 className="text-base md:text-lg font-extrabold text-slate-900 my-0"><T lang={language}>Crop Compatibility</T> ({capitalize(translateCrop(language, activeCropKey))})</h3>
                         <span className="text-xs font-black text-emerald-900 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-300">
-                          {currentCropEval.totalMatch}% <T lang={language}>Match</T>
+                          {formatInteger(currentCropEval.totalMatch, language)}% <T lang={language}>Match</T>
                         </span>
                       </div>
 
@@ -3717,23 +3916,23 @@ function App() {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-earth-50 p-3.5 rounded-xl border border-earth-200 text-center">
                         <p className="text-xs text-slate-500 font-bold uppercase my-0">🧪 <T lang={language}>Soil Fit</T></p>
-                        <p className="text-xl font-black text-slate-900 mt-1 my-0">{currentCropEval.soilScore}%</p>
+                        <p className="text-xl font-black text-slate-900 mt-1 my-0">{formatInteger(currentCropEval.soilScore, language)}%</p>
                         <p className="text-xs text-slate-600 font-bold my-0 capitalize">{translateSoil(language, currentSoil)}</p>
                       </div>
                       <div className="bg-earth-50 p-3.5 rounded-xl border border-earth-200 text-center">
                         <p className="text-xs text-slate-500 font-bold uppercase my-0">💧 <T lang={language}>Irrigation System</T></p>
-                        <p className="text-xl font-black text-slate-900 mt-1 my-0">{currentCropEval.irrigScore}%</p>
+                        <p className="text-xl font-black text-slate-900 mt-1 my-0">{formatInteger(currentCropEval.irrigScore, language)}%</p>
                         <p className="text-xs text-slate-600 font-bold my-0 capitalize">{translateIrrigation(language, currentIrrigation)}</p>
                       </div>
                       <div className="bg-earth-50 p-3.5 rounded-xl border border-earth-200 text-center">
                         <p className="text-xs text-slate-500 font-bold uppercase my-0">⛅ <T lang={language}>Weather</T></p>
-                        <p className="text-xl font-black text-slate-900 mt-1 my-0">{currentCropEval.weatherScore}%</p>
+                        <p className="text-xl font-black text-slate-900 mt-1 my-0">{formatInteger(currentCropEval.weatherScore, language)}%</p>
                         <p className="text-xs text-slate-600 font-bold my-0"><T lang={language}>Seasonal fit</T></p>
                       </div>
                       <div className="bg-earth-50 p-3.5 rounded-xl border border-earth-200 text-center">
                         <p className="text-xs text-slate-500 font-bold uppercase my-0">💰 <T lang={language}>Market Price</T></p>
-                        <p className="text-xl font-black text-slate-900 mt-1 my-0">{currentCropEval.marketScore}%</p>
-                        <p className="text-xs text-slate-600 font-bold my-0">₹{currentCropEval.mandiPrice}/q</p>
+                        <p className="text-xl font-black text-slate-900 mt-1 my-0">{formatInteger(currentCropEval.marketScore, language)}%</p>
+                        <p className="text-xs text-slate-600 font-bold my-0">₹{formatInteger(currentCropEval.mandiPrice, language)}/q</p>
                       </div>
                     </div>
                   </div>
@@ -3790,7 +3989,7 @@ function App() {
                     <p className="text-slate-600 text-sm mt-1 my-0 font-semibold"><T lang={language}>{`Top recommended crops evaluated for ${currentFarm.name} (${translateSoil(language, currentSoil)} Soil, ${translateIrrigation(language, currentIrrigation)} Irrigation)`}</T></p>
                   </div>
                   <span className="text-xs md:text-sm font-extrabold text-slate-700 bg-earth-100 px-3 py-1.5 rounded-full border border-earth-200">
-                    5 <T lang={language}>Crops Evaluated</T>
+                    <T lang={language}>{`${formatInteger(5, language)} Crops Evaluated`}</T>
                   </span>
                 </div>
 
@@ -3810,7 +4009,7 @@ function App() {
                               <T lang={language}>{medal}</T>
                             </span>
                             <span className="text-xs md:text-sm font-black text-emerald-900 bg-emerald-200 px-2.5 py-1 rounded-full">
-                              {item.totalMatch}% <T lang={language}>Match</T>
+                              {formatInteger(item.totalMatch, language)}% <T lang={language}>Match</T>
                             </span>
                           </div>
 
@@ -3822,11 +4021,11 @@ function App() {
                           <div className="mt-4 space-y-2 text-sm text-slate-800 font-semibold">
                             <div className="flex justify-between">
                               <span className="text-slate-500"><T lang={language}>Expected Yield:</T></span>
-                              <span className="font-extrabold text-slate-900">{item.yieldPerAcre} q / acre</span>
+                              <span className="font-extrabold text-slate-900">{formatInteger(item.yieldPerAcre, language)} q / acre</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-slate-500"><T lang={language}>Mandi Rate:</T></span>
-                              <span className="font-extrabold text-slate-900">₹{item.mandiPrice} / q</span>
+                              <span className="font-extrabold text-slate-900">₹{formatInteger(item.mandiPrice, language)} / q</span>
                             </div>
                             <div className="flex justify-between border-t border-slate-200 pt-2 mt-2">
                               <span className="text-slate-600 font-bold"><T lang={language}>Est. Profit / Acre:</T></span>
@@ -3848,10 +4047,10 @@ function App() {
                           <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-2' : 'grid-rows-[0fr] opacity-0'}`}>
                             <div className="overflow-hidden">
                               <div className="p-3.5 bg-white rounded-xl border border-earth-200 text-xs md:text-sm space-y-1.5 text-slate-700 font-semibold">
-                                <p className="my-0">💰 <strong><T lang={language}>Profit Return:</T></strong> {item.econScore}% (₹{formatInteger(item.netProfit, language)}/acre)</p>
-                                <p className="my-0">🧪 <strong><T lang={language}>Soil Fit:</T></strong> {item.soilScore}% on {translateSoil(language, currentSoil)}</p>
-                                <p className="my-0">💧 <strong><T lang={language}>Water Fit:</T></strong> {item.irrigScore}% with {translateIrrigation(language, currentIrrigation)}</p>
-                                <p className="my-0">📈 <strong><T lang={language}>Market Fit:</T></strong> Mandi score {item.marketScore}%</p>
+                                <p className="my-0">💰 <strong><T lang={language}>Profit Return:</T></strong> {formatInteger(item.econScore, language)}% (₹{formatInteger(item.netProfit, language)}/acre)</p>
+                                <p className="my-0">🧪 <strong><T lang={language}>Soil Fit:</T></strong> {formatInteger(item.soilScore, language)}% on {translateSoil(language, currentSoil)}</p>
+                                <p className="my-0">💧 <strong><T lang={language}>Water Fit:</T></strong> {formatInteger(item.irrigScore, language)}% with {translateIrrigation(language, currentIrrigation)}</p>
+                                <p className="my-0">📈 <strong><T lang={language}>Market Fit:</T></strong> Mandi score {formatInteger(item.marketScore, language)}%</p>
                               </div>
                             </div>
                           </div>
@@ -3943,10 +4142,10 @@ function App() {
                     <p className="text-3xl mb-1 my-0">{currentCropEval.def.emoji}</p>
                     <p className="text-xs text-slate-500 font-bold uppercase my-0"><T lang={language}>Expected Yield</T></p>
                     <p className="text-2xl md:text-3xl font-black text-slate-900 mt-1 my-0">
-                      {yieldResult ? yieldResult.qPerAcre : currentCropEval.yieldPerAcre} q/ac
+                      {formatNumber(yieldResult ? yieldResult.qPerAcre : currentCropEval.yieldPerAcre, language)} q/ac
                     </p>
                     <p className="text-xs text-slate-600 my-0 font-bold">
-                      <T lang={language}>Total:</T> {yieldResult ? yieldResult.totalQ : (currentCropEval.yieldPerAcre * currentArea).toFixed(1)} q
+                      <T lang={language}>Total:</T> {formatNumber(yieldResult ? yieldResult.totalQ : (currentCropEval.yieldPerAcre * currentArea), language)} q
                     </p>
                   </div>
 
@@ -3954,7 +4153,7 @@ function App() {
                     <p className="text-3xl mb-1 my-0">📊</p>
                     <p className="text-xs text-slate-500 font-bold uppercase my-0"><T lang={language}>Mandi Price</T></p>
                     <p className="text-2xl md:text-3xl font-black text-slate-900 mt-1 my-0">
-                      ₹{yieldResult ? yieldResult.pricePerQ : currentCropEval.mandiPrice}/q
+                      ₹{formatInteger(yieldResult ? yieldResult.pricePerQ : currentCropEval.mandiPrice, language)}/q
                     </p>
                     <p className="text-xs text-slate-600 my-0 font-bold">Pimpalgaon Mandi</p>
                   </div>
@@ -4099,18 +4298,119 @@ function App() {
         // Dynamic natural-language reasoning summary for farm financial health (rich, contextual & multi-scenario)
         const generateFinancialSummaryText = () => {
           const parts: string[] = [];
+          const absNet = Math.abs(netMoneyLeft);
+          const netFmt = formatInteger(absNet, language);
+          const debtFmt = formatInteger(totalObligations, language);
+          const cropsCountFmt = formatInteger(allCrops.length, language);
+          const areaFmt = formatNumber(totalFarmArea, language);
+          const distressFmt = formatInteger(Math.round(avgDistress), language);
+          const cropName = allCrops[0]?.crop_type ? translateCrop(language, allCrops[0].crop_type) : 'crop';
+
+          if (language === 'hindi') {
+            if (netMoneyLeft > 100000) parts.push(`आपका खेत फसल खर्च के बाद ₹${netFmt} के उत्कृष्ट लाभ अधिशेष के साथ बहुत अच्छा प्रदर्शन कर रहा है।`);
+            else if (netMoneyLeft > 30000) parts.push(`आपका खेत लागत से ₹${netFmt} का स्वस्थ आय अधिशेष कमा रहा है।`);
+            else if (netMoneyLeft > 0) parts.push(`आपका खेत ₹${netFmt} का सकारात्मक नकद मार्जिन बनाए रख रहा है।`);
+            else if (netMoneyLeft === 0) parts.push(`आपकी फसल की आय वर्तमान में खेती के खर्चों के बराबर है।`);
+            else parts.push(`खेती की लागत वर्तमान आय से अधिक होने के कारण आपका खेत इस सीजन में ₹${netFmt} की शुद्ध हानि पर काम कर रहा है।`);
+
+            if (totalObligations > 0) {
+              if (netMoneyLeft > 0 && totalObligations > netMoneyLeft) parts.push(`हालांकि, आपके पास ₹${debtFmt} का आगामी देय भुगतान है, जो आपके लाभ से अधिक है और ध्यान देने की आवश्यकता है।`);
+              else if (netMoneyLeft > 0) parts.push(`आपके पास ₹${debtFmt} का आगामी देय भुगतान है, जिसे आपका खेत लाभ आसानी से कवर कर सकता है।`);
+              else parts.push(`इसके अलावा, आपके पास ₹${debtFmt} का आगामी ऋण दायित्व है, जो वित्तीय दबाव बढ़ा रहा है।`);
+            } else {
+              parts.push(`खुशी की बात यह है कि आपका खेत शून्य देय भुगतान के साथ पूरी तरह से ऋण मुक्त है।`);
+            }
+
+            if (allCrops.length === 1) parts.push(`एक ही फसल (${cropName}) लगाने से बाजार मूल्य का जोखिम बढ़ता है; अगले सीजन में फसल विविधीकरण पर विचार करें।`);
+            else if (allCrops.length >= 2) parts.push(`आपकी बहु-फसल प्रणाली (${cropsCountFmt} फसलें) बाजार और मौसम के जोखिम को कम करने में मदद करती है।`);
+
+            if (totalFarmArea < 2.0) parts.push(`${areaFmt} एकड़ की छोटी जोत पर, इनपुट लागत नियंत्रण मुख्य कुंजी है।`);
+            else if (totalFarmArea >= 5.0) parts.push(`आपकी ${areaFmt} एकड़ की बड़ी जोत बेहतर वित्तीय सुरक्षा प्रदान करती है।`);
+
+            if (avgDistress > 60) parts.push(`उच्च क्षेत्रीय जोखिम (${distressFmt}%) सम्भावित मौसम या कीट जोखिम का संकेत देता है।`);
+
+            return parts.join(' ');
+          }
+
+          if (language === 'marathi') {
+            if (netMoneyLeft > 100000) parts.push(`आपले शेत पीक खर्चानंतर ₹${netFmt} च्या उत्कृष्ट नफ्यासह उत्तम कामगिरी करत आहे.`);
+            else if (netMoneyLeft > 30000) parts.push(`आपले शेत खर्चापेक्षा ₹${netFmt} चा चांगला उत्पन्न नफा मिळवत आहे.`);
+            else if (netMoneyLeft > 0) parts.push(`आपले शेत ₹${netFmt} चा सकारात्मक रोख नफा राखत आहे.`);
+            else if (netMoneyLeft === 0) parts.push(`आपले पीक उत्पन्न सध्या शेती खर्चाच्या बरोबरीचे आहे.`);
+            else parts.push(`शेतीचा खर्च उत्पन्नापेक्षा जास्त असल्याने आपले शेत या हंगामात ₹${netFmt} तोट्यात आहे.`);
+
+            if (totalObligations > 0) {
+              if (netMoneyLeft > 0 && totalObligations > netMoneyLeft) parts.push(`तथापि, आपल्यावर ₹${debtFmt} चे आगामी देय कर्ज आहे, जे आपल्या नफ्यापेक्षा जास्त आहे.`);
+              else if (netMoneyLeft > 0) parts.push(`आपल्यावर ₹${debtFmt} चे आगामी देय कर्ज आहे, जे आपल्या शेतातील नफ्यातून सहज भरता येईल.`);
+              else parts.push(`याशिवाय, आपल्यावर ₹${debtFmt} चे कर्ज दायित्व आहे, ज्यामुळे आर्थिक ताण वाढतो.`);
+            } else {
+              parts.push(`आनंदाची गोष्ट म्हणजे आपले शेत पूर्णपणे कर्जमुक्त आहे.`);
+            }
+
+            if (allCrops.length === 1) parts.push(`एकच पीक (${cropName}) घेतल्यास बाजारातील जोखीम वाढते; पुढील हंगामात पीक विविधतेचा विचार करा.`);
+            else if (allCrops.length >= 2) parts.push(`आपली बहु-पीक पद्धत (${cropsCountFmt} पिके) बाजार आणि हवामानातील जोखीम कमी करण्यास मदत करते.`);
+
+            if (totalFarmArea < 2.0) parts.push(`${areaFmt} एकराच्या लहान शेतात, निविष्ठा खर्चावर नियंत्रण ठेवणे महत्त्वाचे आहे.`);
+            else if (totalFarmArea >= 5.0) parts.push(`आपले ${areaFmt} एकराचे मोठे शेत चांगली आर्थिक स्थिरता प्रदान करते.`);
+
+            if (avgDistress > 60) parts.push(`उच्च प्रादेशिक जोखीम (${distressFmt}%) हवामान किंवा कीड धोक्याचा इशारा देते.`);
+
+            return parts.join(' ');
+          }
+
+          if (language === 'bengali') {
+            if (netMoneyLeft > 100000) parts.push(`আপনার খামার খরচ বাদে ₹${netFmt} চমৎকার নিট লাভে কাজ করছে।`);
+            else if (netMoneyLeft > 30000) parts.push(`আপনার খামার খরচ বাদে ₹${netFmt} সুস্থ লাভে রয়েছে।`);
+            else if (netMoneyLeft > 0) parts.push(`আপনার খামার ₹${netFmt} ইতিবাচক নগদ মার্জিন বজায় রাখছে।`);
+            else if (netMoneyLeft === 0) parts.push(`আপনার ফসল থেকে আয় খামারের খরচের সমপরিমাণ।`);
+            else parts.push(`চাষের খরচ আয়ের চেয়ে বেশি হওয়ায় আপনার খামার এই মৌসুমে ₹${netFmt} লোকসানে রয়েছে।`);
+
+            if (totalObligations > 0) {
+              if (netMoneyLeft > 0 && totalObligations > netMoneyLeft) parts.push(`তবে, আপনার ₹${debtFmt} প্রদেয় ঋণ রয়েছে যা আপনার লাভের চেয়ে বেশি।`);
+              else if (netMoneyLeft > 0) parts.push(`আপনার ₹${debtFmt} প্রদেয় ঋণ রয়েছে, যা খামারের লাভ দিয়ে সহজে পরিশোধ সম্ভব।`);
+              else parts.push(`এছাড়াও, আপনার ₹${debtFmt} ঋণ দায় রয়েছে যা আর্থিক চাপ বাড়ায়।`);
+            } else {
+              parts.push(`সুসংবাদ হলো আপনার খামার সম্পূর্ণ ঋণমুক্ত।`);
+            }
+
+            if (allCrops.length === 1) parts.push(`একটিমাত্র ফসল (${cropName}) চাষ করলে বাজার ঝুঁকি বাড়ে; আগামী মরসুমে ফসল বৈচিত্র্যের কথা ভাবুন।`);
+            else if (allCrops.length >= 2) parts.push(`আপনার বহু-ফসল ব্যবস্থা (${cropsCountFmt}টি ফসল) ঝুঁকি কমাতে সাহায্য করে।`);
+
+            return parts.join(' ');
+          }
+
+          if (language === 'odia') {
+            if (netMoneyLeft > 100000) parts.push(`ଆପଣଙ୍କ ଜମି ଖର୍ଚ୍ଚ କାଟିବା ପରେ ₹${netFmt} ର ଉତ୍କୃଷ୍ଟ ଲାଭରେ ଚାଲୁଛି।`);
+            else if (netMoneyLeft > 30000) parts.push(`ଆପଣଙ୍କ ଜମି ଖର୍ଚ୍ଚ କାଟିବା ପରେ ₹${netFmt} ଲାଭରେ ଅଛି।`);
+            else if (netMoneyLeft > 0) parts.push(`ଆପଣଙ୍କ ଜମି ₹${netFmt} ଧନାତ୍ମକ କ୍ୟାଶ୍ ମାର୍ଜିନ୍ ରଖିଛି।`);
+            else if (netMoneyLeft === 0) parts.push(`ଆପଣଙ୍କ ଫସଲ ଆୟ ଖର୍ଚ୍ଚ ସହିତ ସମାନ ଅଛି।`);
+            else parts.push(`ଖର୍ଚ୍ଚ ଆୟ ଠାରୁ ଅଧିକ ହେତୁ ଆପଣଙ୍କ ଜମି ଏହି ଋତୁରେ ₹${netFmt} କ୍ଷତିରେ ଚାଲୁଛି।`);
+
+            if (totalObligations > 0) {
+              if (netMoneyLeft > 0 && totalObligations > netMoneyLeft) parts.push(`ତଥାପି, ଆପଣଙ୍କର ₹${debtFmt} ଦେୟ ଋଣ ଅଛି ଯାହା ଲାଭ ଠାରୁ ଅଧିକ।`);
+              else if (netMoneyLeft > 0) parts.push(`ଆପଣଙ୍କର ₹${debtFmt} ଦେୟ ଋଣ ଅଛି, ଯାହା ଲାଭରୁ ସହଜରେ ପୈଠ ହୋଇପାରିବ।`);
+              else parts.push(`ଏହା ସହିତ, ଆପଣଙ୍କର ₹${debtFmt} ଋଣ ଅଛି ଯାହା ଆର୍ଥିକ ଚାପ ବଢ଼ାଏ।`);
+            } else {
+              parts.push(`ଆପଣଙ୍କ ଜମି ସମ୍ପୂର୍ଣ୍ଣ ଋଣମୁକ୍ତ।`);
+            }
+
+            if (allCrops.length === 1) parts.push(`ଗୋଟିଏ ଫସଲ (${cropName}) ଲଗାଇଲେ ବଜାର ଆଶଙ୍କା ବଢ଼େ; ଆଗାମୀ ଋତୁରେ ବିବିଧ ଫସଲ ଚାଷ କରନ୍ତୁ।`);
+            else if (allCrops.length >= 2) parts.push(`ଆପଣଙ୍କର ବିବିଧ ଫସଲ (${cropsCountFmt}ଟି ଫସଲ) ଆଶଙ୍କା କମ୍ କରିବାରେ ସାହାଯ୍ୟ କରେ।`);
+
+            return parts.join(' ');
+          }
 
           // 1. Earning & Profitability Analysis
           if (netMoneyLeft > 100000) {
-            parts.push(`Your farm is performing strongly with an excellent profit surplus of ₹${Math.abs(netMoneyLeft).toLocaleString('en-IN')} after crop expenses.`);
+            parts.push(`Your farm is performing strongly with an excellent profit surplus of ₹${absNet.toLocaleString('en-IN')} after crop expenses.`);
           } else if (netMoneyLeft > 30000) {
-            parts.push(`Your farm is earning a healthy income surplus of ₹${Math.abs(netMoneyLeft).toLocaleString('en-IN')} above costs.`);
+            parts.push(`Your farm is earning a healthy income surplus of ₹${absNet.toLocaleString('en-IN')} above costs.`);
           } else if (netMoneyLeft > 0) {
-            parts.push(`Your farm is maintaining a positive cash margin of ₹${Math.abs(netMoneyLeft).toLocaleString('en-IN')}.`);
+            parts.push(`Your farm is maintaining a positive cash margin of ₹${absNet.toLocaleString('en-IN')}.`);
           } else if (netMoneyLeft === 0) {
             parts.push(`Your harvest income currently breaks even with cultivation expenses.`);
           } else {
-            parts.push(`Your farm operates at a net loss of ₹${Math.abs(netMoneyLeft).toLocaleString('en-IN')} this season due to cultivation costs exceeding current returns.`);
+            parts.push(`Your farm operates at a net loss of ₹${absNet.toLocaleString('en-IN')} this season due to cultivation costs exceeding current returns.`);
           }
 
           // 2. Debt & Obligations Liquidity Analysis
@@ -4128,7 +4428,6 @@ function App() {
 
           // 3. Crop Diversification & Risk Exposure
           if (allCrops.length === 1) {
-            const cropName = allCrops[0]?.crop_type || 'single crop';
             parts.push(`Planting a single crop (${cropName}) increases market price risk; consider crop diversification next season.`);
           } else if (allCrops.length >= 2) {
             parts.push(`Your multi-crop portfolio (${allCrops.length} crops) helps spread market and weather risks.`);
@@ -4236,10 +4535,10 @@ function App() {
                       <span className="text-xl">💰</span>
                     </div>
                     <p className="text-lg md:text-2xl font-black text-emerald-950 my-0">
-                      ₹{totalRevenue.toLocaleString('en-IN')}
+                      ₹{formatInteger(totalRevenue, language)}
                     </p>
                     <p className="text-[11px] text-slate-500 font-medium mt-1 my-0">
-                      <T lang={language}>From registered crops</T> ({totalFarmArea.toFixed(1)} <T lang={language}>acres</T>)
+                      <T lang={language}>From registered crops</T> ({formatNumber(totalFarmArea, language)} <T lang={language}>acres</T>)
                     </p>
                   </div>
 
@@ -4250,7 +4549,7 @@ function App() {
                       <span className="text-xl">📉</span>
                     </div>
                     <p className="text-lg md:text-2xl font-black text-rose-950 my-0">
-                      ₹{totalCost.toLocaleString('en-IN')}
+                      ₹{formatInteger(totalCost, language)}
                     </p>
                     <p className="text-[11px] text-slate-500 font-medium mt-1 my-0">
                       <T lang={language}>Inputs & farming costs</T>
@@ -4266,7 +4565,7 @@ function App() {
                       <span className="text-xl">{netMoneyLeft >= 0 ? '🟢' : '🔴'}</span>
                     </div>
                     <p className={`text-lg md:text-2xl font-black my-0 ${netMoneyLeft >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                      {netMoneyLeft >= 0 ? '+' : '−'}₹{Math.abs(netMoneyLeft).toLocaleString('en-IN')}
+                      {netMoneyLeft >= 0 ? '+' : '−'}₹{formatInteger(Math.abs(netMoneyLeft), language)}
                     </p>
                     <p className="text-[11px] text-slate-500 font-bold mt-1 my-0">
                       {netMoneyLeft >= 0 ? <span className="text-emerald-600">🎉 <T lang={language}>Net Surplus</T></span> : <span className="text-rose-600">⚠️ <T lang={language}>Net Loss</T></span>}
@@ -4280,10 +4579,10 @@ function App() {
                       <span className="text-xl">💳</span>
                     </div>
                     <p className="text-lg md:text-2xl font-black text-amber-950 my-0">
-                      ₹{totalObligations.toLocaleString('en-IN')}
+                      ₹{formatInteger(totalObligations, language)}
                     </p>
                     <p className="text-[11px] text-slate-500 font-medium mt-1 my-0">
-                      {cashFlow?.obligations?.length || 0} <T lang={language}>upcoming payments</T>
+                      <T lang={language}>{`${cashFlow?.obligations?.length || 0} upcoming payments`}</T>
                     </p>
                   </div>
                 </div>
@@ -4331,10 +4630,10 @@ function App() {
                               <div key={i} className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/60 space-y-1.5">
                                 <div className="flex justify-between items-center text-xs font-bold">
                                   <span className="capitalize text-slate-800">
-                                    {translateCrop(language, cr.crop)} <span className="text-slate-400 font-normal">({cr.area} ac · {cr.farmName})</span>
+                                    {translateCrop(language, cr.crop)} <span className="text-slate-400 font-normal">(<T lang={language}>{`${formatNumber(cr.area, language)} ac · ${cr.farmName}`}</T>)</span>
                                   </span>
                                   <span className={cr.profit >= 0 ? 'text-emerald-700 font-black' : 'text-rose-700 font-black'}>
-                                    {cr.profit >= 0 ? '+' : '−'}₹{Math.abs(cr.profit).toLocaleString('en-IN')}
+                                    {cr.profit >= 0 ? '+' : '−'}₹{formatInteger(Math.abs(cr.profit), language)}
                                   </span>
                                 </div>
 
@@ -4343,8 +4642,8 @@ function App() {
                                 </div>
 
                                 <div className="flex justify-between text-[11px] text-slate-500 font-semibold">
-                                  <span><T lang={language}>Total Income</T>: ₹{cr.revenue.toLocaleString('en-IN')}</span>
-                                  <span><T lang={language}>Total Costs</T>: ₹{cr.cost.toLocaleString('en-IN')}</span>
+                                  <span><T lang={language}>Total Income</T>: ₹{formatInteger(cr.revenue, language)}</span>
+                                  <span><T lang={language}>Total Costs</T>: ₹{formatInteger(cr.cost, language)}</span>
                                 </div>
                               </div>
                             );
@@ -4365,10 +4664,10 @@ function App() {
                               <div key={i} className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/60 space-y-1.5">
                                 <div className="flex justify-between items-center text-xs font-bold">
                                   <span className="text-slate-800 font-extrabold">
-                                    📍 {fr.farmName} <span className="text-slate-400 font-normal">({fr.area} ac · {fr.cropsCount} crops)</span>
+                                    📍 {fr.farmName} <span className="text-slate-400 font-normal">(<T lang={language}>{`${formatNumber(fr.area, language)} ac · ${fr.cropsCount} crops`}</T>)</span>
                                   </span>
                                   <span className={fr.profit >= 0 ? 'text-emerald-700 font-black' : 'text-rose-700 font-black'}>
-                                    {fr.profit >= 0 ? '+' : '−'}₹{Math.abs(fr.profit).toLocaleString('en-IN')}
+                                    {fr.profit >= 0 ? '+' : '−'}₹{formatInteger(Math.abs(fr.profit), language)}
                                   </span>
                                 </div>
 
@@ -4377,8 +4676,8 @@ function App() {
                                 </div>
 
                                 <div className="flex justify-between text-[11px] text-slate-500 font-semibold">
-                                  <span><T lang={language}>Total Income</T>: ₹{fr.revenue.toLocaleString('en-IN')}</span>
-                                  <span><T lang={language}>Total Costs</T>: ₹{fr.cost.toLocaleString('en-IN')}</span>
+                                  <span><T lang={language}>Total Income</T>: ₹{formatInteger(fr.revenue, language)}</span>
+                                  <span><T lang={language}>Total Costs</T>: ₹{formatInteger(fr.cost, language)}</span>
                                 </div>
                               </div>
                             );
@@ -4422,13 +4721,13 @@ function App() {
                                 <p className="font-extrabold text-slate-800 text-xs my-0 capitalize">
                                   {translateObligation(language, ob.type)}
                                 </p>
-                                <p className="text-[10px] text-slate-400 font-medium my-0">Due: {ob.due_date}</p>
+                                <p className="text-[10px] text-slate-400 font-medium my-0"><T lang={language}>{`Due: ${ob.due_date}`}</T></p>
                               </div>
                             </div>
 
                             <div className="flex items-center gap-2.5">
                               <span className="font-black text-rose-600 text-xs md:text-sm">
-                                ₹{Number(ob.amount).toLocaleString('en-IN')}
+                                ₹{formatInteger(Number(ob.amount), language)}
                               </span>
                               <button
                                 onClick={() => handleDeleteObligation(ob.id)}
@@ -4776,16 +5075,28 @@ function App() {
               {authRoleToggle === 'officer' ? (
                 <button
                   type="button"
-                  onClick={() => { setLoginPhone('+919988776655'); setLoginPassword('officer123'); }}
-                  className="w-full border border-indigo-200 bg-indigo-50/50 text-indigo-900 py-3 rounded-2xl text-sm font-bold hover:bg-indigo-100 transition-colors flex items-center justify-center gap-2"
+                  onClick={() => {
+                    const phone = '+919988776655';
+                    const pass = 'officer123';
+                    setLoginPhone(phone);
+                    setLoginPassword(pass);
+                    handleLoginSubmit(undefined, phone, pass, 'officer');
+                  }}
+                  className="w-full border border-indigo-200 bg-indigo-50/50 text-indigo-900 py-3 rounded-2xl text-sm font-bold hover:bg-indigo-100 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
                 >
                   🏛️ Try Demo Agro Officer Account
                 </button>
               ) : (
                 <button
                   type="button"
-                  onClick={() => { setLoginPhone('+919876543210'); setLoginPassword('demo1234'); }}
-                  className="w-full border border-earth-200 text-slate-600 py-3 rounded-2xl text-sm font-bold hover:bg-earth-50 transition-colors flex items-center justify-center gap-2"
+                  onClick={() => {
+                    const phone = '+919876543210';
+                    const pass = 'demo1234';
+                    setLoginPhone(phone);
+                    setLoginPassword(pass);
+                    handleLoginSubmit(undefined, phone, pass, 'farmer');
+                  }}
+                  className="w-full border border-earth-200 text-slate-600 py-3 rounded-2xl text-sm font-bold hover:bg-earth-50 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
                 >
                   🚜 Try Demo Farmer Account
                 </button>
@@ -5711,15 +6022,17 @@ function App() {
                       </div>
                     </div>
                     <div className="max-h-60 overflow-y-auto space-y-2">
-                      {alerts.length > 0 ? (
-                        alerts.map((a: any) => (
-                          <div key={a.id} className={`p-3 rounded-xl border text-xs ${
-                            a.severity === 'Critical' ? 'bg-high-light border-high/20 text-high' : 'bg-elevated-light border-elevated/20 text-elevated'
+                      {(translatedAlerts.length > 0 ? translatedAlerts : alerts).length > 0 ? (
+                        (translatedAlerts.length > 0 ? translatedAlerts : alerts).map((a: any, idx: number) => (
+                          <div key={a.id || idx} className={`p-3 rounded-xl border text-xs ${
+                            (a.severity === 'Critical' || a.severity === 'गंभीर') ? 'bg-high-light border-high/20 text-high' : 'bg-elevated-light border-elevated/20 text-elevated'
                           }`}>
                             <p className="font-bold my-0 flex items-center gap-1">
-                              {a.severity === 'Critical' ? '🚨' : '⚠️'} {a.severity}
+                              {(a.severity === 'Critical' || a.severity === 'गंभीर') ? '🚨' : '⚠️'} <T lang={language}>{a.severity}</T>
                             </p>
-                            <p className="mt-1 mb-0 leading-relaxed font-semibold text-slate-700">{a.reason}</p>
+                            <p className="mt-1 mb-0 leading-relaxed font-semibold text-slate-700">
+                              <T lang={language}>{a.reason || a.message}</T>
+                            </p>
                           </div>
                         ))
                       ) : (
@@ -6350,30 +6663,74 @@ function App() {
                 )}
               </div>
 
-              {/* Crop type */}
+              {/* Crop type — extended list */}
               <div>
                 <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Crop Type</label>
                 <select value={newCropType} onChange={(e) => setNewCropType(e.target.value)}
-                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl">
-                  <option value="tomato">🍅 {translateCrop(language, 'tomato')}</option>
-                  <option value="wheat">🌾 {translateCrop(language, 'wheat')}</option>
-                  <option value="onion">🧅 {translateCrop(language, 'onion')}</option>
+                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl font-semibold">
+                  <optgroup label="── Vegetables">
+                    <option value="tomato">🍅 {translateCrop(language, 'tomato')}</option>
+                    <option value="onion">🧅 {translateCrop(language, 'onion')}</option>
+                    <option value="potato">🥔 {translateCrop(language, 'potato')}</option>
+                    <option value="chilli">🌶️ {translateCrop(language, 'chilli')}</option>
+                  </optgroup>
+                  <optgroup label="── Grains & Cereals">
+                    <option value="wheat">🌾 {translateCrop(language, 'wheat')}</option>
+                    <option value="rice">🍚 {translateCrop(language, 'rice')}</option>
+                    <option value="maize">🌽 {translateCrop(language, 'maize')}</option>
+                    <option value="soybean">🫘 {translateCrop(language, 'soybean')}</option>
+                  </optgroup>
+                  <optgroup label="── Fruits & Cash Crops">
+                    <option value="grapes">🍇 {translateCrop(language, 'grapes')}</option>
+                    <option value="banana">🍌 {translateCrop(language, 'banana')}</option>
+                    <option value="sugarcane">🎋 {translateCrop(language, 'sugarcane')}</option>
+                    <option value="cotton">🧵 {translateCrop(language, 'cotton')}</option>
+                  </optgroup>
                 </select>
               </div>
 
-              {/* Variety */}
-              <div>
-                <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Variety Name</label>
-                <input type="text" value={newCropVariety} onChange={(e) => setNewCropVariety(e.target.value)}
-                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
-                  placeholder="e.g. PKM-1, Local Premium, Hybrid-7" />
+              {/* Variety + Growth Stage side by side */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Variety / Hybrid</label>
+                  <input type="text" value={newCropVariety} onChange={(e) => setNewCropVariety(e.target.value)}
+                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl"
+                    placeholder="e.g. PKM-1, Hybrid-7" />
+                </div>
+                <div>
+                  <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Current Stage</label>
+                  <select value={newCropStage} onChange={(e) => setNewCropStage(e.target.value)}
+                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl">
+                    <option value="Nursery">🌱 Nursery</option>
+                    <option value="Vegetative">🌿 Vegetative</option>
+                    <option value="Flowering">🌸 Flowering</option>
+                    <option value="Fruit Development">🍅 Fruit Development</option>
+                    <option value="Harvest">✂️ Harvest Ready</option>
+                  </select>
+                </div>
               </div>
 
-              {/* Sowing Date */}
+              {/* Sowing Date + Expected Harvest Date side by side */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Sowing Date</label>
+                  <input type="date" value={newCropSowingDate} onChange={(e) => setNewCropSowingDate(e.target.value)}
+                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Expected Harvest</label>
+                  <input type="date" value={newCropHarvestDate} onChange={(e) => setNewCropHarvestDate(e.target.value)}
+                    className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl" />
+                </div>
+              </div>
+
+              {/* Plot Notes */}
               <div>
-                <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Sowing Date</label>
-                <input type="date" value={newCropSowingDate} onChange={(e) => setNewCropSowingDate(e.target.value)}
-                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl" />
+                <label className="block text-slate-500 text-xs font-bold uppercase mb-1">Plot Notes <span className="normal-case font-normal text-slate-400">(optional)</span></label>
+                <textarea value={newCropNotes} onChange={(e) => setNewCropNotes(e.target.value)}
+                  rows={2}
+                  className="w-full text-xs px-3 py-2 border border-earth-200 bg-earth-50 rounded-xl resize-none"
+                  placeholder="e.g. North section near borewell, intercropped with marigold..." />
               </div>
 
             </div>
@@ -6394,8 +6751,11 @@ function App() {
                       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                       body: JSON.stringify({
                         crop_type: newCropType,
-                        variety: newCropVariety,
+                        variety: newCropVariety || undefined,
                         sowing_date: newCropSowingDate,
+                        stage: newCropStage || undefined,
+                        expected_harvest_date: newCropHarvestDate || undefined,
+                        notes: newCropNotes || undefined,
                       })
                     });
                     if (res.ok) {

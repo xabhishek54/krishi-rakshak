@@ -146,7 +146,7 @@ export async function speakText(
     if (response.ok) {
       const blob = await response.blob();
       const audio = new Audio(URL.createObjectURL(blob));
-      audio.playbackRate = 1.18; // 1.18x speed for faster, natural human-like cadence
+      audio.playbackRate = 1.18;
       activeAudio = audio;
       audio.onended = () => { activeAudio = null; };
       audio.onerror = () => { activeAudio = null; };
@@ -183,7 +183,7 @@ export async function speakText(
       const utterance = new SpeechSynthesisUtterance(translated);
       utterance.lang = locale;
       if (voice) utterance.voice = voice;
-      utterance.rate = 1.15; // 1.15x speed for crisp, natural speech
+      utterance.rate = 1.15;
       utterance.pitch = 1.0;
       utterance.volume = 1.0;
 
@@ -199,7 +199,7 @@ export async function speakText(
     const encoded = encodeURIComponent(translated.slice(0, 200));
     const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=${langCode}&client=tw-ob`;
     const audio = new Audio(audioUrl);
-    audio.playbackRate = 1.18; // 1.18x speed for faster, natural cadence
+    audio.playbackRate = 1.18;
     activeAudio = audio;
     audio.onended = () => { activeAudio = null; };
     audio.onerror = () => { activeAudio = null; };
@@ -220,6 +220,87 @@ export async function speakText(
   }
 }
 
+/**
+ * Like speakText but returns a Promise that resolves only AFTER audio finishes.
+ * Uses event callbacks (onended / utterance.onend) — no polling, no race conditions.
+ * Safe fallback: always resolves after 20s max.
+ */
+export async function speakTextAndWait(
+  text: string,
+  language: string,
+  onError?: (msg: string) => void
+): Promise<void> {
+  stopSpeech();
+
+  if (!text || !text.trim()) return;
+
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  const isNativeScript = /[\u0900-\u097F\u0980-\u09FF\u0B00-\u0B7F]/.test(cleaned);
+  const translated = (language === 'english' || isNativeScript)
+    ? cleaned
+    : await translateText(cleaned, language);
+
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    const done = () => { if (!settled) { settled = true; resolve(); } };
+    const maxTimer = setTimeout(done, 20000); // absolute safety net
+
+    const finish = () => { clearTimeout(maxTimer); done(); };
+
+    // 1. Try Backend API
+    const backendUrl = `${getVoiceApiBase()}/api/v1/voice/speak`;
+    fetch(backendUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: translated, language }),
+    }).then(async (response) => {
+      if (!response.ok) throw new Error('backend_fail');
+      const blob = await response.blob();
+      const audio = new Audio(URL.createObjectURL(blob));
+      audio.playbackRate = 1.18;
+      activeAudio = audio;
+      audio.onended = () => { activeAudio = null; finish(); };
+      audio.onerror = () => { activeAudio = null; finish(); };
+      audio.play().catch((err) => {
+        if (err.name !== 'AbortError' && onError) onError(`Audio error: ${err.message}`);
+        finish();
+      });
+    }).catch(() => {
+      // Backend failed — try browser TTS
+      const langCodeMap: Record<string, string> = {
+        english: 'en', hindi: 'hi', marathi: 'mr', bengali: 'bn', odia: 'or',
+      };
+      const locale = LOCALE_MAP[language] || 'en-IN';
+      const langCode = langCodeMap[language] || 'en';
+
+      if (hasWebSpeechSupport()) {
+        loadVoices().then((voices) => {
+          const voice = pickVoice(voices, locale);
+          const utterance = new SpeechSynthesisUtterance(translated);
+          utterance.lang = locale;
+          if (voice) utterance.voice = voice;
+          utterance.rate = 1.15;
+          utterance.pitch = 1.0;
+          utterance.volume = 1.0;
+          utterance.onend = finish;
+          utterance.onerror = finish;
+          window.speechSynthesis.speak(utterance);
+        }).catch(finish);
+      } else {
+        // Fallback stream
+        const encoded = encodeURIComponent(translated.slice(0, 200));
+        const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=${langCode}&client=tw-ob`;
+        const audio = new Audio(audioUrl);
+        audio.playbackRate = 1.18;
+        activeAudio = audio;
+        audio.onended = () => { activeAudio = null; finish(); };
+        audio.onerror = () => { activeAudio = null; finish(); };
+        audio.play().catch(() => finish());
+      }
+    });
+  });
+}
+
 /** Stop any current speech */
 export function stopSpeech(): void {
   if (activeAudio) {
@@ -236,6 +317,11 @@ export function isSpeaking(): boolean {
   if (typeof window === 'undefined') return !!(activeAudio && !activeAudio.paused);
   const isSpeech = 'speechSynthesis' in window && window.speechSynthesis.speaking;
   return isSpeech || !!(activeAudio && !activeAudio.paused);
+}
+
+/** Returns true if a backend HTMLAudioElement is currently playing. */
+export function activeAudioPlaying(): boolean {
+  return !!(activeAudio && !activeAudio.paused && !activeAudio.ended);
 }
 
 /**

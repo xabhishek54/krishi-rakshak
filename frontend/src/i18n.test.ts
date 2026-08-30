@@ -16,10 +16,16 @@ import {
   formatDaysAgo,
   formatFarmSummary,
   useNativeDigits,
+  localizeDigits,
 } from './i18n';
 import { buildVoiceText, isCropMarketReady } from './voice';
 
 describe('number & currency formatting', () => {
+  it('localizes digits embedded in spoken translated text', () => {
+    expect(localizeDigits('मंडी भाव ₹2,290 और 5 कार्य', 'hindi')).toBe('मंडी भाव ₹२,२९० और ५ कार्य');
+    expect(localizeDigits('মন্ডির দর 2290 টাকা', 'bengali')).toBe('মন্ডির দর ২২৯০ টাকা');
+  });
+
   it('formats integers with Indian grouping using Latin digits', () => {
     expect(formatInteger(1234567, 'english', false)).toBe('12,34,567');
   });
@@ -125,7 +131,7 @@ describe('sell-ready crop filtering', () => {
       ]
     });
 
-    expect(text).toContain('Best selling options now');
+    expect(text).toContain('Where should I sell each crop?');
     expect(text).toContain('Lasalgaon APMC');
     expect(text).not.toContain('Recommendation 1');
     expect(text).not.toContain('Recommendation 2');
@@ -147,7 +153,7 @@ describe('sell-ready crop filtering', () => {
       marketSuggestions: []
     });
 
-    expect(text).toContain('Overall');
+    expect(text).toContain("Today's farm summary.");
     expect(text).toContain('Mandi rate for Tomato');
     expect(text).toContain('pending action items');
     expect(text).not.toContain('Top action today');

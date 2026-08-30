@@ -58,12 +58,26 @@ function isIndianDigitScript(locale: LocaleInfo): boolean {
   return locale.digits.length === 10 && locale.digits[0] !== '0';
 }
 
+/** Whether the active script should render native digits (Devanagari etc.). */
+export function useNativeDigits(lang: LocaleId): boolean {
+  return isIndianDigitScript(LOCALE_INFO[lang] || LOCALE_INFO.english);
+}
+
+/** Replaces all ASCII digits 0-9 in a text string with active locale's native script digits. */
+export function localizeDigits(text: string | number | undefined | null, lang: LocaleId): string {
+  if (text === undefined || text === null) return '';
+  const str = String(text);
+  if (!str || lang === 'english') return str;
+  const info = LOCALE_INFO[lang] || LOCALE_INFO.english;
+  if (!isIndianDigitScript(info)) return str;
+  return toNativeDigits(info, str);
+}
+
 /**
  * Format a number using Indian grouping (12,34,567) in the active locale's
- * script. When `nativeDigits` is false (default), a Latin-digit Indian format
- * is produced (e.g. "12,34,567").
+ * script. Defaults to native script digits when viewing in Hindi, Marathi, Bengali, or Odia.
  */
-export function formatNumber(value: number, lang: LocaleId, nativeDigits = false): string {
+export function formatNumber(value: number, lang: LocaleId, nativeDigits = useNativeDigits(lang)): string {
   const info = LOCALE_INFO[lang] || LOCALE_INFO.english;
   const formatter = new Intl.NumberFormat(info.tag, { maximumFractionDigits: 2 });
   const grouped = formatter.format(Number.isFinite(value) ? value : 0);
@@ -73,9 +87,9 @@ export function formatNumber(value: number, lang: LocaleId, nativeDigits = false
 
 /**
  * Format a number as a whole integer (no fraction) respecting Indian grouping,
- * e.g. 1234567 -> "12,34,567".
+ * e.g. 1234567 -> "12,34,567". Defaults to native script digits for Indian languages.
  */
-export function formatInteger(value: number, lang: LocaleId, nativeDigits = false): string {
+export function formatInteger(value: number, lang: LocaleId, nativeDigits = useNativeDigits(lang)): string {
   const info = LOCALE_INFO[lang] || LOCALE_INFO.english;
   const formatter = new Intl.NumberFormat(info.tag, { maximumFractionDigits: 0 });
   const grouped = formatter.format(Number.isFinite(value) ? Math.round(value) : 0);
@@ -93,7 +107,7 @@ const COMPACT: Record<LocaleId, { lakh: string; crore: string }> = {
 };
 
 /** Format a whole number compactly (e.g. 12,00,000 -> "12L"). */
-export function formatCompact(value: number, lang: LocaleId, nativeDigits = false): string {
+export function formatCompact(value: number, lang: LocaleId, nativeDigits = useNativeDigits(lang)): string {
   const info = LOCALE_INFO[lang] || LOCALE_INFO.english;
   const abs = Math.abs(value);
   let suffix = '';
@@ -112,20 +126,17 @@ export function formatCompact(value: number, lang: LocaleId, nativeDigits = fals
 
 /**
  * Format a monetary amount using Indian grouping with a currency label in the
- * active language's script. `mode` controls whether the amount appears in
- * native digits (e.g. Devanagari) or Latin digits.
+ * active language's script.
  */
-export function formatCurrency(value: number, lang: LocaleId, nativeDigits = false): string {
+export function formatCurrency(value: number, lang: LocaleId, nativeDigits = useNativeDigits(lang)): string {
   const grouped = formatNumber(value, lang, nativeDigits);
   return `₹${grouped}`;
 }
 
-/**
- * Render a per-quintal price commonly used across market screens, e.g.
- * "₹2,290/q".
- */
-export function formatPerQuintal(value: number, lang: LocaleId, nativeDigits = false): string {
-  return `${formatCurrency(value, lang, nativeDigits)}/q`;
+/** Format a price per quintal (e.g. 2290 -> "₹2,290/q"). */
+export function formatPerQuintal(value: number, lang: LocaleId, nativeDigits = useNativeDigits(lang)): string {
+  const grouped = formatInteger(value, lang, nativeDigits);
+  return `₹${grouped}/q`;
 }
 
 /** Translate a UI string key for the active language. */
@@ -300,9 +311,4 @@ export function formatFarmSummary(cropCount: number, farmCount: number, lang: Lo
     default:
       return `${crops} crop${cropCount > 1 ? 's' : ''} across ${farms} farm${farmCount > 1 ? 's' : ''}`;
   }
-}
-
-/** Whether the active script should render native digits (Devanagari etc.). */
-export function useNativeDigits(lang: LocaleId): boolean {
-  return isIndianDigitScript(LOCALE_INFO[lang] || LOCALE_INFO.english);
 }

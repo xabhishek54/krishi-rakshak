@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { translateText, getCachedTranslation } from './translate';
 import { translations, type LanguageType } from './translations';
+import { localizeDigits } from './i18n';
 
 interface TranslatedProps {
   text?: string;
@@ -152,12 +153,12 @@ export const T: React.FC<TranslatedProps> = ({ text, children, lang, className }
   const trimmed = content.trim();
   const staticKey = STATIC_LOOKUP[trimmed];
   if (staticKey && translations[lang] && translations[lang][staticKey]) {
-    return <span className={className}>{translations[lang][staticKey]}</span>;
+    return <span className={className}>{localizeDigits(translations[lang][staticKey], lang)}</span>;
   }
 
   // 3. State for dynamic translation
   const cached = getCachedTranslation(lang, trimmed);
-  const [translated, setTranslated] = useState<string>(cached || trimmed);
+  const [translated, setTranslated] = useState<string>(cached ? localizeDigits(cached, lang) : localizeDigits(trimmed, lang));
 
   useEffect(() => {
     if (!trimmed) {
@@ -167,14 +168,14 @@ export const T: React.FC<TranslatedProps> = ({ text, children, lang, className }
 
     const cachedVal = getCachedTranslation(lang, trimmed);
     if (cachedVal) {
-      setTranslated(cachedVal);
+      setTranslated(localizeDigits(cachedVal, lang));
       return;
     }
 
     let isMounted = true;
     translateText(trimmed, lang).then((res) => {
       if (isMounted) {
-        setTranslated(res);
+        setTranslated(localizeDigits(res, lang));
       }
     });
 
@@ -183,7 +184,7 @@ export const T: React.FC<TranslatedProps> = ({ text, children, lang, className }
     };
   }, [trimmed, lang]);
 
-  return <span className={className}>{translated}</span>;
+  return <span className={className}>{localizeDigits(translated, lang)}</span>;
 };
 
 export default T;
