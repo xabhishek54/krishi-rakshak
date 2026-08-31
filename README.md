@@ -49,7 +49,7 @@ Make sure you have installed:
 ### Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/xabhishek54/krishi-rakshak.git
+git clone [https://github.com/xabhishek54/krishi-rakshak.git](https://github.com/xabhishek54/krishi-rakshak.git)
 cd krishi-rakshak
 ```
 
@@ -170,7 +170,7 @@ python -m pytest tests/
 
 ## 📁 Repository Structure
 
-```
+```text
 krishi-rakshak/
 ├── backend/
 │   ├── app/
