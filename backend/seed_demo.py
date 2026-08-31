@@ -3,7 +3,7 @@ Demo account seeder for KrishiRakshak.
 Direct SQLite seeder (SQLAlchemy).
 """
 
-import sys
+import sys 
 import os
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
