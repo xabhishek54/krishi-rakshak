@@ -18,7 +18,7 @@ It unifies **hyperlocal weather analytics**, **crop disease forecasting**, **APM
 
 ---
 
-## 🛠️ Technical Architecture & Stack
+## 🛠️ Technical Architecture & Stacks
 
 ### Backend
 - **Framework**: Python 3.10+ & FastAPI
